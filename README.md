@@ -55,8 +55,8 @@ TO-DO Panel 是一个常驻 macOS / Windows 屏幕顶部的本地工作台。Mac
 
 | 平台 | 在上方 GitHub Releases 下载对应安装包 |
 | --- | --- |
-| Mac | `TO-DO-Panel-1.1.0-arm64.dmg` |
-| Windows | `TO-DO-Panel-1.1.0-windows-x64-setup.exe` |
+| Mac | [TO-DO-Panel-1.1.0-arm64.dmg](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/TO-DO-Panel-1.1.0-arm64.dmg) |
+| Windows | [TO-DO-Panel-1.1.0-windows-x64-setup.exe](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/TO-DO-Panel-1.1.0-windows-x64-setup.exe) |
 
 ### macOS
 

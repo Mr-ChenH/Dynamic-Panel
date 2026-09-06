@@ -102,8 +102,10 @@ async function main() {
   if (retained) {
     assert.equal(await evaluate('localStorage.getItem("notch-home-note")'), 'Windows retained data');
     assert.equal(await evaluate('window.notchAPI.listCredentials().then(r => r.items.some(i => i.service === "CI smoke"))'), true);
+    assert.equal(await evaluate('window.notchAPI.listCredentials().then(async r => (await window.notchAPI.getCredential(r.items.find(i => i.service === "CI smoke").id)).item.password)'), 'test-only-password');
     const recordings = await evaluate('JSON.parse(localStorage.getItem("notch-recordings") || "[]")');
     assert.ok(recordings.some((item) => item.audioPath), 'Saved recording survives reinstall');
+    assert.equal(await evaluate('window.notchAPI.readRecording(JSON.parse(localStorage.getItem("notch-recordings"))[0].audioPath).then(r => r.bytes.length > 0)'), true);
   } else {
     const credentials = await evaluate('window.notchAPI.saveCredential({service:"CI smoke",account:"test",password:"test-only-password"})');
     assert.equal(credentials.ok, true);
@@ -142,6 +144,16 @@ async function main() {
   const screenshot = await send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(path.join(evidence, retained ? 'retained.png' : 'windows-settings.png'), Buffer.from(screenshot.data, 'base64'));
   assert.deepEqual(exceptions, [], 'No uncaught renderer errors');
+  // Exercise an ordinary application shutdown, not taskkill /F: Chromium flushes
+  // profile preferences (including Windows OS-crypt metadata) during shutdown.
+  // Browser.close is Electron's own CDP shutdown path; no testing IPC is shipped.
+  const browser = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+  const shutdown = new WebSocket(browser.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => { shutdown.once('open', resolve); shutdown.once('error', reject); });
+  shutdown.send(JSON.stringify({ id: 1, method: 'Browser.close', params: {} }));
+  await until(() => child.exitCode !== null, 'normal application exit');
+  shutdown.close();
+  assert.equal(child.exitCode, 0, 'Application exits cleanly before reinstall/uninstall');
   fs.writeFileSync(path.join(evidence, retained ? 'retained.json' : 'smoke.json'), JSON.stringify({ ok: true, platform: process.platform, retained, profile, checks: ['real startup', 'five home modules', 'IPC', 'clipboard copy', 'auto-launch', 'shortcuts', 'encrypted credentials', 'fake camera release', 'fake recording release and persistence', 'notifications', 'settings'] }, null, 2));
   console.log(`Windows application smoke passed (${retained ? 'retained profile' : 'fresh profile'})`);
 }
