@@ -2,15 +2,15 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { assetPath } from "./assetPath.mjs";
 
-const title = "TO-DO Panel — 把 Mac 刘海变成随手工作台";
-const description = "常驻 macOS 刘海的本地工作台：首页、待办、笔记、链接、录制、密钥与可选剪贴板，数据留在当前 Mac。";
+const title = "TO-DO Panel — Mac 与 Windows 的贴顶工作台";
+const description = "适用于 macOS 与 Windows 的本地工作台：首页、待办、笔记、链接、录制、密钥与可选剪贴板，数据留在自己的电脑。";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://xiaopu-ai.github.io/TO-DO-Panel/"),
   title,
   description,
   applicationName: "TO-DO Panel",
-  keywords: ["TO-DO Panel", "macOS 刘海", "Mac 待办", "本地工作台", "Apple Silicon"],
+  keywords: ["TO-DO Panel", "macOS 刘海", "Mac 待办", "Windows 待办", "本地工作台", "Apple Silicon"],
   icons: { icon: [{ url: assetPath("/favicon.png"), type: "image/png" }], shortcut: assetPath("/favicon.png"), apple: assetPath("/favicon.png") },
   openGraph: {
     type: "website",

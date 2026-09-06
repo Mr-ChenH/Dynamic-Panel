@@ -1489,8 +1489,7 @@ function normalizePortableStorage(storage) {
       if (!Array.isArray(rows)) continue;
       portable[storageKey] = JSON.stringify(rows.map((row) => {
         if (!row || typeof row !== 'object' || !row[property]) return row;
-        const basename = path.basename(String(row[property]));
-        return { ...row, [property]: path.join(directory, basename) };
+        return { ...row, [property]: platformPolicy.portableMediaPath(directory, row[property]) };
       }));
     } catch (error) {}
   }
@@ -2833,7 +2832,7 @@ ipcMain.handle('recordings:save', async (event, payload) => {
   const audioPath = path.join(getRecordingsDir(), `recording-${id}.${extension}`);
   try {
     await fs.promises.writeFile(audioPath, buffer, { flag: 'wx' });
-    return { ok: true, audioPath: path.join(RECORDINGS_DIR_NAME, path.basename(audioPath)), mimeType };
+    return { ok: true, audioPath: platformPolicy.portableMediaPath(RECORDINGS_DIR_NAME, audioPath), mimeType };
   } catch (error) {
     return { ok: false, error: 'write_failed' };
   }
@@ -3003,7 +3002,7 @@ async function pollClipboard() {
         mainWindow.webContents.send('clipboard:new-entry', {
           type: 'image',
           text: null,
-          imagePath,
+          imagePath: platformPolicy.portableMediaPath(CLIP_IMAGES_DIR_NAME, imagePath),
         });
       }
     }

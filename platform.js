@@ -28,5 +28,8 @@
     const height = expanded ? Math.min(616, Math.max(strip, area.height - 24)) : strip;
     return { x: Math.round(area.x + (area.width - width) / 2), y: area.y, width, height };
   }
-  return { capabilities, effectiveHiddenModules, panelBounds };
+  function portableMediaPath(directory, value) {
+    return `${directory}/${String(value).replace(/\\/g, '/').split('/').pop()}`;
+  }
+  return { capabilities, effectiveHiddenModules, panelBounds, portableMediaPath };
 });

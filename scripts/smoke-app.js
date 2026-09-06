@@ -97,7 +97,7 @@ async function main() {
   assert.equal(await evaluate('window.notchAPI.setPanelShortcut("Control+Shift+F9").then(r => r.ok)'), true);
   assert.equal(await evaluate('window.notchAPI.setPanelShortcut("Space").then(r => r.ok)'), true);
   if (retained) {
-    assert.equal(await evaluate('localStorage.getItem("notch-note")'), 'Windows retained data');
+    assert.equal(await evaluate('localStorage.getItem("notch-home-note")'), 'Windows retained data');
     assert.equal(await evaluate('window.notchAPI.listCredentials().then(r => r.items.some(i => i.service === "CI smoke"))'), true);
     const recordings = await evaluate('JSON.parse(localStorage.getItem("notch-recordings") || "[]")');
     assert.ok(recordings.some((item) => item.audioPath), 'Saved recording survives reinstall');
@@ -125,7 +125,9 @@ async function main() {
     await until(() => evaluate('!window.NotchWorkspace.isRecordingActive() && window.smokeTracks.every(t => t.readyState === "ended")'), 'microphone released');
     await until(() => evaluate('JSON.parse(localStorage.getItem("notch-recordings") || "[]").some(r => r.audioPath)'), 'recording persisted');
     assert.ok(fs.readdirSync(path.join(profile, 'recordings')).some((file) => fs.statSync(path.join(profile, 'recordings', file)).size > 0));
-    await evaluate('localStorage.setItem("notch-note", "Windows retained data"); window.notchAPI.saveWorkspaceData(Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)])))');
+    await evaluate('document.getElementById("home-note").value = "Windows retained data"; document.getElementById("home-note").dispatchEvent(new Event("input", {bubbles:true}))');
+    await until(() => evaluate('localStorage.getItem("notch-home-note") === "Windows retained data"'), 'note persisted');
+    await evaluate('window.notchAPI.saveWorkspaceData(Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)])))');
   }
   const notify = await fetch('http://127.0.0.1:43821/notify/gpt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Windows smoke complete', task_id: `smoke-${Date.now()}` }) });
   assert.equal(notify.ok, true);
@@ -140,4 +142,13 @@ async function main() {
   fs.writeFileSync(path.join(evidence, retained ? 'retained.json' : 'smoke.json'), JSON.stringify({ ok: true, platform: process.platform, retained, profile, checks: ['real startup', 'five home modules', 'IPC', 'clipboard copy', 'auto-launch', 'shortcuts', 'encrypted credentials', 'fake camera release', 'fake recording release and persistence', 'notifications', 'settings'] }, null, 2));
   console.log(`Windows application smoke passed (${retained ? 'retained profile' : 'fresh profile'})`);
 }
-main().catch((error) => { console.error(error); process.exitCode = 1; }).finally(cleanup);
+main().catch(async (error) => {
+  console.error(error);
+  process.exitCode = 1;
+  if (socket?.readyState === WebSocket.OPEN) {
+    try {
+      const screenshot = await send('Page.captureScreenshot', { format: 'png' });
+      fs.writeFileSync(path.join(evidence, 'failure.png'), Buffer.from(screenshot.data, 'base64'));
+    } catch { /* Startup logs remain available even if the renderer has crashed. */ }
+  }
+}).finally(cleanup);

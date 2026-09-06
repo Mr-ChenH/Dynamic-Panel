@@ -1,7 +1,7 @@
 <div align="center">
   <img src="build/to-do-panel-icon.png" width="112" alt="TO-DO Panel 图标" />
   <h1>TO-DO Panel</h1>
-  <p><strong>把 Mac 刘海，变成随手可用的工作台。</strong></p>
+  <p><strong>Mac 与 Windows 的贴顶工作台。</strong></p>
   <p>待办、随笔记、链接、录音与本机 AI 提醒，始终贴顶待命。</p>
   <p>
     <a href="https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest"><strong>下载 macOS 版</strong></a>
@@ -17,6 +17,7 @@
   <p>
     <img alt="Release" src="https://img.shields.io/github/v/release/xiaopu-ai/TO-DO-Panel?style=flat-square&color=7c8cff" />
     <img alt="macOS 13+ Apple Silicon" src="https://img.shields.io/badge/macOS-13%2B%20Apple%20Silicon-111318?style=flat-square&logo=apple" />
+    <img alt="Windows 10/11 x64" src="https://img.shields.io/badge/Windows-10%2F11%20x64-0078D4?style=flat-square" />
     <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-35c58b?style=flat-square" />
     <img alt="Electron 44" src="https://img.shields.io/badge/Electron-44-47848f?style=flat-square&logo=electron" />
   </p>
@@ -106,6 +107,8 @@ curl -X POST http://127.0.0.1:43821/notify/codex \
 /Applications/TO-DO Panel.app/Contents/Resources/app/scripts/codex-notify.js
 /Applications/TO-DO Panel.app/Contents/Resources/app/scripts/claude-notify.js
 ```
+
+Windows 安装后的两个脚本位于安装目录的 `resources/app/scripts/` 中，可用 Node.js 调用；应用本身无需用户安装 Node.js。
 
 ## 从源码运行
 

@@ -34,3 +34,8 @@ test('platform filtering leaves saved preferences intact and recovers a usable h
   assert.deepEqual(hidden, before);
   assert.deepEqual(platform.effectiveHiddenModules(hidden, registry, []), hidden);
 });
+
+test('media references use portable separators for both Windows and Mac workspace files', () => {
+  assert.equal(platform.portableMediaPath('recordings', 'C:\\Users\\me\\recordings\\recording-123.webm'), 'recordings/recording-123.webm');
+  assert.equal(platform.portableMediaPath('clipboard-images', '/Users/me/clipboard-images/clip-123.png'), 'clipboard-images/clip-123.png');
+});
