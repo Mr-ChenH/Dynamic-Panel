@@ -364,7 +364,13 @@ function installLocalWebContentsGuards(webContents) {
     || typeof webContents.setWindowOpenHandler !== 'function'
     || typeof webContents.on !== 'function') return false;
   webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  webContents.on('will-navigate', (event) => event.preventDefault());
+  webContents.on('will-navigate', (event, url) => {
+    // Recovery reloads this same trusted local document. Never allow a different
+    // file, query string, external origin or a reload of a non-local document.
+    const current = webContents.getURL?.();
+    if (typeof current === 'string' && current.startsWith('file:') && url === current) return;
+    event.preventDefault();
+  });
   return true;
 }
 

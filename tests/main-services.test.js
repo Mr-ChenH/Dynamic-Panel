@@ -411,6 +411,7 @@ test('local Electron windows deny renderer navigation and child windows', () => 
   let windowOpenHandler = null;
   let navigationHandler = null;
   const webContents = {
+    getURL() { return 'file:///app/renderer/index.html'; },
     setWindowOpenHandler(handler) { windowOpenHandler = handler; },
     on(eventName, handler) {
       if (eventName === 'will-navigate') navigationHandler = handler;
@@ -422,6 +423,14 @@ test('local Electron windows deny renderer navigation and child windows', () => 
   let prevented = false;
   navigationHandler({ preventDefault() { prevented = true; } }, 'https://example.com');
   assert.equal(prevented, true);
+  for (const url of ['file:///app/renderer/other.html', 'file:///app/renderer/index.html?other', 'https://example.com']) {
+    let denied = false;
+    navigationHandler({ preventDefault() { denied = true; } }, url);
+    assert.equal(denied, true, `Navigation must remain denied: ${url}`);
+  }
+  let reloadDenied = false;
+  navigationHandler({ preventDefault() { reloadDenied = true; } }, 'file:///app/renderer/index.html');
+  assert.equal(reloadDenied, false, 'Portable workspace recovery may reload only the exact current local page');
 });
 
 test('native file pickers stay attached to the panel and always release the transient guard', async () => {

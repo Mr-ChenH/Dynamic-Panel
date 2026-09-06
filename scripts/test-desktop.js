@@ -15,12 +15,15 @@ function run(executable, args) {
   }
 }
 run(process.execPath, ['--test', ...fs.readdirSync(path.join(root, 'tests')).filter((name) => name.endsWith('.test.js')).map((name) => `tests/${name}`)]);
-const testProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-renderer-test-'));
-env.TODO_TEST_USER_DATA = testProfile;
 env.TODO_TEST_LOG = path.join(root, 'dist.noindex', 'windows-smoke', 'renderer-test.log');
 fs.mkdirSync(path.dirname(env.TODO_TEST_LOG), { recursive: true });
-run(require('electron'), ['tests/notch-focus.electron.js']);
-fs.rmSync(testProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+fs.writeFileSync(env.TODO_TEST_LOG, '');
+for (const file of ['notch-focus', 'retained-workspace', 'startup']) {
+  const testProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-renderer-test-'));
+  env.TODO_TEST_USER_DATA = testProfile;
+  run(require('electron'), [`tests/${file}.electron.js`]);
+  fs.rmSync(testProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}
 for (const file of ['main.js', 'main-services.js', 'platform.js', 'preload.js', 'renderer/domain.js', 'renderer/effects.js', 'renderer/app.js', 'renderer/workspace.js', 'renderer/icon-motion.js', 'renderer/notification.js', 'build/afterPack.js', 'scripts/codex-notify.js', 'scripts/claude-notify.js', 'scripts/smoke-app.js']) {
   run(process.execPath, ['--check', file]);
 }

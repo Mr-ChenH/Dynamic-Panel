@@ -24,6 +24,7 @@ function collectLocalStorageSnapshot() {
   return result;
 }
 
+let workspaceReloadPending = false;
 async function hydratePortableWorkspace() {
   if (!window.notchAPI?.loadWorkspaceData) return;
   try {
@@ -39,13 +40,21 @@ async function hydratePortableWorkspace() {
       sessionStorage.setItem('notch-workspace-hydrated', '1');
     }
     if (imported) {
+      // The current editors were initialized before the asynchronous import.
+      // Their unload/visibility handlers must not overwrite recovered values.
+      workspaceReloadPending = true;
       location.reload();
       return;
     }
     setInterval(() => window.notchAPI.saveWorkspaceData(collectLocalStorageSnapshot()).catch(() => {}), 2000);
   } catch (error) {}
 }
-hydratePortableWorkspace();
+// Do not interrupt parser-loaded workspace scripts with a recovery navigation.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', hydratePortableWorkspace, { once: true });
+} else {
+  hydratePortableWorkspace();
+}
 window.notchAPI?.onWorkspaceChanged?.(() => {
   sessionStorage.removeItem('notch-workspace-hydrated');
   window.notchAPI.saveWorkspaceData(collectLocalStorageSnapshot()).finally(() => location.reload());
@@ -2025,6 +2034,7 @@ if (noteInput) {
   const saveNote = () => {
     if (noteTimer) clearTimeout(noteTimer);
     noteTimer = null;
+    if (workspaceReloadPending) return;
     try {
       localStorage.setItem(NOTE_KEY, noteInput.value);
     } catch (e) {
@@ -2220,6 +2230,7 @@ function persistNotesEditor(editor) {
 }
 
 function flushNotesEditorSave() {
+  if (workspaceReloadPending) return;
   if (notesSaveTimer) clearTimeout(notesSaveTimer);
   notesSaveTimer = null;
   const editor = pendingNotesEditor;
