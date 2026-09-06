@@ -230,7 +230,8 @@ button, input, textarea, select { font: inherit; }
 
 .hero-bottom { position: absolute; right: clamp(24px, 3.5vw, 58px); bottom: 34px; left: clamp(24px, 3.5vw, 58px); z-index: 7; display: flex; align-items: center; justify-content: space-between; gap: 28px; }
 .hero-bottom > p { margin: 0; color: #edf2f5; font-size: clamp(18px, 1.65vw, 27px); font-weight: 650; letter-spacing: -0.035em; line-height: 1.25; text-shadow: 0 2px 20px rgba(0, 0, 0, 0.88); white-space: nowrap; }
-.hero-actions { display: flex; flex: none; flex-wrap: wrap; justify-content: flex-end; gap: 12px; }
+.hero-actions { display: flex; flex: none; flex-direction: column; justify-content: flex-end; gap: 12px; }
+.hero-actions .landing-cta { width: 100%; }
 .hero-bottom { flex-wrap: wrap; }
 .landing-cta:focus-visible { outline: 2px solid #edf2f5; outline-offset: 4px; }
 .hero-download-magnet { flex: none; }
