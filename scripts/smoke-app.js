@@ -12,6 +12,8 @@ const profile = process.argv[3] || fs.mkdtempSync(path.join(os.tmpdir(), 'todo-s
 const retained = process.argv[4] === 'retained';
 const evidence = process.env.SMOKE_ARTIFACT_DIR || path.join(profile, 'evidence');
 fs.mkdirSync(evidence, { recursive: true });
+const activePortFile = path.join(profile, 'DevToolsActivePort');
+if (fs.existsSync(activePortFile)) fs.unlinkSync(activePortFile);
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 const child = spawn(executable, [
@@ -62,7 +64,8 @@ async function evaluate(expression) {
 async function main() {
   const port = await until(() => {
     const match = log.match(/DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)/);
-    return match?.[1];
+    if (match) return match[1];
+    return fs.existsSync(activePortFile) && fs.readFileSync(activePortFile, 'utf8').split(/\r?\n/)[0];
   }, 'DevTools startup');
   const page = await until(async () => {
     const pages = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
@@ -144,9 +147,11 @@ async function main() {
 }
 main().catch(async (error) => {
   console.error(error);
+  console.error('Renderer exceptions:', JSON.stringify(exceptions));
   process.exitCode = 1;
   if (socket?.readyState === WebSocket.OPEN) {
     try {
+      console.error('Renderer state:', await evaluate('JSON.stringify({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,api:!!window.notchAPI,ready:document.readyState,storage:Object.fromEntries(Object.keys(localStorage).map(k=>[k,localStorage.getItem(k)]))})'));
       const screenshot = await send('Page.captureScreenshot', { format: 'png' });
       fs.writeFileSync(path.join(evidence, 'failure.png'), Buffer.from(screenshot.data, 'base64'));
     } catch { /* Startup logs remain available even if the renderer has crashed. */ }
