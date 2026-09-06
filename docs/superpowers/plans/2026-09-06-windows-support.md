@@ -14,10 +14,14 @@
 
 ## Execution
 
-- [ ] Platform policy: add `platform.js`, consume in `main.js` and preload, test geometry (negative origins/top/side/bottom taskbars), capability fallback and final-visible-module behavior in `tests/platform.test.js` using literal fixtures. Run failing tests, implement, rerun.
-- [ ] Renderer: union unavailable modules only when resolving layout; preserve saved visibility; prevent hiding final available module; neutralize Mac copy; hide unavailable switches; verify actual DOM with Electron.
-- [ ] Packaging/testing: cross-platform Node test runner; NSIS current-user installer; actual application CDP smoke in isolated profile, packaged and installed checks, fake camera/audio, user-data retention and uninstall. Keep startup tests finite and capture logs/screenshots.
-- [ ] Website: Windows asset selector and a second glass-pill button; assert mixed-release selection and SSR buttons; run website tests/lint/build and browser layout verification at desktop/mobile sizes.
-- [ ] Release: bump shared version to 1.1.0, update CHANGELOG/README/releasing guide, build both targets and publish only after both pass; push branch for CI first, repair failures before main/tag; verify four Release assets and live Pages button targets.
+- [x] Platform policy: add `platform.js`, consume in `main.js` and preload, test geometry (negative origins/top/side/bottom taskbars), capability fallback and final-visible-module behavior in `tests/platform.test.js` using literal fixtures. Run failing tests, implement, rerun.
+- [x] Renderer: union unavailable modules only when resolving layout; preserve saved visibility; prevent hiding final available module; neutralize Mac copy; hide unavailable switches; verify actual DOM with Electron.
+- [x] Packaging/testing: cross-platform Node test runner; NSIS current-user installer; actual application CDP smoke in isolated profile, packaged and installed checks, fake camera/audio, user-data retention and uninstall. Keep startup tests finite and capture logs/screenshots.
+- [x] Website: Windows asset selector and a second glass-pill button; assert mixed-release selection and SSR buttons; run website tests/lint/build and browser layout verification at desktop/mobile sizes.
+- [x] Release: bump shared version to 1.1.0, update CHANGELOG/README/releasing guide, build both targets and publish only after both pass; push branch for CI first, repair failures before main/tag; verify four Release assets and live Pages button targets.
 
 Run `npm test` for desktop, `npm test && npm run lint && npm run build` in website, and Windows CI for platform/installed behavior. Commit only scoped paths. Final handoff includes Release/website links and actual verification evidence.
+
+Candidate validation: GitHub Actions run `34044062278` passed both native build jobs, including installed Windows fresh/retained profiles, password decryption, recording bytes, normal exit, reinstall and uninstall. Website: 20 tests and lint/build passed locally; desktop: 112 Node tests and three Electron suites passed.
+
+Release validation (2026-09-07): tag `v1.1.0` at `408e81e`; release run `34044252812` and Pages run `34044252718` succeeded. Four published assets verified; both installers downloaded back and SHA-256 matched (normalize the Windows checksum file's CRLF when checking with macOS `shasum`). Live Pages shows both platform buttons; the latest-release selectors resolve to the correct 1.1.0 installers and both URLs return HTTP 200. Physical Windows devices remain outside this automated acceptance coverage.
