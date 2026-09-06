@@ -40,6 +40,10 @@
 
 ## 当前产品约束
 
+- 双平台：macOS 13+ arm64 与 Windows 10/11 x64 共用代码及版本。Windows 使用 `npm run build:win` 生成 NSIS EXE；发布必须两个平台检查通过后汇总至同一 Release。
+- Windows：折叠态为 200 × 38 DIP，贴工作区顶部居中并避开任务栏；隐藏当前窗口和汽水音乐组件，但不修改用户保存的显隐偏好；剪贴板只复制，提醒点击关闭。
+- 便携媒体路径：LocalStorage / workspace.json 中新写入的录音与剪贴板图片使用 `/` 分隔的相对路径，系统加密密钥不保证跨电脑迁移。
+
 - 折叠态：宽 200px，高度等于当前屏幕菜单栏高度，不得超出物理刘海
 - 展开态：各页内容区统一 `1240 × 540`；窗口总高为 `76 + 540`，窄屏与矮屏保留 24px 安全距
 - 待办：2 × 2 布局，一次回车新增，颜色为红 / 橙 / 绿 / 蓝。内部存储键仍是 `P0`–`P3`（`notch-todo-data` 结构不可变更），但界面显示名默认「课程 / 自媒体&写作 / Vibe coding / 日常」且用户可改名（存 `notch-todo-category-names-v1`）；截止时间默认当天 23:30，到期前一小时提醒
@@ -63,7 +67,7 @@
 
 - 任何产品更新推送到 GitHub 前，必须联动检查版本号、`CHANGELOG.md`、README 当前稳定版本与下载入口、GitHub Pages 下载按钮。
 - 正式发布必须保证 `package.json` 与 `package-lock.json` 版本一致，推送匹配的 `v*.*.*` 标签，并在 GitHub Actions 完成后验证 Release 的 DMG / SHA-256 资产与 Pages 实际下载指向。
-- 官网下载按钮应始终从 GitHub `releases/latest` 动态解析当前版本的 `arm64.dmg`，不得留下过期的固定版本链接。
+- 官网下载按钮分别从 GitHub `releases/latest` 动态解析当前版本的 `arm64.dmg` 与 `windows-x64-setup.exe`，不得留下过期固定链接或跨平台误下载。验证两个安装包及各自 SHA-256。
 
 ## NEVER
 

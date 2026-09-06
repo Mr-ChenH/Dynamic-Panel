@@ -4,12 +4,20 @@ const os = require('node:os');
 const path = require('node:path');
 const { app, BrowserWindow } = require('electron');
 
-const isolatedUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'to-do-panel-electron-test-'));
+const isolatedUserData = process.env.TODO_TEST_USER_DATA || fs.mkdtempSync(path.join(os.tmpdir(), 'to-do-panel-electron-test-'));
 app.setPath('userData', isolatedUserData);
-app.once('will-quit', () => fs.rmSync(isolatedUserData, { recursive: true, force: true }));
+function diagnostic(message) {
+  console.log(message);
+  if (process.env.TODO_TEST_LOG) fs.appendFileSync(process.env.TODO_TEST_LOG, `${message}\n`);
+}
+process.on('uncaughtException', (error) => { diagnostic(error.stack); app.exit(1); });
+// Windows keeps Chromium's files locked until process exit. The parent test runner
+// cleans up the isolated profile after the child has exited, never in will-quit.
 
 async function main() {
+  diagnostic('Renderer test: waiting for Electron');
   await app.whenReady();
+  diagnostic('Renderer test: Electron ready');
   const window = new BrowserWindow({
     width: 200,
     height: 38,
@@ -25,6 +33,7 @@ async function main() {
 
   try {
     await window.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    diagnostic('Renderer test: page loaded');
     const freshProfileClipboardState = await window.webContents.executeJavaScript(`
       (() => ({
         history: localStorage.getItem('notch-clip-history'),
@@ -1093,9 +1102,9 @@ async function main() {
 }
 
 main().then(
-  () => app.quit(),
+  () => { diagnostic('Renderer interaction checks passed'); app.quit(); },
   (error) => {
-    console.error(error);
+    diagnostic(error.stack);
     app.exit(1);
   }
 );
