@@ -47,7 +47,7 @@ export default function EndingSection() {
           <p>需要时展开，用完即收起</p>
         </motion.div>
 
-        <footer><span>macOS 14+ · Apple Silicon · MIT</span><span>© 2026 TO-DO Panel</span></footer>
+        <footer><span>macOS 13+ · Windows 10/11 x64 · MIT</span><span>© 2026 TO-DO Panel</span></footer>
       </div>
     </section>
   );

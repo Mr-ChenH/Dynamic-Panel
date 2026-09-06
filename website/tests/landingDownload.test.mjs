@@ -4,6 +4,22 @@ import { existsSync } from "node:fs";
 
 const moduleUrl = new URL("../app/landingDownload.mjs", import.meta.url);
 
+test("Windows download selects only the current x64 installer in a mixed release", async () => {
+  const { selectWindowsDownloadUrl } = await import(moduleUrl.href);
+  const asset = (name) => ({ name, state: 'uploaded', browser_download_url: `https://example.com/${name}` });
+  const release = { tag_name: 'v1.1.0', assets: [
+    asset('TO-DO-Panel-1.0.7-windows-x64-setup.exe'),
+    asset('TO-DO-Panel-1.1.0-arm64.dmg'),
+    asset('TO-DO-Panel-1.1.0-windows-x64-setup.exe.sha256'),
+    asset('TO-DO-Panel-1.1.0-windows-arm64-setup.exe'),
+    asset('TO-DO-Panel-1.1.0-windows-x64-setup.exe'),
+  ] };
+  assert.equal(selectWindowsDownloadUrl(release), 'https://example.com/TO-DO-Panel-1.1.0-windows-x64-setup.exe');
+  assert.equal(selectWindowsDownloadUrl({ ...release, assets: release.assets.slice(0, 4) }), null);
+  assert.equal(selectWindowsDownloadUrl(null), null);
+  assert.equal(selectWindowsDownloadUrl({ ...release, assets: [{ ...release.assets[4], state: 'new' }] }), null);
+});
+
 test("latest release selection returns the installable Apple Silicon DMG", async () => {
   assert.ok(existsSync(moduleUrl), "landingDownload.mjs must resolve the current installable asset");
   const { selectMacDownloadUrl } = await import(moduleUrl.href);

@@ -2406,6 +2406,8 @@ const HOME_ORDER_KEY = 'notch-home-order-v3';
 const HOME_SIZES_KEY = 'notch-home-widget-sizes-v2';
 const HOME_HIDDEN_MODULES_KEY = 'notch-home-hidden-modules-v1';
 const HOME_MODULE_REGISTRY = ['music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands'];
+const unavailableHomeModules = window.NotchPlatform.capabilities(window.notchAPI?.platform || 'darwin').unavailableHomeModules;
+const effectiveHomeHidden = (hidden) => window.NotchPlatform.effectiveHiddenModules(hidden, HOME_MODULE_REGISTRY, unavailableHomeModules);
 const HOME_ORDER_DEFAULTS = ['music', 'pomodoro', 'windows', 'recorder', 'mirror', 'note', 'commands'];
 const HOME_SIZE_DEFAULTS = {
   music: 'medium',
@@ -2515,6 +2517,7 @@ function saveHiddenHomeModules() {
 if (loadedHomeVisibility.needsRepair) saveHiddenHomeModules();
 
 function resolveValidatedHomeLayout(hiddenIds, order = homeOrder, sizes = homeSizes) {
+  hiddenIds = effectiveHomeHidden(hiddenIds);
   const visibleIds = HOME_MODULE_REGISTRY.filter((id) => !hiddenIds.includes(id));
   const layout = window.NotchDomain.resolveHomeWidgetLayout(order, sizes, hiddenIds, 12, 4);
   return window.NotchDomain.validateHomeWidgetLayout(layout, visibleIds, 12, 4)
@@ -2595,7 +2598,7 @@ function applyHomeLayout(layout, { reason = 'initial' } = {}) {
   const beforeState = reason === 'initial' || reason === 'rollback'
     ? null
     : captureHomeLayoutVisualState();
-  const automaticLayout = !homeLayoutReadOnly && hiddenHomeModules.length > 0;
+  const automaticLayout = !homeLayoutReadOnly && effectiveHomeHidden(hiddenHomeModules).length > 0;
   homeBento.dataset.layoutMode = homeLayoutReadOnly ? 'safe' : automaticLayout ? 'automatic' : 'preferred';
   homeTiles.forEach((tile) => {
     const moduleId = tile.dataset.homeModule;
@@ -2663,12 +2666,13 @@ if (!initialHomeLayout) throw new Error('Default homepage layout validation fail
 applyHomeLayout(initialHomeLayout, { reason: 'initial' });
 
 function visibilitySnapshot() {
-  const effectiveHiddenIds = homeLayoutReadOnly ? [] : hiddenHomeModules;
+  const effectiveHiddenIds = effectiveHomeHidden(homeLayoutReadOnly ? [] : hiddenHomeModules);
   return {
     hiddenIds: [...effectiveHiddenIds],
     visibleIds: HOME_MODULE_REGISTRY.filter((id) => !effectiveHiddenIds.includes(id)),
     storedHiddenIds: [...hiddenHomeModules],
-    automaticLayout: !homeLayoutReadOnly && hiddenHomeModules.length > 0,
+    automaticLayout: !homeLayoutReadOnly && effectiveHiddenIds.length > 0,
+    unavailableIds: [...unavailableHomeModules],
     readOnly: homeLayoutReadOnly,
     persisted: homeVisibilityPersisted,
   };
@@ -2676,6 +2680,11 @@ function visibilitySnapshot() {
 
 function setHomeModuleVisible(moduleId, visible) {
   const current = [...hiddenHomeModules];
+  if (unavailableHomeModules.includes(moduleId)) return { ok: false, changed: false, error: 'unsupported', hiddenIds: current, persisted: homeVisibilityPersisted };
+  const currentlyVisible = visibilitySnapshot().visibleIds;
+  if (!visible && currentlyVisible.includes(moduleId) && currentlyVisible.length === 1) {
+    return { ok: false, changed: false, error: 'at_least_one_required', hiddenIds: current, persisted: homeVisibilityPersisted };
+  }
   if (homeLayoutReadOnly) {
     return { ok: false, changed: false, error: 'layout_read_only', hiddenIds: current, persisted: homeVisibilityPersisted };
   }
@@ -2802,7 +2811,7 @@ if (homeBento) {
     if (!sizeButton) return;
     event.preventDefault();
     event.stopPropagation();
-    if (hiddenHomeModules.length > 0 || homeLayoutReadOnly) return;
+    if (effectiveHomeHidden(hiddenHomeModules).length > 0 || homeLayoutReadOnly) return;
     const moduleId = sizeButton.dataset.widgetSizeCycle;
     const sequence = ['mini', 'small', 'medium', 'large'];
     const current = homeSizes[moduleId] || HOME_SIZE_DEFAULTS[moduleId];

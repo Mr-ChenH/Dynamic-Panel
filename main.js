@@ -23,6 +23,8 @@ const dns = require('dns');
 const zlib = require('zlib');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
+const platformPolicy = require('./platform');
+const PLATFORM_CAPABILITIES = platformPolicy.capabilities(process.platform);
 const {
   isPrivateAddress,
   extractPageTitle,
@@ -59,7 +61,8 @@ const {
 // recordings and encrypted settings after the public product rename.
 const LEGACY_USER_DATA_PATH = path.join(app.getPath('appData'), 'Dynamic Panel');
 app.setName('TO-DO Panel');
-app.setPath('userData', LEGACY_USER_DATA_PATH);
+// Honor Electron's standard profile switch for isolated automated tests.
+app.setPath('userData', app.commandLine.getSwitchValue('user-data-dir') || LEGACY_USER_DATA_PATH);
 
 // ============ 托盘图标 PNG 生成 ============
 // 直接在主进程编码 PNG，避免引入额外资源文件
@@ -163,6 +166,7 @@ function makeNotchPng(scale) {
 }
 
 function createNotchTrayIcon() {
+  if (process.platform === 'win32') return nativeImage.createFromPath(path.join(__dirname, 'build', 'to-do-panel-icon.png')).resize({ width: 32, height: 32 });
   const png2x = makeNotchPng(2);
   const icon = nativeImage.createFromBuffer(png2x, { scaleFactor: 2 });
   icon.setTemplateImage(true);
@@ -321,9 +325,10 @@ function getWindowDisplay() {
 
 function getCenteredBounds(width, height, display) {
   const d = display || getTargetDisplay();
+  const area = process.platform === 'win32' ? d.workArea : d.bounds;
   return {
-    x: Math.round(d.bounds.x + (d.bounds.width - width) / 2),
-    y: d.bounds.y, // 副屏的 y 不一定是 0，可能是负数（如外接屏在主屏上方）
+    x: Math.round(area.x + (area.width - width) / 2),
+    y: area.y,
     width,
     height,
   };
@@ -336,6 +341,7 @@ function getMenuBarHeight(display) {
 }
 
 function getCollapsedHeight(display) {
+  if (process.platform === 'win32') return COLLAPSED_MIN_HEIGHT;
   const mb = getMenuBarHeight(display);
   // 折叠条高度恰好等于菜单栏带（≈物理刘海高），一个像素都不超出物理刘海。
   // 无刘海的外接屏 menuBarHeight 仍是真实菜单栏高，能正常露头；
@@ -361,6 +367,7 @@ function getExpandedSize(display) {
 // 原生窗口只提供透明画布，用户可见的岛体形变交给渲染层 CSS。
 function getBoundsForMode(mode, display) {
   const d = display || getWindowDisplay();
+  if (process.platform === 'win32') return platformPolicy.panelBounds(process.platform, d, mode === 'expanded');
   if (mode === 'expanded') {
     const { width, height } = getExpandedSize(d);
     return getCenteredBounds(width, height, d);
@@ -727,7 +734,7 @@ function createTaskNotificationWindow() {
 
   const targetWindow = notificationWindow;
   notificationWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-  notificationWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (process.platform === 'darwin') notificationWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   notificationWindow.setIgnoreMouseEvents(false);
   notificationWindow.loadFile(path.join(__dirname, 'renderer', 'notification.html'));
 
@@ -1008,7 +1015,8 @@ function createWindow() {
   installLocalWebContentsGuards(mainWindow.webContents);
 
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
-  mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (process.platform === 'darwin') mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (process.platform === 'win32') mainWindow.setMenu(null);
 
   // Escape 在到达页面前会被 Chromium 浏览器层吞掉（实测 document keydown 收不到），
   // 用 before-input-event 在分发前拦截并转发给渲染层处理（退出输入 / 收起面板）
@@ -1069,7 +1077,7 @@ function toggleVisibility() {
 }
 
 function isAutoLaunchEnabled() {
-  if (process.platform !== 'darwin') return false;
+  if (!PLATFORM_CAPABILITIES.autoLaunch) return false;
   try {
     return app.getLoginItemSettings().openAtLogin;
   } catch (e) {
@@ -1078,7 +1086,7 @@ function isAutoLaunchEnabled() {
 }
 
 function setAutoLaunch(enabled) {
-  if (process.platform !== 'darwin') return false;
+  if (!PLATFORM_CAPABILITIES.autoLaunch) return false;
   try {
     app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: false });
     return isAutoLaunchEnabled() === enabled;
@@ -1358,7 +1366,7 @@ function refreshTrayMenu() {
     {
       label: '数据文件夹',
       submenu: [
-        { label: '在访达中打开', click: () => shell.openPath(workspaceRoot()) },
+        { label: '打开文件夹', click: () => shell.openPath(workspaceRoot()) },
         { label: '更换文件夹…', click: chooseWorkspaceFolder },
       ],
     },
@@ -1381,7 +1389,7 @@ function refreshTrayMenu() {
           title: '关于 TO-DO Panel',
           message: 'TO-DO Panel',
           detail:
-            `版本 ${app.getVersion()}\n\n一个开源、常驻 macOS 屏幕顶部的本地工作台。工作区数据默认保存在本机；账号密码与 API Key 由 macOS 安全存储加密。\n\nMIT License`,
+            `版本 ${app.getVersion()}\n\n一个开源、常驻屏幕顶部的本地工作台。工作区数据默认保存在本机；账号密码与 API Key 由系统安全存储加密。\n\nMIT License`,
           buttons: ['查看 GitHub', '好'],
           defaultId: 1,
           cancelId: 1,
@@ -1394,7 +1402,7 @@ function refreshTrayMenu() {
     { type: 'separator' },
     {
       label: '退出',
-      accelerator: 'Cmd+Q',
+      accelerator: 'CommandOrControl+Q',
       click: () => app.quit(),
     },
   ]);
@@ -1579,7 +1587,10 @@ ipcMain.handle('shell:openPath', (event, p) => {
 
 // 只放行固定的几个隐私面板，渲染层传来的值只能当作枚举的键来查，
 // 绝不能拼进 URL：x-apple.systempreferences: 能打开任意设置面板。
-const PRIVACY_SETTINGS_PANES = {
+const PRIVACY_SETTINGS_PANES = process.platform === 'win32' ? {
+  microphone: 'ms-settings:privacy-microphone',
+  camera: 'ms-settings:privacy-webcam',
+} : {
   accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
   'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
@@ -2239,6 +2250,7 @@ function run(argv) {
 }`;
 
 function readFrontmostApp() {
+  if (!PLATFORM_CAPABILITIES.automaticPaste) return Promise.resolve(null);
   return new Promise((resolve) => {
     execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', FRONTMOST_APP_JXA], { timeout: 2200 }, (error, stdout) => {
       if (error) return resolve(null);
@@ -2439,6 +2451,7 @@ ipcMain.handle('music:status', async () => {
 });
 
 ipcMain.handle('music:control', async (event, action) => {
+  if (process.platform !== 'darwin') return { ok: false, error: 'unsupported' };
   if (!fs.existsSync(SODA_MUSIC_APP)) return { ok: false, error: 'not_installed' };
   const result = await controlSodaMusic(action, {
     isRunning: sodaMusicRunning,
@@ -3207,6 +3220,7 @@ ipcMain.handle('clipboard:write', (event, entry) => writeClipboardEntry(entry));
 // 若系统尚未授予辅助功能权限，内容仍保留在系统剪贴板作为可靠降级。
 ipcMain.handle('clipboard:paste', async (event, entry) => {
   if (!await writeClipboardEntry(entry)) return { ok: false, pasted: false };
+  if (!PLATFORM_CAPABILITIES.automaticPaste) return { ok: true, pasted: false };
   if (process.platform === 'darwin' && !systemPreferences.isTrustedAccessibilityClient(true)) {
     return { ok: true, pasted: false, permissionRequired: true };
   }
@@ -3253,6 +3267,7 @@ function watchDisplayChanges() {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') app.setAppUserModelId('com.dynamicpanel.app');
   if (process.platform === 'darwin' && app.dock) {
     app.dock.hide();
   }

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const moduleUrl = new URL("../app/LandingPage.tsx", import.meta.url);
 
-test("landing page renders the approved section order and one hero CTA", async () => {
+test("landing page renders both platform downloads in the existing hero", async () => {
   assert.ok(existsSync(moduleUrl), "LandingPage.tsx must render the approved landing experience");
   const { default: LandingPage } = await import(moduleUrl.href);
   const html = renderToStaticMarkup(createElement(LandingPage));
@@ -15,8 +15,10 @@ test("landing page renders the approved section order and one hero CTA", async (
     [...html.matchAll(/data-section="([^"]+)"/g)].map((match) => match[1]),
     ["hero", "marquee", "story", "capabilities", "tabs-intro", "tab-stack", "ending"],
   );
-  assert.equal((html.match(/data-primary-action=/g) || []).length, 1);
-  assert.equal((html.match(/data-direct-download=/g) || []).length, 1);
+  assert.equal((html.match(/data-primary-action=/g) || []).length, 2);
+  assert.equal((html.match(/data-direct-download=/g) || []).length, 2);
+  assert.match(html, /下载 Windows 版本/);
+  assert.match(html, /下载 macOS 版本/);
   assert.equal((html.match(/data-secondary-action=/g) || []).length, 0);
   assert.equal((html.match(/data-nav-github=/g) || []).length, 1);
   assert.doesNotMatch(html, /data-section="privacy"/);

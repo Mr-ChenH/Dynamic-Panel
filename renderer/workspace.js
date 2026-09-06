@@ -977,8 +977,10 @@
     const recordingActive = window.NotchWorkspace?.isRecordingActive?.() ?? isRecordingActive();
     settingsHomeModuleList?.querySelectorAll('input[data-settings-home-module]').forEach((input) => {
       const moduleId = input.dataset.settingsHomeModule;
+      const unavailable = state?.unavailableIds?.includes(moduleId) === true;
+      input.closest('label').hidden = unavailable;
       input.checked = !hidden.has(moduleId);
-      input.disabled = state?.readOnly === true
+      input.disabled = unavailable || state?.readOnly === true
         || (moduleId === 'recorder' && recordingActive && input.checked);
     });
     const recorderNote = settingsHomeModuleList?.querySelector('[data-home-module-setting-note="recorder"]');
@@ -1885,7 +1887,7 @@
     const actions = document.createElement('div');
     actions.append(
       createIconButton('copy-recording', '复制转写文本', COPY_ICON),
-      createIconButton('reveal-recording', '在访达中显示', OPEN_ICON),
+      createIconButton('reveal-recording', '在文件夹中显示', OPEN_ICON),
       createIconButton('delete-recording', '删除录音', DELETE_ICON, true)
     );
     transcriptHead.append(label, actions);
@@ -2401,7 +2403,7 @@
       empty.className = 'credential-empty';
       empty.innerHTML = credentials.length
         ? '<strong>没有匹配的密钥</strong><span>可按名称或账号继续检索</span>'
-        : '<strong>还没有保存密钥</strong><span>账号与密码会加密保存在这台 Mac</span>';
+        : '<strong>还没有保存密钥</strong><span>账号与密码会加密保存在本机</span>';
       credentialList.appendChild(empty);
       updateCredentialBulkAction();
       return;
@@ -2468,7 +2470,7 @@
     try { result = await window.notchAPI.listCredentials(); } catch (error) { result = null; }
     credentials = result && Array.isArray(result.items) ? result.items : [];
     if (credentialsNote && result && !result.secureStorage) {
-      credentialsNote.textContent = '当前 macOS 安全存储不可用，暂时无法保存密码。';
+      credentialsNote.textContent = '当前系统安全存储不可用，暂时无法保存密码。';
       credentialsNote.classList.add('error');
     }
     renderCredentials();
@@ -2505,7 +2507,7 @@
       credentialPassword.placeholder = '保存后才会加密';
     }
     if (credentialsNote) {
-      credentialsNote.textContent = '已使用 macOS 安全存储加密保存。';
+      credentialsNote.textContent = '已使用系统安全存储加密保存。';
       credentialsNote.classList.remove('error');
     }
     await loadCredentials();

@@ -9,7 +9,7 @@ import {
 } from "react";
 import { assetPath } from "./assetPath.mjs";
 import { DOWNLOAD_URL, MARQUEE_ITEMS, NAV_ITEMS, TAB_ITEMS } from "./landingContent";
-import { LATEST_RELEASE_API_URL, selectMacDownloadUrl } from "./landingDownload.mjs";
+import { LATEST_RELEASE_API_URL, selectMacDownloadUrl, selectWindowsDownloadUrl } from "./landingDownload.mjs";
 import EchoText from "./reactbits/EchoText/EchoText";
 import Magnet from "./reactbits/Magnet/Magnet";
 import {
@@ -33,7 +33,7 @@ export default function HeroSection() {
   const [panelState, setPanelState] = useState<HeroPanelState>(INITIAL_HERO_PANEL_STATE);
   const [bootPhase, setBootPhase] = useState<HeroBootPhase>("loading");
   const [entranceComplete, setEntranceComplete] = useState(false);
-  const [downloadPending, setDownloadPending] = useState(false);
+  const [downloadPending, setDownloadPending] = useState<"mac" | "windows" | null>(null);
   const expanded = panelState === "expanded";
 
   const noMotion = reducedMotion === true;
@@ -98,23 +98,25 @@ export default function HeroSection() {
     setPanelState((current) => nextHeroPanelState(current, entranceComplete));
   };
 
-  const startDownload = async (event: ReactMouseEvent<HTMLAnchorElement>) => {
+  const startDownload = async (event: ReactMouseEvent<HTMLAnchorElement>, platform: "mac" | "windows") => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
     event.preventDefault();
     if (downloadPending) return;
 
-    setDownloadPending(true);
+    setDownloadPending(platform);
     try {
       const response = await fetch(LATEST_RELEASE_API_URL, {
         headers: { Accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(8000),
       });
       if (!response.ok) throw new Error(`GitHub release request failed: ${response.status}`);
-      const downloadUrl = selectMacDownloadUrl(await response.json());
+      const release = await response.json();
+      const downloadUrl = platform === 'windows' ? selectWindowsDownloadUrl(release) : selectMacDownloadUrl(release);
       window.location.assign(downloadUrl ?? DOWNLOAD_URL);
     } catch {
       window.location.assign(DOWNLOAD_URL);
     } finally {
-      setDownloadPending(false);
+      setDownloadPending(null);
     }
   };
 
@@ -260,12 +262,26 @@ export default function HeroSection() {
             <a
               className="landing-cta landing-cta-primary"
               href={DOWNLOAD_URL}
-              aria-busy={downloadPending}
+              aria-busy={downloadPending === 'mac'}
+              aria-label="下载 macOS 版本（Apple Silicon，macOS 13 或更高版本）"
               data-primary-action
               data-direct-download
-              onClick={startDownload}
+              onClick={(event) => startDownload(event, 'mac')}
             >
               下载 macOS 版本
+            </a>
+          </Magnet>
+          <Magnet padding={70} magnetStrength={6} disabled={noMotion} wrapperClassName="hero-download-magnet" data-magnet="download-windows">
+            <a
+              className="landing-cta landing-cta-primary"
+              href={DOWNLOAD_URL}
+              aria-busy={downloadPending === 'windows'}
+              aria-label="下载 Windows 版本（Windows 10/11，x64）"
+              data-primary-action
+              data-direct-download="windows"
+              onClick={(event) => startDownload(event, 'windows')}
+            >
+              下载 Windows 版本
             </a>
           </Magnet>
         </div>

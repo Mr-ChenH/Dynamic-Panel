@@ -1,68 +1,36 @@
-# GitHub Release 发布流程
+# 双平台发布流程
 
-TO-DO Panel 采用与 CC Switch 类似的开源分发方式：源码公开在 GitHub，安装包放在 Releases。项目明确使用 ad-hoc 签名、不进行 Apple 公证，也不上架 Mac App Store；用户首次启动时通过“隐私与安全性”确认“仍要打开”是正式安装流程。
+每个版本在同一 GitHub Release 提供两个独立安装包和各自 SHA-256：
+- Mac：`TO-DO-Panel-<版本>-arm64.dmg`，macOS 13+ Apple Silicon，ad-hoc 签名。
+- Windows：`TO-DO-Panel-<版本>-windows-x64-setup.exe`，Windows 10/11 x64，NSIS 当前用户安装，暂无商业代码签名。
 
-## 用户安装
+## 发布前
 
-1. 从 [GitHub Releases](https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest) 下载 `TO-DO-Panel-*-arm64.dmg`。
-2. 打开 DMG，将 `TO-DO Panel.app` 拖入“应用程序”。
-3. 首次启动若被 macOS 拦截，打开“系统设置 → 隐私与安全性”，点击“仍要打开”。
-4. 再次启动 TO-DO Panel，并按系统提示授权摄像头和麦克风。
+1. `package.json`、`package-lock.json` 版本一致；CHANGELOG、README 稳定版本、`docs/release-notes.md` 对齐。
+2. 桌面端 `npm test`；官网 `npm test && npm run lint && npm run build`。
+3. `Release macOS and Windows` 工作流的手动运行只验证并上传 Actions artifacts；不创建 Release。开发分支 `feat/windows-support` 推送也执行同样验证。
+4. Windows runner 运行 `npm run build:win`，随后 `scripts/verify-windows.ps1` 安装实际 EXE、启动真实程序、验证核心 IPC/数据/系统加密/快捷键/模拟相机与录音释放，重新安装检查数据，再卸载。
+5. Mac runner 运行 `npm run build`、codesign 与 hdiutil 校验。两者全部通过才允许发布。
+6. 不提交 node_modules、dist、密码、API Key、录音、剪贴板或测试用户数据。
 
-“仍要打开”只需要确认一次。安装包使用 ad-hoc 签名且未经过 Apple 公证，因此无法省略这一步。
+## 正式发布
 
-## 本地直接生成 DMG
+用户确认发布后，提交并推送 main，再推送与 package.json 匹配的 `v*.*.*` 标签。工作流重新构建验证两个平台，汇总资产校验 SHA-256，再创建一个 Release。任何平台失败均不会创建 Release；修复后在发布前重新验证，不覆盖已发布版本。
 
-不依赖 GitHub 也能出包，自己分发或先行验证时用这条路径：
+官网通过 main 推送自动部署 GitHub Pages。两个下载按钮分别读取 `releases/latest` 的 macOS arm64 DMG 和 Windows x64 setup EXE；资产缺失时退回 Release 页面，绝不下载另一个平台安装包。不能硬编码过期版本的下载链接。
 
-```bash
-npm install
-npm test
-npm run build
-```
+发布后检查：
+- Actions 两个平台及发布步骤成功；Pages 部署成功。
+- Release 有两个安装包与两个校验文件，版本及 SHA-256 相符。
+- 打开线上 Pages，两个按钮都存在，分别指向当前版本的对应安装包。
+- 发布说明区分系统要求、首次系统拦截提示、Windows 首版功能限制及自动测试边界。
 
-产物是 `dist.noindex/TO-DO-Panel-<版本>-arm64.dmg`。`.noindex` 后缀避免解包后的应用被 Spotlight 当成第二份已安装应用；`afterPack` 的 ad-hoc 签名校验失败会直接中断构建，
-所以只要命令成功退出，产物就是可分发的。
+## 本地构建
 
-## 维护者经 GitHub 发布新版本
+`npm run build` 生成 Mac DMG；`npm run build:win` 生成 Windows EXE。使用对应系统构建最稳妥，CI 可从 Mac 发起并在 Windows 执行。安装包不要求终端用户安装 Node.js；通知转发脚本由相应 AI 工具的 Node 环境调用。
 
-> **前置条件**：本地 `main` 已跟踪 GitHub 的 `origin/main`，并已配置可写入
-> `xiaopu-ai/TO-DO-Panel` 的 GitHub 凭据。发布前先确认工作区干净且本地提交已经推送。
+Windows 默认安装路径为 `%LOCALAPPDATA%/Programs/TO-DO Panel`（以安装向导为准），通知脚本位于安装目录的 `resources/app/scripts/`。普通工作区可复制迁移，系统加密密钥不能跨用户或操作系统直接解密，应重新输入。卸载默认保留工作区。
 
-GitHub Actions 只在推送语义化版本标签时发布安装包。标签必须与 `package.json` 中的版本一致，
-所以先读版本号再打标签，不要照抄示例里的数字：
+## 测试边界
 
-```bash
-npm test
-version=$(node -p "require('./package.json').version")
-git tag "v${version}"
-git push origin main
-git push origin "v${version}"
-```
-
-工作流会在 GitHub 的 Apple Silicon macOS runner 上自动完成：
-
-1. 安装锁定版本的 npm 依赖。
-2. 执行桌面端检查。
-3. 生成并验证 Apple Silicon DMG。
-4. 生成 SHA-256 校验文件。
-5. 创建 GitHub Release，并上传 DMG 与校验文件。
-
-如果任一测试、版本检查或 DMG 校验失败，Release 不会创建。
-
-## 手动验证发布流程（不发布）
-
-发布工作流支持从 GitHub Actions 页面手动运行。选择 `Release macOS DMG`，点击 `Run workflow` 后，工作流会安装依赖、执行桌面检查、生成 DMG，并完成签名、镜像与 SHA-256 校验。
-
-手动运行固定为验证模式：它会在 GitHub 托管 runner 中临时重新构建安装包，但不会创建或修改 GitHub Release，也不会覆盖现有版本。只有推送与 `package.json` 版本一致的 `v*.*.*` 标签时，发布步骤才会启用。
-
-## 发布前检查
-
-- 不提交 `node_modules/`、`dist/`、`.env`、录音、剪贴板图片或本地工作区数据。
-- 任何产品更新推送到 GitHub 前，都要同步核对 `package.json` / `package-lock.json`、`CHANGELOG.md`、README 当前稳定版本与下载入口。
-- 确认 GitHub Pages 下载按钮仍通过 `releases/latest` 选择当前标签的 `TO-DO-Panel-<版本>-arm64.dmg`；推送后必须在线验证最新 Release 资产和 Pages 入口。
-- 确认 `scripts/codex-notify.js` 与 `scripts/claude-notify.js` 已随包装入（在 `build.files` 白名单内），
-  否则装了 DMG 的用户按 README 注册钩子时会指向空路径。
-- 不把 API Key、密码、Apple ID 或其他凭据写入源码和 Release。
-- 发布说明必须注明 macOS 13.0+、Apple Silicon 系统要求和首次“仍要打开”的操作。
-- 每个正式版本只使用一个唯一标签，不覆盖已经公开的安装包。
+Windows runner 属于托管 Windows Server 环境。自动化验证并不等于 Windows 10/11 每种硬件都已实测。物理相机/麦克风、多显示器插拔、DPI 混用、组织策略和 SmartScreen 信誉需要真实用户设备持续反馈。测试截图和日志保存在 Actions 的 windows-test-evidence artifact。

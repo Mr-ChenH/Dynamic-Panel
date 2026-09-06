@@ -6,6 +6,8 @@
   <p>
     <a href="https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest"><strong>下载 macOS 版</strong></a>
     ·
+    <a href="https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest"><strong>下载 Windows 版</strong></a>
+    ·
     <a href="#从源码运行">从源码运行</a>
     ·
     <a href="#更新日志">更新日志</a>
@@ -26,7 +28,7 @@
 
 ## 它是什么
 
-TO-DO Panel 是一个常驻 macOS 屏幕顶部的本地工作台。默认折叠成物理刘海大小，点击后从顶部展开；常用信息和动作不必再散落在多个应用里。
+TO-DO Panel 是一个常驻 macOS / Windows 屏幕顶部的本地工作台。Mac 默认折叠成物理刘海大小；Windows 显示为贴顶的 200 × 38 逻辑像素悬浮条，避开顶部任务栏。点击后从顶部展开。
 
 | 页面 | 解决什么问题 |
 | --- | --- |
@@ -35,7 +37,7 @@ TO-DO Panel 是一个常驻 macOS 屏幕顶部的本地工作台。默认折叠�
 | **随笔记** | Markdown 速记、归档、搜索、重命名与智能标题 |
 | **链接** | 保存公开网址，后台补全标题、图标和分组 |
 | **录制** | 录音开始即创建实时记录，同步显示状态与转写，并可在页内配置 API |
-| **密钥** | 使用 macOS 安全存储加密账号、密码和 API Key |
+| **密钥** | 使用系统安全存储加密账号、密码和 API Key |
 | **设置** | 当菜单栏图标被刘海遮挡时，仍可在面板内配置 API、镜子、首页组件、功能显示、默认展开页、快捷键、数据目录与开机启动 |
 
 剪贴板历史默认关闭，可从菜单栏或面板「设置」的「显示功能」中按需启用。菜单栏入口与设置页读写同一份本机配置；即使状态栏图标过多、被物理刘海遮挡，也不影响调整。Codex、Claude Code 与 GPT 的本机完成事件也可以直接显示为不抢焦点的顶部提醒。
@@ -48,7 +50,14 @@ TO-DO Panel 是一个常驻 macOS 屏幕顶部的本地工作台。默认折叠�
 
 ## 下载与安装
 
-> 当前稳定版本：**1.0.7** · 支持 **macOS 13.0+ 的 Apple Silicon Mac**
+> 当前稳定版本：**1.1.0** · **macOS 13.0+ Apple Silicon** / **Windows 10/11 x64（Intel / AMD 64 位）**
+
+| 平台 | 在上方 GitHub Releases 下载对应安装包 |
+| --- | --- |
+| Mac | `TO-DO-Panel-1.1.0-arm64.dmg` |
+| Windows | `TO-DO-Panel-1.1.0-windows-x64-setup.exe` |
+
+### macOS
 
 1. 前往 [GitHub Releases](https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest) 下载 `TO-DO-Panel-*-arm64.dmg`。
 2. 打开 DMG，将 `TO-DO Panel.app` 拖入「应用程序」。
@@ -57,9 +66,19 @@ TO-DO Panel 是一个常驻 macOS 屏幕顶部的本地工作台。默认折叠�
 
 项目明确采用 GitHub Releases + ad-hoc 签名分发，不进行 Apple 公证，也不上架 Mac App Store。因此首次安装需要手动确认“仍要打开”；这是当前正式分发方式，不是待修复的发布缺陷。每次重新打包后，macOS 可能要求重新授权；由 `safeStorage` 加密的密钥也可能需要重新填写。
 
+### Windows
+
+下载 `TO-DO-Panel-*-windows-x64-setup.exe`，运行安装向导，再从桌面或开始菜单启动。默认仅安装给当前用户，无需管理员权限，卸载保留本机工作区数据。托盘菜单可设置功能或退出，面板设置中可开启开机启动。
+
+安装包暂无商业代码签名，可能出现 SmartScreen 提示。请核对来源与 `.sha256` 校验码，确认后通过「更多信息 → 仍要运行」安装；企业策略可能需要管理员批准。
+
+Windows 首版暂不显示「当前窗口」和「汽水音乐」组件；剪贴板点击复制后用 Ctrl+V 粘贴，AI 完成提醒暂不支持点击切回任务窗口。平台限制不覆盖原有组件偏好。镜子仅主动点击后开启，离开首页或收起立即释放；结束录音释放麦克风。系统拒绝访问设备时，请检查 Windows 隐私设置中桌面应用的相机 / 麦克风权限。
+
+Windows 版在 GitHub Windows runner 上自动验证安装、启动、数据保存、加密、快捷键、模拟音视频设备、重新安装和卸载；物理设备、Windows 10 实机及多显示器硬件尚未人工验收。普通工作区可跨平台迁移，加密密钥需在新电脑重新输入。
+
 ## 更新日志
 
-当前稳定版本为 **v1.0.7**。正在开发但尚未发布的改动会先记录在 `[未发布]`，正式发版时再归档到对应版本，避免 README 随版本增加而持续膨胀。
+当前稳定版本为 **v1.1.0**。正在开发但尚未发布的改动会先记录在 `[未发布]`，正式发版时再归档到对应版本，避免 README 随版本增加而持续膨胀。
 
 完整版本历史、修复内容与未发布改动见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -108,6 +127,7 @@ npm start
 | `npm start` | 启动 Electron 开发版 |
 | `npm run pack` | 生成未安装的 `.app` |
 | `npm run build` | 生成 Apple Silicon DMG |
+| `npm run build:win` | 生成 Windows x64 EXE 安装包（建议 Windows 环境构建） |
 | `npm run build:zip` | 生成 ZIP 分发包 |
 
 官网位于 `website/`，要求 Node.js 22.13.0+：
@@ -135,7 +155,7 @@ npm run dev
 
 ## 发布
 
-推送与 `package.json` 版本一致的 `v*.*.*` 标签后，GitHub Actions 会自动测试、构建并校验 DMG，然后将安装包和 SHA-256 文件上传到 Releases。完整流程见 [发布说明](docs/releasing.md)。
+推送与 `package.json` 版本一致的 `v*.*.*` 标签后，GitHub Actions 并行测试、构建并校验 macOS DMG 和 Windows EXE。两个平台全部通过后，才创建同一个 Release 并上传两个安装包及各自 SHA-256 文件。完整流程见 [发布说明](docs/releasing.md)。
 
 ## License
 

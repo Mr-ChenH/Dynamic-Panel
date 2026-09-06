@@ -1,5 +1,12 @@
 export const LATEST_RELEASE_API_URL = "https://api.github.com/repos/xiaopu-ai/TO-DO-Panel/releases/latest";
 
+export function selectWindowsDownloadUrl(release) {
+  if (!release || !Array.isArray(release.assets) || typeof release.tag_name !== 'string') return null;
+  const name = `TO-DO-Panel-${release.tag_name.replace(/^v/, '')}-windows-x64-setup.exe`;
+  return release.assets.find((asset) => asset?.name === name && asset.state === 'uploaded'
+    && typeof asset.browser_download_url === 'string')?.browser_download_url ?? null;
+}
+
 export function selectMacDownloadUrl(release) {
   if (!release || !Array.isArray(release.assets)) return null;
 

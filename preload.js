@@ -8,6 +8,7 @@ function subscribe(channel, handler) {
 }
 
 contextBridge.exposeInMainWorld('notchAPI', {
+  platform: process.platform,
   setMode: (mode) => ipcRenderer.invoke('window:set-mode', mode),
   beginCollapse: () => ipcRenderer.invoke('window:begin-collapse'),
   setTab: (tab) => ipcRenderer.invoke('window:set-tab', tab),

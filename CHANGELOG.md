@@ -4,6 +4,15 @@
 
 ## [未发布]
 
+## [1.1.0] - 2026-09-06
+
+### 新增
+
+- Windows 10/11 x64 安装包，与 macOS DMG 共用版本及业务代码；新增 Windows 托盘、开机启动、顶部工作区定位及系统加密支持。
+- Windows 首页按平台能力隐藏当前窗口和汽水音乐，保留用户组件偏好；剪贴板采用复制后手动 Ctrl+V 粘贴。
+- Windows runner 验证安装、真实应用启动、核心 IPC、模拟音视频设备释放、数据保留与卸载；双平台全部通过后统一发布。
+- 官网新增「下载 Windows 版本」按钮，与 macOS 下载分别解析最新 Release 对应资产。
+
 ## [1.0.7] - 2026-09-04
 
 ### 修复
@@ -82,7 +91,8 @@
 
 - 首个稳定版本，建立固定命名的 Apple Silicon DMG 发布流程。
 
-[未发布]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.0.7...HEAD
+[未发布]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.0.7...v1.1.0
 [1.0.7]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.0.4...v1.0.5

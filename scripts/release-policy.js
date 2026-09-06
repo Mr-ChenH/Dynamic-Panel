@@ -5,6 +5,11 @@ const path = require('node:path');
 
 const projectRoot = path.join(__dirname, '..');
 const packageJson = require(path.join(projectRoot, 'package.json'));
+const lock = require(path.join(projectRoot, 'package-lock.json'));
+if (lock.version !== packageJson.version || lock.packages[''].version !== packageJson.version) {
+  process.stderr.write('package.json and package-lock.json versions must match\n');
+  process.exit(1);
+}
 const outputPath = process.env.GITHUB_OUTPUT;
 const expectedTag = `v${packageJson.version}`;
 const isPushedTag = process.env.GITHUB_EVENT_NAME === 'push'

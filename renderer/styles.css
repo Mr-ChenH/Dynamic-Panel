@@ -79,7 +79,7 @@
   --s-6: 24px;
 
   /* ============ 字体 ============ */
-  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'SF Pro Display', 'SF Pro Text',
     'PingFang SC', sans-serif;
   --font-mono: 'SF Mono', ui-monospace, monospace;
   --fs-micro: 9px;
