@@ -1708,12 +1708,14 @@ const notesList = document.getElementById('notes-list');
 const notesSearch = document.getElementById('notes-search');
 const notesDetail = document.getElementById('notes-detail');
 const notesCount = document.getElementById('notes-count');
+const notesNewButton = document.getElementById('notes-new');
 const noteFormatActions = document.getElementById('note-format-actions');
 const noteModeButtons = Array.from(document.querySelectorAll('[data-note-mode]'));
 const noteEditButton = document.getElementById('note-edit-btn');
 const homeNote = document.querySelector('.home-note');
 
 const NOTE_INLINE_PATTERNS = [
+  { type: 'image', regex: /!\[([^\]\n]*)\]\((note-images\/[a-z0-9-]{6,80}\/image-[a-f0-9-]{36}\.png)\)/gi },
   { type: 'code', regex: /`([^`\n]+)`/g },
   { type: 'link', regex: /\[([^\]\n]+)\]\(([^)\s]+)\)/g },
   { type: 'strong', regex: /\*\*([^*\n]+)\*\*/g },
@@ -1747,6 +1749,13 @@ function findNextInlineToken(text, fromIndex) {
   return next;
 }
 
+function safeNoteImageReference(rawPath) {
+  const normalized = String(rawPath || '').replace(/\\/g, '/');
+  return /^note-images\/[a-z0-9-]{6,80}\/image-[a-f0-9-]{36}\.png$/i.test(normalized)
+    ? normalized
+    : null;
+}
+
 function safeMarkdownUrl(rawUrl) {
   try {
     const url = new URL(rawUrl);
@@ -1776,7 +1785,25 @@ function appendInlineMarkdown(parent, source, depth = 0) {
       parent.append(document.createTextNode(text.slice(cursor, match.index)));
     }
 
-    if (type === 'code') {
+    if (type === 'image') {
+      const imagePath = safeNoteImageReference(match[2]);
+      if (!imagePath || !window.notchAPI?.readNoteImage) {
+        parent.append(document.createTextNode(match[0]));
+      } else {
+        const image = document.createElement('img');
+        image.className = 'note-preview-image';
+        image.alt = match[1] || '笔记图片';
+        image.dataset.noteImage = imagePath;
+        image.decoding = 'async';
+        window.notchAPI.readNoteImage(imagePath).then((source) => {
+          if (source && image.isConnected) image.src = source;
+          else if (image.isConnected) image.replaceWith(document.createTextNode('[图片不可用]'));
+        }).catch(() => {
+          if (image.isConnected) image.replaceWith(document.createTextNode('[图片不可用]'));
+        });
+        parent.append(image);
+      }
+    } else if (type === 'code') {
       const code = document.createElement('code');
       code.textContent = match[1];
       parent.append(code);
@@ -2317,7 +2344,10 @@ function noteArchiveTitle(note) {
 }
 
 function noteArchiveExcerpt(note) {
-  const lines = String(note && note.content || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const content = String(note && note.content || '')
+    .replace(/!\[([^\]]*)\]\(note-images\/[^)]+\)/gi, '$1 ')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  const lines = content.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   return lines.join(' ').replace(/[#*_~`>\[\]]/g, '').slice(0, 86);
 }
 
@@ -2331,6 +2361,29 @@ function noteArchiveTime(timestamp) {
   }).format(new Date(timestamp));
 }
 
+const NOTES_TOOL_ICONS = {
+  heading: '<b>H</b>',
+  bold: '<b>B</b>',
+  italic: '<i>I</i>',
+  bullet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg>',
+  task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="6" height="6" rx="1"/><path d="m4.5 7 1.5 1.5L8.5 6M13 7h8M3 17h6M13 17h8"/></svg>',
+  quote: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 8H4v4h4v4H4M17 8h-3v4h4v4h-4"/></svg>',
+  code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>',
+};
+let notesEditorMode = 'edit';
+
+function noteActionButton(action, label, icon, className = 'notes-icon-button') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.dataset.action = action;
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.innerHTML = icon;
+  return button;
+}
+
 function renderNotesDetail(notes = loadNoteArchive()) {
   if (!notesDetail) return;
   notesDetail.replaceChildren();
@@ -2341,7 +2394,7 @@ function renderNotesDetail(notes = loadNoteArchive()) {
     const hasArchive = loadNoteArchive().length > 0;
     empty.innerHTML = hasArchive
       ? '<span class="notes-empty-mark" aria-hidden="true">⌕</span><strong>没有匹配的笔记</strong><p>试试搜索其他关键词。</p>'
-      : '<span class="notes-empty-mark" aria-hidden="true">✎</span><strong>还没有保存的笔记</strong><p>在首页的「随笔记」中写下内容，点击保存后会出现在这里。</p>';
+      : '<span class="notes-empty-mark" aria-hidden="true">✎</span><strong>还没有笔记</strong><button class="notes-empty-create" type="button" data-action="create-note">新建笔记</button>';
     notesDetail.append(empty);
     return;
   }
@@ -2358,32 +2411,79 @@ function renderNotesDetail(notes = loadNoteArchive()) {
   title.maxLength = 80;
   title.autocomplete = 'off';
   title.spellcheck = false;
-  title.setAttribute('aria-label', '笔记标题，可直接修改');
+  title.setAttribute('aria-label', '笔记标题');
   const time = document.createElement('time');
   time.className = 'notes-detail-time';
-  time.textContent = `更新于 ${noteArchiveTime(note.updatedAt)}`;
+  time.textContent = `已保存 · ${noteArchiveTime(note.updatedAt)}`;
   heading.append(title, time);
+
   const actions = document.createElement('div');
   actions.className = 'notes-detail-actions';
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'notes-delete';
-  remove.dataset.action = 'delete-note';
-  remove.setAttribute('aria-label', '删除笔记');
-  remove.title = '删除笔记';
-  remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h10l1-12"/></svg>';
-  actions.append(remove);
+  const modes = document.createElement('div');
+  modes.className = 'notes-mode-control';
+  modes.setAttribute('role', 'group');
+  modes.setAttribute('aria-label', '笔记显示模式');
+  for (const [mode, label] of [['edit', '编辑'], ['preview', '预览']]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.action = `note-mode-${mode}`;
+    button.textContent = label;
+    button.classList.toggle('active', notesEditorMode === mode);
+    button.setAttribute('aria-pressed', String(notesEditorMode === mode));
+    modes.append(button);
+  }
+  const attach = noteActionButton(
+    'attach-note-image',
+    '添加图片',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h4l2-2h4l2 2h4v12H4z"/><circle cx="12" cy="13" r="3"/></svg>'
+  );
+  const remove = noteActionButton(
+    'delete-note',
+    '删除笔记',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12"/></svg>',
+    'notes-icon-button danger'
+  );
+  actions.append(modes, attach, remove);
   header.append(heading, actions);
 
+  const toolbar = document.createElement('div');
+  toolbar.className = 'notes-format-toolbar';
+  toolbar.hidden = notesEditorMode !== 'edit';
+  toolbar.setAttribute('role', 'toolbar');
+  toolbar.setAttribute('aria-label', '笔记格式');
+  const labels = {
+    heading: '标题', bold: '加粗', italic: '斜体', bullet: '项目列表',
+    task: '待办列表', quote: '引用', code: '行内代码', link: '链接',
+  };
+  for (const type of Object.keys(labels)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.notesFormat = type;
+    button.setAttribute('aria-label', labels[type]);
+    button.title = labels[type];
+    button.innerHTML = NOTES_TOOL_ICONS[type];
+    toolbar.append(button);
+  }
+
+  const content = document.createElement('div');
+  content.className = 'notes-content';
   const editor = document.createElement('textarea');
   editor.id = 'notes-editor';
   editor.className = 'notes-editor';
   editor.dataset.noteId = note.id;
   editor.value = note.content;
-  editor.placeholder = '直接输入笔记内容…';
+  editor.placeholder = '开始写作…';
   editor.setAttribute('aria-label', `编辑笔记：${noteArchiveTitle(note)}`);
-  editor.spellcheck = false;
-  notesDetail.append(header, editor);
+  editor.spellcheck = true;
+  editor.hidden = notesEditorMode !== 'edit';
+  const preview = document.createElement('article');
+  preview.id = 'notes-preview';
+  preview.className = 'note-preview notes-preview';
+  preview.tabIndex = 0;
+  preview.hidden = notesEditorMode !== 'preview';
+  if (notesEditorMode === 'preview') preview.replaceChildren(buildMarkdownPreview(note.content));
+  content.append(editor, preview);
+  notesDetail.append(header, toolbar, content);
   requestNoteTitle(note);
 }
 
@@ -2419,7 +2519,7 @@ async function requestNoteTitle(note) {
     return;
   }
   localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next.slice(0, 200)));
-  renderNotesLibrary();
+  updateSavedNotePresentation(updated);
 }
 
 function updateSavedNotePresentation(note) {
@@ -2455,6 +2555,7 @@ function persistNotesEditor(editor) {
     renderNotePreview();
   }
   updateSavedNotePresentation(updated);
+  void requestNoteTitle(updated);
   if (pendingNotesEditor === editor) pendingNotesEditor = null;
 }
 
@@ -2513,6 +2614,180 @@ function renderNotesLibrary() {
   });
   renderNotesDetail(notes);
 }
+
+function createNote() {
+  flushNotesEditorSave();
+  const now = Date.now();
+  const note = {
+    id: generateId(),
+    title: '',
+    titleSource: '',
+    content: '',
+    createdAt: now,
+    updatedAt: now,
+  };
+  const notes = [note, ...loadNoteArchive()].slice(0, 200);
+  try {
+    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes));
+  } catch (error) {
+    showStatusToast('无法创建笔记，请检查存储空间');
+    return null;
+  }
+  selectedNoteId = note.id;
+  notesEditorMode = 'edit';
+  if (notesSearch) notesSearch.value = '';
+  renderNotesLibrary();
+  requestAnimationFrame(() => notesDetail?.querySelector('.notes-detail-title')?.focus({ preventScroll: true }));
+  return note;
+}
+
+function replaceNotesEditorText(editor, start, end, replacement, selectionStart, selectionEnd) {
+  editor.setRangeText(replacement, start, end, 'end');
+  editor.focus({ preventScroll: true });
+  editor.setSelectionRange(selectionStart, selectionEnd);
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function applyNotesEditorFormat(editor, type) {
+  if (!editor) return;
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  const selected = editor.value.slice(start, end);
+  const inline = {
+    bold: ['**', '**', '加粗文字'],
+    italic: ['*', '*', '斜体文字'],
+    code: ['`', '`', '代码'],
+  }[type];
+  if (inline) {
+    const content = selected || inline[2];
+    const replacement = inline[0] + content + inline[1];
+    replaceNotesEditorText(
+      editor, start, end, replacement,
+      start + inline[0].length,
+      start + inline[0].length + content.length
+    );
+    return;
+  }
+  if (type === 'link') {
+    const label = selected || '链接文字';
+    const replacement = `[${label}](https://)`;
+    const urlStart = start + label.length + 3;
+    replaceNotesEditorText(editor, start, end, replacement, urlStart, urlStart + 8);
+    return;
+  }
+  const value = editor.value;
+  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+  const nextBreak = value.indexOf('\n', end);
+  const lineEnd = nextBreak === -1 ? value.length : nextBreak;
+  const lines = value.slice(lineStart, lineEnd).split('\n');
+  const prefixes = { heading: '# ', bullet: '- ', task: '- [ ] ', quote: '> ' };
+  const prefix = prefixes[type];
+  if (!prefix) return;
+  const matcher = type === 'heading' ? /^#{1,6}\s+/ :
+    type === 'task' ? /^[-*+]\s+\[[ xX]\]\s+/ :
+      type === 'quote' ? /^>\s?/ : /^[-*+]\s+/;
+  const remove = lines.filter((line) => line.trim()).every((line) => matcher.test(line.trimStart()));
+  const replacement = lines.map((line) => {
+    if (!line.trim()) return remove ? '' : prefix;
+    const indentation = line.match(/^\s*/)[0];
+    const body = line.slice(indentation.length);
+    return indentation + (remove ? body.replace(matcher, '') : prefix + stripNoteBlockPrefix(body));
+  }).join('\n');
+  replaceNotesEditorText(editor, lineStart, lineEnd, replacement, lineStart, lineStart + replacement.length);
+}
+
+function continueNotesEditorList(editor, event) {
+  if (event.key !== 'Enter' || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey
+    || event.isComposing || editor.selectionStart !== editor.selectionEnd) return false;
+  const cursor = editor.selectionStart;
+  const lineStart = editor.value.lastIndexOf('\n', cursor - 1) + 1;
+  const line = editor.value.slice(lineStart, cursor);
+  const match = line.match(/^(\s*)([-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?)(.*)$/);
+  if (!match) return false;
+  event.preventDefault();
+  if (!match[3].trim()) {
+    replaceNotesEditorText(editor, lineStart, cursor, match[1], lineStart + match[1].length, lineStart + match[1].length);
+    return true;
+  }
+  let prefix = match[2];
+  const ordered = prefix.match(/^(\d+)[.)]\s+$/);
+  if (ordered) prefix = `${Number(ordered[1]) + 1}. `;
+  if (/^[-*+]\s+\[[ xX]\]\s+$/i.test(prefix)) prefix = '- [ ] ';
+  const insertion = `\n${match[1]}${prefix}`;
+  replaceNotesEditorText(editor, cursor, cursor, insertion, cursor + insertion.length, cursor + insertion.length);
+  return true;
+}
+
+function markdownImageAlt(name) {
+  return String(name || '图片').replace(/[\[\]\\]/g, '').trim().slice(0, 80) || '图片';
+}
+
+function insertNoteImageReferences(editor, images) {
+  const rows = (Array.isArray(images) ? images : []).filter((image) => safeNoteImageReference(image && image.imagePath));
+  if (!editor || !rows.length) return false;
+  const markdown = rows.map((image) => `![${markdownImageAlt(image.name)}](${image.imagePath})`).join('\n\n');
+  const before = editor.value.slice(0, editor.selectionStart);
+  const after = editor.value.slice(editor.selectionEnd);
+  const prefix = before && !before.endsWith('\n') ? '\n\n' : '';
+  const suffix = after && !after.startsWith('\n') ? '\n\n' : '';
+  const replacement = prefix + markdown + suffix;
+  const start = editor.selectionStart;
+  replaceNotesEditorText(editor, start, editor.selectionEnd, replacement, start + replacement.length, start + replacement.length);
+  flushNotesEditorSave();
+  return true;
+}
+
+async function saveNoteImageFiles(editor, files) {
+  const noteId = editor?.dataset.noteId;
+  const imageFiles = Array.from(files || []).filter((file) => String(file.type || '').startsWith('image/')).slice(0, 12);
+  if (!noteId || !imageFiles.length || !window.notchAPI?.saveNoteImage) return false;
+  const time = notesDetail?.querySelector('.notes-detail-time');
+  if (time) time.textContent = '正在添加图片…';
+  const saved = [];
+  for (const file of imageFiles) {
+    try {
+      const result = await window.notchAPI.saveNoteImage({
+        noteId,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      });
+      if (result?.ok) saved.push({ ...result, name: file.name || '粘贴的图片' });
+    } catch (error) {}
+  }
+  if (!insertNoteImageReferences(editor, saved)) {
+    if (time) time.textContent = '图片添加失败';
+    return false;
+  }
+  showStatusToast(saved.length === 1 ? '图片已添加' : `已添加 ${saved.length} 张图片`);
+  return true;
+}
+
+function setNotesEditorMode(mode) {
+  const next = mode === 'preview' ? 'preview' : 'edit';
+  if (next === notesEditorMode) return;
+  flushNotesEditorSave();
+  notesEditorMode = next;
+  renderNotesDetail(loadNoteArchive());
+  requestAnimationFrame(() => notesDetail?.querySelector(next === 'preview' ? '#notes-preview' : '#notes-editor')?.focus({ preventScroll: true }));
+}
+
+notesNewButton?.addEventListener('click', createNote);
+document.addEventListener('keydown', (event) => {
+  if (activeTab !== 'notes' || event.altKey || event.shiftKey || event.isComposing
+    || !(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'n') return;
+  event.preventDefault();
+  createNote();
+});
+
+window.NotchNotes = {
+  create: createNote,
+  select: (noteId) => {
+    if (!loadNoteArchive().some((note) => note.id === noteId)) return false;
+    selectedNoteId = noteId;
+    renderNotesLibrary();
+    return true;
+  },
+  list: () => loadNoteArchive().map((note) => ({ ...note })),
+};
 
 noteSaveButton?.addEventListener('click', () => {
   const content = noteInput?.value.trim() || '';
@@ -2577,24 +2852,108 @@ notesDetail?.addEventListener('focusout', (event) => {
   if (event.target.closest('#notes-editor')) flushNotesEditorSave();
 });
 
-notesDetail?.addEventListener('click', (event) => {
+notesDetail?.addEventListener('mousedown', (event) => {
+  if (event.target.closest('[data-notes-format]')) event.preventDefault();
+});
+
+notesDetail?.addEventListener('click', async (event) => {
+  const format = event.target.closest('[data-notes-format]')?.dataset.notesFormat;
+  if (format) {
+    applyNotesEditorFormat(notesDetail.querySelector('#notes-editor'), format);
+    return;
+  }
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (!action) return;
+  if (action === 'create-note') {
+    createNote();
+    return;
+  }
+  if (action === 'note-mode-edit' || action === 'note-mode-preview') {
+    setNotesEditorMode(action.endsWith('preview') ? 'preview' : 'edit');
+    return;
+  }
   flushNotesEditorSave();
   const notes = loadNoteArchive();
   const note = notes.find((item) => item.id === selectedNoteId);
   if (!note) return;
+  if (action === 'attach-note-image') {
+    const editor = notesDetail.querySelector('#notes-editor');
+    if (notesEditorMode !== 'edit') {
+      notesEditorMode = 'edit';
+      renderNotesDetail(notes);
+    }
+    const activeEditor = notesDetail.querySelector('#notes-editor') || editor;
+    const time = notesDetail.querySelector('.notes-detail-time');
+    if (time) time.textContent = '正在选择图片…';
+    const result = await window.notchAPI?.chooseNoteImages?.(note.id).catch(() => null);
+    if (result?.images?.length) insertNoteImageReferences(activeEditor, result.images);
+    else if (time) time.textContent = result?.canceled ? `已保存 · ${noteArchiveTime(note.updatedAt)}` : '图片添加失败';
+    return;
+  }
   if (action === 'delete-note') {
     const next = notes.filter((item) => item.id !== note.id);
     localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next));
     if (localStorage.getItem(NOTE_ACTIVE_ARCHIVE_KEY) === note.id) {
       localStorage.removeItem(NOTE_ACTIVE_ARCHIVE_KEY);
     }
+    void window.notchAPI?.deleteNoteImages?.(note.id).catch(() => false);
     selectedNoteId = next[0]?.id || '';
+    notesEditorMode = 'edit';
     renderNotesLibrary();
     showStatusToast('笔记已删除');
-    return;
   }
+});
+
+notesDetail?.addEventListener('keydown', (event) => {
+  const editor = event.target.closest('#notes-editor');
+  if (!editor) return;
+  if (continueNotesEditorList(editor, event)) return;
+  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
+  const key = event.key.toLowerCase();
+  if (key !== 'b' && key !== 'i') return;
+  event.preventDefault();
+  applyNotesEditorFormat(editor, key === 'b' ? 'bold' : 'italic');
+});
+
+notesDetail?.addEventListener('paste', (event) => {
+  const editor = event.target.closest('#notes-editor');
+  if (!editor) return;
+  const images = Array.from(event.clipboardData?.files || []).filter((file) => String(file.type || '').startsWith('image/'));
+  if (!images.length) return;
+  event.preventDefault();
+  void saveNoteImageFiles(editor, images);
+});
+
+notesDetail?.addEventListener('dragover', (event) => {
+  const editor = event.target.closest('#notes-editor')
+    || (event.target.closest('.notes-content') && notesDetail.querySelector('#notes-editor'));
+  if (!editor || !Array.from(event.dataTransfer?.items || []).some((item) => item.kind === 'file' && item.type.startsWith('image/'))) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'copy';
+  notesDetail.classList.add('is-image-dragging');
+});
+
+notesDetail?.addEventListener('dragleave', (event) => {
+  if (!notesDetail.contains(event.relatedTarget)) notesDetail.classList.remove('is-image-dragging');
+});
+
+notesDetail?.addEventListener('drop', (event) => {
+  notesDetail.classList.remove('is-image-dragging');
+  const editor = event.target.closest('#notes-editor')
+    || (event.target.closest('.notes-content') && notesDetail.querySelector('#notes-editor'));
+  if (!editor) return;
+  const images = Array.from(event.dataTransfer?.files || []).filter((file) => String(file.type || '').startsWith('image/'));
+  if (!images.length) return;
+  event.preventDefault();
+  void saveNoteImageFiles(editor, images);
+});
+
+notesDetail?.addEventListener('click', (event) => {
+  const link = event.target.closest('#notes-preview [data-note-href]');
+  if (!link) return;
+  event.preventDefault();
+  const href = safeMarkdownUrl(link.dataset.noteHref);
+  if (href) window.notchAPI?.openExternal?.(href).catch(() => {});
 });
 
 document.addEventListener('notch:tabchange', (event) => {

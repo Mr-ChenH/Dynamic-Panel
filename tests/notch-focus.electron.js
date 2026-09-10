@@ -81,6 +81,78 @@ async function main() {
     assert.equal(clipboardTimelineAudit.afterFilter.count, '2 条');
     assert.deepEqual(clipboardTimelineAudit.afterFilter.groupSizes, [1, 1]);
 
+    const notesWorkspaceAudit = await window.webContents.executeJavaScript(`
+      (async () => {
+        localStorage.removeItem('notch-note-archive-v1');
+        let savedImages = 0;
+        let deletedNoteId = '';
+        window.notchAPI = {
+          ...(window.notchAPI || {}),
+          saveNoteImage: async ({ noteId, bytes }) => {
+            savedImages += 1;
+            return {
+              ok: bytes.length > 0,
+              imagePath: 'note-images/' + noteId + '/image-12345678-1234-1234-1234-123456789abc.png',
+            };
+          },
+          readNoteImage: async () => 'data:image/png;base64,iVBORw0KGgo=',
+          chooseNoteImages: async () => ({ ok: true, canceled: true, images: [] }),
+          deleteNoteImages: async (noteId) => { deletedNoteId = noteId; return true; },
+        };
+        document.getElementById('tab-button-notes').click();
+        document.getElementById('notes-new').click();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const title = document.querySelector('.notes-detail-title');
+        title.value = '项目研究';
+        title.dispatchEvent(new Event('input', { bubbles: true }));
+        const editor = document.getElementById('notes-editor');
+        editor.value = '核心结论';
+        editor.setSelectionRange(0, 2);
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        document.querySelector('[data-notes-format="bold"]').click();
+        editor.setSelectionRange(editor.value.length, editor.value.length);
+        const paste = new Event('paste', { bubbles: true, cancelable: true });
+        Object.defineProperty(paste, 'clipboardData', {
+          value: { files: [new File([new Uint8Array([1, 2, 3])], '研究截图.png', { type: 'image/png' })] },
+        });
+        editor.dispatchEvent(paste);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const storedBeforePreview = JSON.parse(localStorage.getItem('notch-note-archive-v1'));
+        document.querySelector('[data-action="note-mode-preview"]').click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const preview = document.getElementById('notes-preview');
+        const result = {
+          count: document.getElementById('notes-count').textContent,
+          title: storedBeforePreview[0]?.title,
+          content: storedBeforePreview[0]?.content,
+          savedImages,
+          pastePrevented: paste.defaultPrevented,
+          previewVisible: preview && !preview.hidden,
+          previewStrong: preview?.querySelector('strong')?.textContent,
+          previewImagePath: preview?.querySelector('[data-note-image]')?.dataset.noteImage,
+          toolbarHidden: document.querySelector('.notes-format-toolbar')?.hidden,
+          noteId: storedBeforePreview[0]?.id,
+        };
+        document.querySelector('[data-action="delete-note"]').click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        result.deletedNoteId = deletedNoteId;
+        result.remaining = JSON.parse(localStorage.getItem('notch-note-archive-v1')).length;
+        return result;
+      })()
+    `);
+    assert.equal(notesWorkspaceAudit.count, '1 篇');
+    assert.equal(notesWorkspaceAudit.title, '项目研究');
+    assert.match(notesWorkspaceAudit.content, /\*\*核心\*\*结论/);
+    assert.match(notesWorkspaceAudit.content, /!\[研究截图\.png\]\(note-images\//);
+    assert.equal(notesWorkspaceAudit.savedImages, 1);
+    assert.equal(notesWorkspaceAudit.pastePrevented, true);
+    assert.equal(notesWorkspaceAudit.previewVisible, true);
+    assert.equal(notesWorkspaceAudit.previewStrong, '核心');
+    assert.match(notesWorkspaceAudit.previewImagePath, /^note-images\//);
+    assert.equal(notesWorkspaceAudit.toolbarHidden, true);
+    assert.equal(notesWorkspaceAudit.deletedNoteId, notesWorkspaceAudit.noteId);
+    assert.equal(notesWorkspaceAudit.remaining, 0);
+
     await window.webContents.debugger.attach('1.3');
     await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
       features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],

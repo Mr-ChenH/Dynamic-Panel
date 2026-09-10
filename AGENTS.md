@@ -10,7 +10,7 @@
 
 - 桌面端：Electron 44 + 原生 HTML/CSS/JavaScript，无渲染层构建步骤
 - 官网：React 19 + Vinext + 原生 CSS，位于 `website/`
-- 数据：LocalStorage + `userData/clipboard-images/` + `userData/recordings/`，无后端和云同步
+- 数据：LocalStorage + `userData/clipboard-images/` + `userData/note-images/` + `userData/recordings/`，无后端和云同步
 - 包管理器：npm
 - Node：桌面端使用 Node 18+；官网要求 Node 22.13.0+
 
@@ -42,7 +42,7 @@
 
 - 双平台：macOS 13+ arm64 与 Windows 10/11 x64 共用代码及版本。Windows 使用 `npm run build:win` 生成 NSIS EXE；发布必须两个平台检查通过后汇总至同一 Release。
 - Windows：折叠态为 200 × 38 DIP，贴工作区顶部居中并避开任务栏；隐藏当前窗口和汽水音乐组件，但不修改用户保存的显隐偏好；剪贴板只复制，提醒点击关闭。
-- 便携媒体路径：LocalStorage / workspace.json 中新写入的录音与剪贴板图片使用 `/` 分隔的相对路径，系统加密密钥不保证跨电脑迁移。
+- 便携媒体路径：LocalStorage / workspace.json 中新写入的录音、剪贴板图片与笔记图片使用 `/` 分隔的相对路径，系统加密密钥不保证跨电脑迁移。
 
 - 折叠态：宽 200px，高度等于当前屏幕菜单栏高度，不得超出物理刘海
 - 展开态：各页内容区统一 `1240 × 540`；窗口总高为 `76 + 540`，窄屏与矮屏保留 24px 安全距
@@ -51,7 +51,7 @@
 - 链接：只允许公开 http/https；主进程抓取标题时必须阻止本机、内网与不安全重定向
 - 录制：音频写入 `userData/recordings/`，转写与元数据保存在 LocalStorage；可选百炼 Qwen3-ASR 实时转写，API Key 必须经 `safeStorage` 加密或环境变量读取
 - 当前窗口：通过 macOS 辅助功能枚举和聚焦，使用系统应用图标；同应用多窗口编号；隐藏项保存在 LocalStorage；聚焦 IPC 只接受最近扫描缓存中的窗口 ID
-- 笔记：首页随笔记保存后进入独立笔记页，可搜索、重命名、编辑和删除
+- 笔记：独立笔记页可直接新建、搜索、重命名、自动保存、Markdown 编辑/预览和删除；图片支持粘贴、拖入与文件选择，统一转为 PNG 写入 `workspace/note-images/<noteId>/`，正文只保存 `/` 分隔的相对引用。单图原始输入不超过 20 MB、最长边压到 2400px；删除笔记时删除其专属附件目录
 - 动效：窗口边界变更不使用系统动画；视觉动效由渲染层完成，并支持 `prefers-reduced-motion`
 - 通知：独立 `400 × 96` 无焦点窗口；HTTP 只监听 `127.0.0.1:43821` 的 `/notify/<source>`，来源白名单 `codex` / `claude` / `gpt`；Codex 与 Claude Code 分别由 `scripts/codex-notify.js`、`scripts/claude-notify.js` 转发，子代理结束与云端会话不弹提醒
 

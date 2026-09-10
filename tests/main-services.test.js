@@ -2,6 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  validNoteId,
+  parseNoteImageReference,
   isPrivateAddress,
   extractPageTitle,
   extractFaviconHref,
@@ -33,6 +35,24 @@ const {
   reduceClipboardObservation,
   createForegroundMediaPermissionCoordinator,
 } = require('../main-services');
+
+test('note image references stay inside their note-owned portable directory', () => {
+  const valid = 'note-images/note-123/image-12345678-1234-1234-1234-123456789abc.png';
+  assert.equal(validNoteId('note-123'), true);
+  assert.equal(validNoteId('../note'), false);
+  assert.deepEqual(parseNoteImageReference(valid), {
+    noteId: 'note-123',
+    fileName: 'image-12345678-1234-1234-1234-123456789abc.png',
+    relativePath: valid,
+  });
+  for (const unsafe of [
+    '../note-images/note-123/image-12345678-1234-1234-1234-123456789abc.png',
+    'note-images/note-123/../../secret.png',
+    'note-images\\note-123\\image-12345678-1234-1234-1234-123456789abc.png',
+    'note-images/note-123/not-an-image.txt',
+    '/note-images/note-123/image-12345678-1234-1234-1234-123456789abc.png',
+  ]) assert.equal(parseNoteImageReference(unsafe), null);
+});
 
 test('media permission prompts temporarily leave the screen-saver window layer', async () => {
   const events = [];

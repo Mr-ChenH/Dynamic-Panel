@@ -26,6 +26,8 @@ const { execFile } = require('child_process');
 const platformPolicy = require('./platform');
 const PLATFORM_CAPABILITIES = platformPolicy.capabilities(process.platform);
 const {
+  validNoteId,
+  parseNoteImageReference,
   isPrivateAddress,
   extractPageTitle,
   recordingExtension,
@@ -208,6 +210,9 @@ const CLIP_POLL_INTERVAL_MS = 500;
 // 文本继续保持 500ms 响应，不影响日常文字剪贴体验。
 const CLIP_IMAGE_POLL_INTERVAL_MS = 3000;
 const CLIP_IMAGES_DIR_NAME = 'clipboard-images';
+const NOTE_IMAGES_DIR_NAME = 'note-images';
+const NOTE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+const NOTE_IMAGE_MAX_EDGE = 2400;
 
 const RECORDINGS_DIR_NAME = 'recordings';
 const TRANSCRIPTION_SETTINGS_FILE = 'transcription-settings.json';
@@ -1195,7 +1200,7 @@ function showOwnedOpenDialog(options) {
 
 function copyWorkspaceAssets(sourceRoot, targetRoot) {
   if (!sourceRoot || !targetRoot || path.resolve(sourceRoot) === path.resolve(targetRoot)) return;
-  for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME]) {
+  for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME, NOTE_IMAGES_DIR_NAME]) {
     const source = path.join(sourceRoot, directory);
     const target = path.join(targetRoot, directory);
     try {
@@ -1225,7 +1230,7 @@ async function chooseWorkspaceFolder() {
   const previousRoot = workspaceRoot();
   copyWorkspaceAssets(previousRoot, selected);
   if (!writeJsonFile(getJsonSettingsPath(WORKSPACE_SETTINGS_FILE), { path: selected })) return false;
-  for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME]) {
+  for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME, NOTE_IMAGES_DIR_NAME]) {
     try { fs.mkdirSync(path.join(selected, directory), { recursive: true }); } catch (error) {}
   }
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('workspace:changed', { path: selected });
@@ -2816,6 +2821,144 @@ ipcMain.handle('recordings:reveal', (event, audioPath) => {
   if (!safePath) return false;
   shell.showItemInFolder(safePath);
   return true;
+});
+
+// ============ 笔记图片 ============
+
+function getNoteImagesDir() {
+  return workspacePath(NOTE_IMAGES_DIR_NAME);
+}
+
+function getNoteImageDirectory(noteId) {
+  return validNoteId(noteId) ? path.join(getNoteImagesDir(), String(noteId)) : null;
+}
+
+function portableNoteImagePath(filePath) {
+  return path.relative(workspaceRoot(), filePath).split(path.sep).join('/');
+}
+
+function getSafeNoteImagePath(imagePath) {
+  if (typeof imagePath !== 'string' || path.isAbsolute(imagePath)) return null;
+  const reference = parseNoteImageReference(imagePath);
+  if (!reference) return null;
+  const root = path.resolve(getNoteImagesDir());
+  const resolved = path.resolve(workspaceRoot(), reference.relativePath);
+  const relative = path.relative(root, resolved);
+  if (!relative || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return null;
+  try {
+    const rootStat = fs.lstatSync(root);
+    const noteDirStat = fs.lstatSync(path.dirname(resolved));
+    const fileStat = fs.lstatSync(resolved);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) return null;
+    if (noteDirStat.isSymbolicLink() || !noteDirStat.isDirectory()) return null;
+    if (fileStat.isSymbolicLink() || !fileStat.isFile()) return null;
+    return resolved;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function persistNoteImage(noteId, bytes) {
+  if (!validNoteId(noteId)) return { ok: false, error: 'invalid_note' };
+  let buffer;
+  try {
+    buffer = Buffer.from(bytes || []);
+  } catch (error) {
+    return { ok: false, error: 'invalid_image' };
+  }
+  if (!buffer.length || buffer.length > NOTE_IMAGE_MAX_BYTES) return { ok: false, error: 'invalid_image' };
+  const source = nativeImage.createFromBuffer(buffer);
+  if (source.isEmpty()) return { ok: false, error: 'invalid_image' };
+  const size = source.getSize();
+  if (!size.width || !size.height || size.width * size.height > 80_000_000) {
+    return { ok: false, error: 'image_too_large' };
+  }
+  const scale = Math.min(1, NOTE_IMAGE_MAX_EDGE / Math.max(size.width, size.height));
+  const output = scale < 1
+    ? source.resize({
+      width: Math.max(1, Math.round(size.width * scale)),
+      height: Math.max(1, Math.round(size.height * scale)),
+      quality: 'best',
+    }).toPNG()
+    : source.toPNG();
+  if (!output.length) return { ok: false, error: 'invalid_image' };
+  const directory = getNoteImageDirectory(noteId);
+  const filePath = path.join(directory, `image-${crypto.randomUUID()}.png`);
+  try {
+    await fs.promises.mkdir(directory, { recursive: true });
+    const rootStat = await fs.promises.lstat(getNoteImagesDir());
+    const directoryStat = await fs.promises.lstat(directory);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()
+      || directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+      return { ok: false, error: 'unsafe_directory' };
+    }
+    await fs.promises.writeFile(filePath, output, { flag: 'wx' });
+    return {
+      ok: true,
+      imagePath: portableNoteImagePath(filePath),
+      width: Math.max(1, Math.round(size.width * scale)),
+      height: Math.max(1, Math.round(size.height * scale)),
+    };
+  } catch (error) {
+    return { ok: false, error: 'save_failed' };
+  }
+}
+
+ipcMain.handle('notes:save-image', async (event, payload) => (
+  persistNoteImage(payload && payload.noteId, payload && payload.bytes)
+));
+
+ipcMain.handle('notes:choose-images', async (event, noteId) => {
+  if (!validNoteId(noteId)) return { ok: false, error: 'invalid_note', images: [] };
+  const result = await showOwnedOpenDialog({
+    title: '添加图片到笔记',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }],
+  });
+  if (result.canceled) return { ok: true, canceled: true, images: [] };
+  const images = [];
+  for (const filePath of (result.filePaths || []).slice(0, 12)) {
+    try {
+      const stat = await fs.promises.stat(filePath);
+      if (!stat.isFile() || stat.size > NOTE_IMAGE_MAX_BYTES) continue;
+      const saved = await persistNoteImage(noteId, await fs.promises.readFile(filePath));
+      if (saved.ok) images.push({ ...saved, name: path.parse(filePath).name.slice(0, 80) });
+    } catch (error) {}
+  }
+  return images.length
+    ? { ok: true, canceled: false, images }
+    : { ok: false, error: 'no_valid_images', images: [] };
+});
+
+ipcMain.handle('notes:read-image', async (event, imagePath) => {
+  const safePath = getSafeNoteImagePath(imagePath);
+  if (!safePath) return null;
+  try {
+    const stat = await fs.promises.stat(safePath);
+    if (!stat.isFile() || stat.size > 32 * 1024 * 1024) return null;
+    const buffer = await fs.promises.readFile(safePath);
+    return `data:image/png;base64,${buffer.toString('base64')}`;
+  } catch (error) {
+    return null;
+  }
+});
+
+ipcMain.handle('notes:delete-images', async (event, noteId) => {
+  const directory = getNoteImageDirectory(noteId);
+  if (!directory) return false;
+  try {
+    const root = path.resolve(getNoteImagesDir());
+    const resolved = path.resolve(directory);
+    if (path.dirname(resolved) !== root) return false;
+    const rootStat = await fs.promises.lstat(root);
+    const stat = await fs.promises.lstat(resolved);
+    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()
+      || stat.isSymbolicLink() || !stat.isDirectory()) return false;
+    await fs.promises.rm(resolved, { recursive: true, force: true });
+    return true;
+  } catch (error) {
+    return error && error.code === 'ENOENT';
+  }
 });
 
 // ============ 剪贴板历史 ============

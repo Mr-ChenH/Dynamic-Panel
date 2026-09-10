@@ -11,6 +11,7 @@ fs.writeFileSync(path.join(profile, 'workspace.json'), JSON.stringify({version:1
   'notch-home-note':'Recovered workspace note',
   'notch-recordings':JSON.stringify([{id:'startup-recording',createdAt:1788709776699,durationMs:1558,transcript:'',audioPath:'recordings/retained.webm',mimeType:'audio/webm',title:'Saved recording',category:'未分类'}]),
 }}));
+const noteImageBase64 = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'assets', 'app-logo-128.png')).toString('base64');
 const errors = [];
 setTimeout(() => { console.error('Production startup timed out', errors); app.exit(1); }, 25000);
 app.on('web-contents-created', (_event, contents) => {
@@ -21,10 +22,41 @@ app.on('web-contents-created', (_event, contents) => {
     if (!contents.getURL().endsWith('/renderer/index.html')) return;
     setTimeout(async () => {
       try {
-        const state = await contents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,note:document.getElementById('home-note').value,recordings:document.querySelectorAll('.recording-item').length})`);
+        const state = await contents.executeJavaScript(`
+          (async () => {
+            const encoded = '${noteImageBase64}';
+            const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+            const saved = await window.notchAPI.saveNoteImage({ noteId: 'startup-note', bytes });
+            const source = saved.ok ? await window.notchAPI.readNoteImage(saved.imagePath) : null;
+            const deleted = await window.notchAPI.deleteNoteImages('startup-note');
+            const afterDelete = saved.ok ? await window.notchAPI.readNoteImage(saved.imagePath) : null;
+            return {
+              home: !!window.NotchHome,
+              workspace: !!window.NotchWorkspace,
+              note: document.getElementById('home-note').value,
+              recordings: document.querySelectorAll('.recording-item').length,
+              imageSaved: saved.ok,
+              imagePath: saved.imagePath,
+              imageReadable: String(source || '').startsWith('data:image/png;base64,'),
+              imageDeleted: deleted,
+              imageGone: afterDelete === null,
+            };
+          })()
+        `);
         assert.deepEqual(errors, []);
-        assert.deepEqual(state, {home:true,workspace:true,note:'Recovered workspace note',recordings:1});
-        console.log('Production workspace recovery checks passed');
+        assert.deepEqual(state, {
+          home: true,
+          workspace: true,
+          note: 'Recovered workspace note',
+          recordings: 1,
+          imageSaved: true,
+          imagePath: state.imagePath,
+          imageReadable: true,
+          imageDeleted: true,
+          imageGone: true,
+        });
+        assert.match(state.imagePath, /^note-images\/startup-note\/image-[a-f0-9-]{36}\.png$/);
+        console.log('Production workspace and note attachment checks passed');
         app.quit();
       } catch (error) { console.error(error); app.exit(1); }
     }, 2000);

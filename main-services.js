@@ -2,6 +2,16 @@ const net = require('net');
 const path = require('path');
 const crypto = require('crypto');
 
+function validNoteId(noteId) {
+  return /^[a-z0-9-]{6,80}$/i.test(String(noteId || ''));
+}
+
+function parseNoteImageReference(value) {
+  if (typeof value !== 'string' || path.isAbsolute(value) || value.includes('\\')) return null;
+  const match = value.match(/^note-images\/([a-z0-9-]{6,80})\/(image-[a-f0-9-]{36}\.png)$/i);
+  return match ? { noteId: match[1], fileName: match[2], relativePath: value } : null;
+}
+
 function isPrivateAddress(address) {
   const value = String(address || '').trim().toLowerCase().split('%', 1)[0];
   if (!value) return true;
@@ -590,6 +600,8 @@ async function controlSodaMusic(action, dependencies = {}, currentPlaying = fals
 }
 
 module.exports = {
+  validNoteId,
+  parseNoteImageReference,
   isPrivateAddress,
   decodeHtmlEntities,
   extractPageTitle,

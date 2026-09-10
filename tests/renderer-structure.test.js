@@ -6,6 +6,7 @@ const path = require('node:path');
 const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
 const mainJs = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
+const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -71,12 +72,26 @@ test('Windows panel motion stays on compositor-only properties', () => {
   assert.doesNotMatch(shellRule, /transition:[\s\S]*clip-path/);
 });
 
-test('notes have a dedicated top-level tab and management panel', () => {
+test('notes provide local-first creation, rich editing, and guarded image attachments', () => {
   assert.match(html, /data-tab="notes"/);
   assert.match(html, /id="tab-notes"/);
+  assert.match(html, /id="notes-new"/);
   assert.match(html, /id="notes-search"/);
   assert.match(html, /id="notes-list"/);
   assert.match(html, /id="notes-detail"/);
+  assert.match(appJs, /function createNote\(\)/);
+  assert.match(appJs, /addEventListener\('paste'/);
+  assert.match(appJs, /addEventListener\('drop'/);
+  assert.match(appJs, /safeNoteImageReference/);
+  assert.match(preloadJs, /notes:save-image/);
+  assert.match(preloadJs, /notes:choose-images/);
+  assert.match(preloadJs, /notes:read-image/);
+  assert.match(preloadJs, /notes:delete-images/);
+  assert.match(mainJs, /NOTE_IMAGE_MAX_BYTES\s*=\s*20 \* 1024 \* 1024/);
+  assert.match(mainJs, /NOTE_IMAGE_MAX_EDGE\s*=\s*2400/);
+  assert.match(mainJs, /getSafeNoteImagePath/);
+  assert.match(mainJs, /NOTE_IMAGES_DIR_NAME/);
+  assert.doesNotMatch(appJs, /data:image\/[^;]+;base64[^\n]*localStorage/);
 });
 
 test('home and settings remove the mirror module completely', () => {

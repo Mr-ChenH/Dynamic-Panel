@@ -308,18 +308,22 @@
                     <span class="tile-label">笔记库</span>
                     <strong id="notes-count">0 篇</strong>
                   </div>
-                  <label class="notes-search-wrap">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
-                    <input id="notes-search" type="search" placeholder="搜索笔记" aria-label="搜索笔记" autocomplete="off" />
-                  </label>
+                  <button class="notes-new-button" id="notes-new" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    <span>新建</span>
+                  </button>
                 </div>
+                <label class="notes-search-wrap">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+                  <input id="notes-search" type="search" placeholder="搜索标题与正文" aria-label="搜索笔记" autocomplete="off" />
+                </label>
                 <div class="notes-list" id="notes-list"></div>
               </aside>
               <section class="notes-detail tile" id="notes-detail">
                 <div class="notes-detail-empty">
                   <span class="notes-empty-mark" aria-hidden="true">✎</span>
-                  <strong>还没有保存的笔记</strong>
-                  <p>在首页的「随笔记」中写下内容，点击保存后会出现在这里。</p>
+                  <strong>还没有笔记</strong>
+                  <button class="notes-empty-create" type="button" data-action="create-note">新建笔记</button>
                 </div>
               </section>
             </div>
