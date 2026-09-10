@@ -1612,8 +1612,34 @@ body {
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: var(--s-1);
+  gap: var(--s-3);
+  min-height: 32px;
   flex-shrink: 0;
+}
+
+.clip-toolbar-summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-width: 150px;
+}
+
+.clip-toolbar-summary strong {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.clip-toolbar-summary span {
+  color: var(--text-4);
+  font: 10px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.clip-filter-group {
+  display: flex;
+  align-items: center;
+  gap: var(--s-1);
 }
 
 .clip-filter {
@@ -1684,12 +1710,71 @@ body {
   height: 13px;
 }
 
-/* — 列表（1120px 画布自然排成 5 列，所有卡片与图片参考卡同高） — */
+/* — 按日期分组的剪贴时间线 — */
 .clip-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  padding-right: var(--s-1);
+}
+
+.clip-timeline-group {
+  position: relative;
+  padding-left: 26px;
+  padding-bottom: var(--s-4);
+}
+
+.clip-timeline-group::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  bottom: -1px;
+  left: 5px;
+  width: 1px;
+  background: var(--hairline-soft);
+}
+
+.clip-timeline-group:last-child {
+  padding-bottom: 0;
+}
+
+.clip-timeline-group:last-child::before {
+  bottom: calc(100% - 16px);
+}
+
+.clip-timeline-heading {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-height: 26px;
+  color: var(--text-2);
+}
+
+.clip-timeline-heading time {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.clip-timeline-heading > span:last-child {
+  color: var(--text-4);
+  font: 9px var(--font-mono);
+}
+
+.clip-timeline-node {
+  position: absolute;
+  top: 7px;
+  left: -25px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--bg-base);
+  border-radius: 50%;
+  background: var(--text-2);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+.clip-timeline-items {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
   grid-auto-rows: var(--clip-card-h);
@@ -1716,10 +1801,10 @@ body {
 
 /* — 空态（跨满全部列居中） — */
 .clip-empty {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 100%;
   min-height: 80px;
   font-size: 12.5px;
   font-weight: 400;
@@ -1879,10 +1964,21 @@ body {
 }
 
 .clip-time {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  width: 100%;
   font-size: 10.5px;
-  font-weight: 400;
-  color: var(--text-3);
+  font-weight: 500;
+  color: var(--text-2);
   font-variant-numeric: tabular-nums;
+}
+
+.clip-time-relative {
+  color: var(--text-4);
+  font-size: 9px;
+  font-weight: 400;
 }
 
 /* — 浮出操作按钮（收藏 / 删除） — */
@@ -1914,7 +2010,7 @@ body {
 }
 
 .clip-fav-btn {
-  right: 28px;
+  right: 36px;
 }
 
 .clip-item:hover .clip-fav-btn,

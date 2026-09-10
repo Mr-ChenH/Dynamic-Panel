@@ -348,10 +348,16 @@
           <section id="tab-clip" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-clip" aria-hidden="true" inert>
             <div class="clip-panel">
               <div class="clip-toolbar" id="clip-toolbar">
-                <button class="clip-filter active" data-filter="all" type="button">全部</button>
-                <button class="clip-filter" data-filter="text" type="button">文字</button>
-                <button class="clip-filter" data-filter="image" type="button">图片</button>
-                <button class="clip-filter" data-filter="faved" type="button">收藏</button>
+                <div class="clip-toolbar-summary">
+                  <strong>剪贴时间线</strong>
+                  <span id="clip-result-count">0 条</span>
+                </div>
+                <div class="clip-filter-group" role="group" aria-label="筛选剪贴记录">
+                  <button class="clip-filter active" data-filter="all" type="button">全部</button>
+                  <button class="clip-filter" data-filter="text" type="button">文字</button>
+                  <button class="clip-filter" data-filter="image" type="button">图片</button>
+                  <button class="clip-filter" data-filter="faved" type="button">收藏</button>
+                </div>
                 <button class="clip-clear-btn squircle" id="clip-clear-btn" type="button" aria-label="清空历史">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <path d="M4 7h16" />

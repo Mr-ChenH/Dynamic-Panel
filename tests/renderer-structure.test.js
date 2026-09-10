@@ -15,6 +15,15 @@ test('clipboard rows define both favorite icons before rendering entries', () =>
   assert.match(appJs, /const starFilledSvg\s*=/);
 });
 
+test('clipboard history renders a dated timeline with filtered result counts', () => {
+  assert.match(html, /id="clip-result-count"/);
+  assert.match(appJs, /groupClipItemsByDay/);
+  assert.match(appJs, /clip-timeline-group/);
+  assert.match(appJs, /formatClipMoment/);
+  assert.match(stylesCss, /\.clip-timeline-group::before/);
+  assert.match(stylesCss, /\.clip-timeline-node/);
+});
+
 test('Windows collapsed notch stays compact and grows only on approach', () => {
   assert.match(appJs, /app\.dataset\.platform\s*=\s*window\.notchAPI\?\.platform/);
   const compactRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch \{([\s\S]*?)\n\}/)?.[1] || '';

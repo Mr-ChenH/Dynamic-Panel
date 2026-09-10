@@ -47,6 +47,40 @@ async function main() {
       imageRows: 0,
     }, '全新用户目录不得预置任何剪贴板文本、收藏或图片记录');
 
+    const clipboardTimelineAudit = await window.webContents.executeJavaScript(`
+      (() => {
+        const now = new Date();
+        const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 21, 15);
+        clipHistory = [
+          { id: 'today-text', type: 'text', text: '今日文字', imagePath: null, timestamp: now.getTime() - 120000 },
+          { id: 'today-image', type: 'image', text: null, imagePath: 'clipboard-images/today.png', timestamp: now.getTime() - 3600000 },
+          { id: 'yesterday-url', type: 'url', text: 'https://example.com', imagePath: null, timestamp: yesterday.getTime() },
+        ];
+        clipDataVersion += 1;
+        renderClipList();
+        const beforeFilter = {
+          count: document.getElementById('clip-result-count').textContent,
+          headings: [...document.querySelectorAll('.clip-timeline-heading time')].map((item) => item.textContent),
+          groupSizes: [...document.querySelectorAll('.clip-timeline-items')].map((item) => item.children.length),
+          clocks: [...document.querySelectorAll('.clip-time > span:first-child')].map((item) => item.textContent),
+        };
+        document.querySelector('[data-filter="text"]').click();
+        const afterFilter = {
+          count: document.getElementById('clip-result-count').textContent,
+          groupSizes: [...document.querySelectorAll('.clip-timeline-items')].map((item) => item.children.length),
+        };
+        clearClipHistory();
+        document.querySelector('[data-filter="all"]').click();
+        return { beforeFilter, afterFilter };
+      })()
+    `);
+    assert.equal(clipboardTimelineAudit.beforeFilter.count, '3 条');
+    assert.deepEqual(clipboardTimelineAudit.beforeFilter.headings, ['今天', '昨天']);
+    assert.deepEqual(clipboardTimelineAudit.beforeFilter.groupSizes, [2, 1]);
+    assert.ok(clipboardTimelineAudit.beforeFilter.clocks.every((clock) => /^\d{2}:\d{2}$/.test(clock)));
+    assert.equal(clipboardTimelineAudit.afterFilter.count, '2 条');
+    assert.deepEqual(clipboardTimelineAudit.afterFilter.groupSizes, [1, 1]);
+
     await window.webContents.debugger.attach('1.3');
     await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
       features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
