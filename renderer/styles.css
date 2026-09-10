@@ -1296,13 +1296,96 @@ body {
   color: var(--text-1);
 }
 
-/* ============ 待办 · P0–P3 四象限 ============ */
+/* ============ 待办 · 时间范围 + P0–P3 四象限 ============ */
+.todo-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  height: 100%;
+  min-height: 0;
+}
+
+.todo-planner-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: 34px;
+  flex: 0 0 34px;
+}
+
+.todo-scope-control {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(68px, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 8px;
+  background: var(--surface-1);
+}
+
+.todo-scope-control button,
+.todo-overdue-jump {
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  font: 500 10px var(--font);
+  cursor: pointer;
+}
+
+.todo-scope-control button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+}
+
+.todo-scope-control button b,
+.todo-overdue-jump b {
+  min-width: 14px;
+  color: var(--text-4);
+  font: 9px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.todo-scope-control button:hover { color: var(--text-2); }
+.todo-scope-control button.active {
+  background: var(--surface-3);
+  color: var(--text-1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
+}
+.todo-scope-control button.active b { color: var(--text-2); }
+
+.todo-scope-period {
+  color: var(--text-4);
+  font: 9px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.todo-overdue-jump {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 0 9px;
+  border: 1px solid rgba(255,95,87,.22);
+  background: rgba(255,95,87,.08);
+  color: #ff8c87;
+}
+.todo-overdue-jump[hidden] { display: none; }
+.todo-overdue-jump:hover { background: rgba(255,95,87,.14); color: #ffaaa6; }
+.todo-overdue-jump b { color: inherit; }
+
 .sections {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: var(--s-3);
-  height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 /* ============ 象限 tile ============ */
@@ -2936,6 +3019,12 @@ body {
 }
 
 /* DDL 与文字分两层，保证四象限卡片在窄宽下仍清楚可扫读。 */
+.todo-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
 .todo-copy {
   flex: 1;
   min-width: 0;
@@ -2954,6 +3043,60 @@ body {
   font-variant-numeric: tabular-nums;
 }
 .todo-item.done .todo-ddl { opacity: .5; }
+.todo-item.overdue .todo-ddl { color: #ff8c87; }
+.todo-reschedule-action {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid rgba(255,95,87,.2);
+  border-radius: 5px;
+  background: rgba(255,95,87,.07);
+  color: #ff9a95;
+  font: 500 9px var(--font);
+  cursor: pointer;
+  opacity: .72;
+}
+.todo-reschedule-action:hover,
+.todo-reschedule-action:focus-visible { opacity: 1; background: rgba(255,95,87,.14); }
+
+.todo-completed-disclosure,
+.todo-scope-empty { list-style: none; }
+.todo-completed-disclosure button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 25px;
+  padding: 0 5px 0 31px;
+  border: 0;
+  border-top: 1px solid var(--hairline-soft);
+  background: transparent;
+  color: var(--text-4);
+  font: 500 9px var(--font);
+  cursor: pointer;
+  text-align: left;
+}
+.todo-completed-disclosure button:hover { color: var(--text-2); }
+.todo-completed-disclosure b { font: 9px var(--font-mono); }
+.todo-completed-disclosure i {
+  width: 5px;
+  height: 5px;
+  margin-left: auto;
+  border-right: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+  transform: rotate(45deg) translateY(-1px);
+  transition: transform var(--d-fast) var(--ease);
+}
+.todo-completed-disclosure button[aria-expanded='true'] i {
+  transform: rotate(225deg) translate(-1px, -1px);
+}
+.todo-scope-empty {
+  display: grid;
+  place-items: center;
+  min-height: 42px;
+  color: var(--text-4);
+  font-size: 10px;
+}
 .add-row {
   display: grid;
   grid-template-columns: minmax(110px, 1fr) 154px 30px;
@@ -3282,6 +3425,28 @@ body {
 .todo-editor-name { display: flex; flex-direction: column; gap: 6px; margin-bottom: 13px; }
 .todo-editor-name span { color: var(--text-3); font-size: 9px; }
 .todo-editor-name input { height: 38px; padding: 0 11px; border: 0; border-radius: 12px; outline: none; background: rgba(255,255,255,.06); color: var(--text-1); font: 12px var(--font); }
+.todo-date-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+  margin-bottom: 7px;
+}
+.todo-date-shortcuts button {
+  height: 22px;
+  padding: 0 3px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text-3);
+  font: 500 9px var(--font);
+  cursor: pointer;
+}
+.todo-date-shortcuts button:hover,
+.todo-date-shortcuts button:focus-visible {
+  border-color: var(--hairline);
+  background: var(--surface-3);
+  color: var(--text-1);
+}
 .todo-calendar-week,
 .todo-calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
 .todo-calendar-week { margin-bottom: 5px; color: var(--text-4); font: 9px var(--font); text-align: center; }

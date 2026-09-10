@@ -49,7 +49,7 @@
 - 窗口变形（防卡顿铁律）：**主进程 setBounds 一律瞬时、禁用系统动画**；展开先瞬时放大窗口再播面板入场，收起先播退场再瞬时缩窗。切 Tab 只替换内容，不改变原生窗口尺寸
 - 多屏锚定：模式切换 / Tab 变形 / 失焦收起一律锚定**窗口当前所在屏**（getDisplayMatching），绝不跟随光标——否则失焦瞬间刘海会瞬移到光标所在的另一块屏；仅启动 / 托盘重新居中 / 显示跟随光标屏
 - 展开/收起交互：折叠态点折叠条展开（无唇边，靠 screen-saver 级窗口穿透菜单栏拦截）；收起 = 再点顶部刘海位正下方的顶栏（整条顶栏除 Tab/按钮/输入外都是收起热区，含品牌区）/ 收起钮 / 点面板外任意处（窗口失焦）自动收起 / Esc（主进程 before-input-event 转发兜底，Escape 不会原生到达页面）
-- 可见 Tab：首页 bento（可选百炼实时转写的快速录音 / 图标式当前窗口 / Markdown 速记 / 常用指令 / 汽水音乐 / 番茄钟）+ 待办 2 × 2 矩阵（内部键 P0–P3，显示名可改）+ 笔记管理 + 链接分组 + 录制管理 + 密钥。剪贴板默认关闭、可从菜单栏「显示功能」启用
+- 可见 Tab：首页 bento（可选百炼实时转写的快速录音 / 图标式当前窗口 / Markdown 速记 / 常用指令 / 汽水音乐 / 番茄钟）+ 待办 2 × 2 矩阵（内部键 P0–P3，显示名可改；今天 / 本周 / 以后 / 全部由 deadline 自动派生，逾期归入今天，完成项折叠）+ 笔记管理 + 链接分组 + 录制管理 + 密钥。剪贴板默认关闭、可从菜单栏「显示功能」启用
 - 剪贴板类型样式：文字 / 链接 / 图片只用浅描边区分，禁止左侧色条与冗余类型标签；长文本按卡片高度截断并显示省略效果
 - 动效对齐 Linear：日常微交互 100–180ms，展开/收起保留从顶部生长与回到顶点的连续手势；窗口本身仍零动画，`prefers-reduced-motion` 必须降级
 - 任务完成提醒：独立 `400 × 96` 无焦点窗口，队列上限 5，悬停暂停、点击关闭；HTTP 入口只监听 `127.0.0.1:43821` 的 `/notify/<source>`，来源白名单 `codex` / `claude` / `gpt`，白名单外一律 404。Codex 走 `~/.codex/config.toml` 的 notify → `scripts/codex-notify.js`（`--previous-notify` 保留原 Computer Use 通知）；Claude Code 走 `~/.claude/settings.json` 的 Stop 钩子 → `scripts/claude-notify.js`（钩子在 CLI 内核里，终端 / VS Code 插件 / 桌面端一份配置全覆盖；Stop 载荷无标题字段，需回读 `transcript_path` JSONL 尾部取最后一条主线助手消息，`isSidechain` 的是子代理记录要跳过）。子代理结束不弹提醒：脚本按 `agent_id` 先挡一层，主进程 `isSubagentNotification` 再挡一层（Claude 的 `agent_type` 存的是子代理名如 `Explore`，不含 subagent 字样，故以 `agent_id` 存在为准）。`CLAUDE_CODE_REMOTE=true` 的云端会话直接放弃，因为那里的 127.0.0.1 不是本机

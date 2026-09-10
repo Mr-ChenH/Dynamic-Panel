@@ -205,7 +205,18 @@
           </section>
 
           <section id="tab-todo" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-todo" aria-hidden="true" inert>
-            <div class="sections">
+            <div class="todo-page">
+              <div class="todo-planner-bar">
+                <div class="todo-scope-control" role="group" aria-label="待办时间范围">
+                  <button class="active" type="button" data-todo-scope="today" aria-pressed="true"><span>今天</span><b data-todo-scope-count="today">0</b></button>
+                  <button type="button" data-todo-scope="week" aria-pressed="false"><span>本周</span><b data-todo-scope-count="week">0</b></button>
+                  <button type="button" data-todo-scope="later" aria-pressed="false"><span>以后</span><b data-todo-scope-count="later">0</b></button>
+                  <button type="button" data-todo-scope="all" aria-pressed="false"><span>全部</span><b data-todo-scope-count="all">0</b></button>
+                </div>
+                <span class="todo-scope-period" id="todo-scope-period"></span>
+                <button class="todo-overdue-jump" id="todo-overdue-jump" type="button" hidden><span>逾期</span><b id="todo-overdue-count">0</b></button>
+              </div>
+              <div class="sections">
               <section class="quadrant tile" data-priority="P0">
                 <div class="quadrant-header">
                   <span class="dot dot-p0"></span>
@@ -285,6 +296,7 @@
                   <button class="todo-deadline-trigger" type="button" data-deadline-priority="P3" aria-label="选择日常待办截止时间"><span>日期</span></button>
                 </div>
               </section>
+              </div>
             </div>
           </section>
 
@@ -482,6 +494,12 @@
               <span id="todo-editor-month"></span>
               <button id="todo-calendar-next" type="button" aria-label="下个月">›</button>
             </header>
+            <div class="todo-date-shortcuts" role="group" aria-label="快捷选择截止日期">
+              <button type="button" data-todo-date-shortcut="today">今天</button>
+              <button type="button" data-todo-date-shortcut="tomorrow">明天</button>
+              <button type="button" data-todo-date-shortcut="weekend">本周末</button>
+              <button type="button" data-todo-date-shortcut="next-week">下周</button>
+            </div>
             <div class="todo-calendar-week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
             <div class="todo-calendar-grid" id="todo-calendar-grid"></div>
             <div class="todo-time-row"><span>截止时间</span><select id="todo-editor-hour" aria-label="小时"></select><b>:</b><select id="todo-editor-minute" aria-label="分钟"></select></div>

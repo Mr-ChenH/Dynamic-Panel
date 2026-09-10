@@ -584,7 +584,9 @@ async function main() {
             resetDeadline.getHours(),
             resetDeadline.getMinutes(),
           ],
-          todayParts: [now.getFullYear(), now.getMonth(), now.getDate(), 23, 30],
+          todayParts: [now.getFullYear(), now.getMonth(), now.getDate()],
+          beforeDefaultCutoff: now.getHours() < 23 || (now.getHours() === 23 && now.getMinutes() < 30),
+          resetIsFuture: resetDeadline > now,
           popoverHidden: popover.hidden,
         };
       })()
@@ -592,8 +594,105 @@ async function main() {
     assert.equal(todoDeadlineReset.firstKeptManualDeadline, true, '当前待办应使用本次手动选择的截止时间');
     assert.equal(todoDeadlineReset.secondUsedResetDeadline, true, '下一条待办不得沿用上一条的截止时间');
     assert.equal(todoDeadlineReset.resetSource, 'default');
-    assert.deepEqual(todoDeadlineReset.resetParts, todoDeadlineReset.todayParts, '新建表单应重置为当天 23:30');
+    assert.deepEqual(todoDeadlineReset.resetParts.slice(0, 3), todoDeadlineReset.todayParts, '新建表单应重置到当天');
+    if (todoDeadlineReset.beforeDefaultCutoff) {
+      assert.deepEqual(todoDeadlineReset.resetParts.slice(3), [23, 30], '当天默认截止时间应为 23:30');
+    } else {
+      assert.equal(todoDeadlineReset.resetIsFuture, true, '超过 23:30 后的当天默认截止时间不能已经过期');
+    }
     assert.equal(todoDeadlineReset.popoverHidden, true, '提交后应关闭旧日期选择器');
+
+    const todoTimeScopeAudit = await window.webContents.executeJavaScript(`
+      (() => {
+        const originalData = JSON.parse(JSON.stringify(data));
+        const now = new Date();
+        const boundaries = NotchDomain.todoTimeBoundaries(now);
+        const todayDeadline = NotchDomain.defaultTodoDeadlineForScope('today', now);
+        const weekDeadline = NotchDomain.defaultTodoDeadlineForScope('week', now);
+        const laterDeadline = NotchDomain.defaultTodoDeadlineForScope('later', now);
+        data = {
+          P0: [
+            { id: 'scope-overdue', text: '逾期任务', done: false, deadline: new Date(now.getTime() - 3600000).toISOString(), createdAt: 1 },
+            { id: 'scope-today', text: '今日任务', done: false, deadline: todayDeadline, createdAt: 2 },
+            ...(weekDeadline ? [{ id: 'scope-week', text: '本周任务', done: false, deadline: weekDeadline, createdAt: 3 }] : []),
+            { id: 'scope-later', text: '长期任务', done: false, deadline: laterDeadline, createdAt: 4 },
+            { id: 'scope-done-today', text: '今日已完成', done: true, deadline: todayDeadline, createdAt: 5 },
+            { id: 'scope-done-past', text: '历史已完成', done: true, deadline: new Date(boundaries.startToday - 3600000).toISOString(), createdAt: 6 },
+            { id: 'scope-unscheduled', text: '旧的无日期任务', done: false, deadline: '', createdAt: 7 },
+          ],
+          P1: [], P2: [], P3: [],
+        };
+        saveData(data);
+        NotchTodo.setTimeScope('today');
+        const visibleIds = () => [...document.querySelectorAll('.todo-item')].map((item) => item.dataset.id);
+        const counts = Object.fromEntries([...document.querySelectorAll('[data-todo-scope]')]
+          .map((button) => [button.dataset.todoScope, button.querySelector('b').textContent]));
+        const today = {
+          ids: visibleIds(),
+          count: document.querySelector('.count[data-priority="P0"]').textContent,
+          overdueAction: Boolean(document.querySelector('[data-id="scope-overdue"] [data-action="reschedule-today"]')),
+          completedCollapsed: document.querySelector('[data-todo-completed-toggle="P0"]')?.getAttribute('aria-expanded'),
+        };
+        document.querySelector('[data-todo-completed-toggle="P0"]')?.click();
+        today.completedExpandedIds = visibleIds();
+        NotchTodo.setTimeScope('week');
+        const week = {
+          ids: visibleIds(),
+          defaultBucket: NotchDomain.todoTimeBucket({ deadline: document.querySelector('[data-deadline-priority="P0"]').dataset.deadline }, now),
+        };
+        NotchTodo.setTimeScope('later');
+        const later = {
+          ids: visibleIds(),
+          defaultBucket: NotchDomain.todoTimeBucket({ deadline: document.querySelector('[data-deadline-priority="P0"]').dataset.deadline }, now),
+        };
+        NotchTodo.setTimeScope('all');
+        const all = { ids: visibleIds() };
+        NotchTodo.setTimeScope('today');
+        document.querySelector('[data-id="scope-overdue"] [data-action="reschedule-today"]')?.click();
+        const rescheduledBucket = NotchDomain.todoTimeBucket(data.P0.find((item) => item.id === 'scope-overdue'), new Date());
+        const pageRect = document.querySelector('.todo-page').getBoundingClientRect();
+        const toolbarRect = document.querySelector('.todo-planner-bar').getBoundingClientRect();
+        const sectionsRect = document.querySelector('#tab-todo .sections').getBoundingClientRect();
+        const quadrantsFit = [...document.querySelectorAll('#tab-todo .quadrant')].every((quadrant) => {
+          const rect = quadrant.getBoundingClientRect();
+          return rect.left >= pageRect.left && rect.right <= pageRect.right
+            && rect.top >= sectionsRect.top && rect.bottom <= pageRect.bottom;
+        });
+        const shortcutCount = document.querySelectorAll('[data-todo-date-shortcut]').length;
+        data = originalData;
+        saveData(data);
+        NotchTodo.setTimeScope('today');
+        return {
+          counts, today, week, later, all, rescheduledBucket, shortcutCount,
+          hasWeekDefault: Boolean(weekDeadline),
+          storagePriorities: Object.keys(JSON.parse(localStorage.getItem('notch-todo-data'))).sort(),
+          layout: {
+            toolbarHeight: toolbarRect.height,
+            sectionsBelowToolbar: sectionsRect.top >= toolbarRect.bottom,
+            quadrantsFit,
+          },
+        };
+      })()
+    `);
+    assert.deepEqual(todoTimeScopeAudit.storagePriorities, ['P0', 'P1', 'P2', 'P3']);
+    assert.equal(todoTimeScopeAudit.counts.today, '2');
+    assert.equal(todoTimeScopeAudit.counts.later, '1');
+    assert.equal(todoTimeScopeAudit.counts.all, todoTimeScopeAudit.hasWeekDefault ? '5' : '4');
+    assert.deepEqual(todoTimeScopeAudit.today.ids, ['scope-overdue', 'scope-today']);
+    assert.equal(todoTimeScopeAudit.today.count, '2');
+    assert.equal(todoTimeScopeAudit.today.overdueAction, true);
+    assert.equal(todoTimeScopeAudit.today.completedCollapsed, 'false');
+    assert.ok(todoTimeScopeAudit.today.completedExpandedIds.includes('scope-done-today'));
+    assert.deepEqual(todoTimeScopeAudit.week.ids, todoTimeScopeAudit.hasWeekDefault ? ['scope-week'] : []);
+    assert.equal(todoTimeScopeAudit.week.defaultBucket, todoTimeScopeAudit.hasWeekDefault ? 'week' : 'unscheduled');
+    assert.ok(todoTimeScopeAudit.later.ids.includes('scope-later'));
+    assert.equal(todoTimeScopeAudit.later.defaultBucket, 'later');
+    assert.ok(todoTimeScopeAudit.all.ids.includes('scope-unscheduled'));
+    assert.equal(todoTimeScopeAudit.rescheduledBucket, 'today');
+    assert.equal(todoTimeScopeAudit.shortcutCount, 4);
+    assert.ok(todoTimeScopeAudit.layout.toolbarHeight <= 40);
+    assert.equal(todoTimeScopeAudit.layout.sectionsBelowToolbar, true);
+    assert.equal(todoTimeScopeAudit.layout.quadrantsFit, true);
 
     await window.webContents.executeJavaScript(`
       window.__measureHomepage = function measureHomepage() {

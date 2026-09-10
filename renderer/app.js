@@ -174,6 +174,7 @@ function saveData(data) {
     const reminders = PRIORITIES.flatMap((priority) => data[priority] || []);
     window.notchAPI.scheduleTodoReminders(reminders).catch(() => {});
   }
+  if (typeof renderTodoPlanner === 'function') renderTodoPlanner();
 }
 
 let data = loadData();
@@ -181,6 +182,17 @@ let todoCategoryNames = loadTodoCategoryNames();
 const todoSelections = Object.fromEntries(PRIORITIES.map((priority) => [priority, new Set()]));
 const todoSelectionAnchors = Object.fromEntries(PRIORITIES.map((priority) => [priority, null]));
 let editingTodo = null;
+const TODO_TIME_SCOPES = ['today', 'week', 'later', 'all'];
+let todoTimeScope = 'today';
+const todoCompletedExpanded = Object.fromEntries(PRIORITIES.map((priority) => [priority, false]));
+const todoScopeButtons = Array.from(document.querySelectorAll('[data-todo-scope]'));
+const todoScopePeriod = document.getElementById('todo-scope-period');
+const todoOverdueJump = document.getElementById('todo-overdue-jump');
+const todoOverdueCount = document.getElementById('todo-overdue-count');
+
+function allTodoItems() {
+  return PRIORITIES.flatMap((priority) => data[priority] || []);
+}
 
 function loadTodoCategoryNames() {
   try {
@@ -249,32 +261,65 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+function formatTodoDeadline(item, now = Date.now()) {
+  const timestamp = Date.parse(String(item && item.deadline || ''));
+  if (!Number.isFinite(timestamp)) return { label: '待整理', title: '截止时间无效', overdue: false };
+  const deadline = new Date(timestamp);
+  const bucket = window.NotchDomain.todoTimeBucket(item, now);
+  const clock = new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(deadline);
+  const full = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(deadline);
+  if (bucket === 'overdue') {
+    const difference = Math.max(0, now - timestamp);
+    const amount = difference < 3600000
+      ? `${Math.max(1, Math.floor(difference / 60000))} 分钟`
+      : difference < 86400000
+        ? `${Math.floor(difference / 3600000)} 小时`
+        : `${Math.floor(difference / 86400000)} 天`;
+    return { label: `逾期 ${amount}`, title: full, overdue: true };
+  }
+  if (bucket === 'today') return { label: clock, title: full, overdue: false };
+  if (bucket === 'week') {
+    const weekday = new Intl.DateTimeFormat('zh-CN', { weekday: 'short' }).format(deadline);
+    return { label: `${weekday} ${clock}`, title: full, overdue: false };
+  }
+  const includeYear = deadline.getFullYear() !== new Date(now).getFullYear();
+  const label = new Intl.DateTimeFormat('zh-CN', {
+    ...(includeYear ? { year: 'numeric' } : {}), month: 'numeric', day: 'numeric',
+  }).format(deadline);
+  return { label, title: full, overdue: false };
+}
+
 function todoItemHtml(priority, item) {
+  const deadlineState = formatTodoDeadline(item);
   const doneClass = item.done ? ' done' : '';
+  const overdueClass = deadlineState.overdue ? ' overdue' : '';
   const selectedClass = todoSelections[priority]?.has(item.id) ? ' multi-selected' : '';
   const safeId = escapeHtml(item.id);
   const safeText = escapeHtml(item.text);
-  const deadline = Number.isFinite(Date.parse(String(item.deadline || '')))
-    ? new Intl.DateTimeFormat('zh-CN', {
-      month: 'numeric',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(item.deadline))
-    : '';
+  const deadline = deadlineState.label;
   const toggleLabel = item.done ? `恢复未完成：${safeText}` : `标记完成：${safeText}`;
-  const battery = window.NotchDomain.todoTimeBattery(item, Date.now());
+  const battery = item.done ? null : window.NotchDomain.todoTimeBattery(item, Date.now());
   // 逾期项整条填满红色并只显示一个白色感叹号：剩余 0% 是「快到了」，
   // 逾期是「已经欠账」，两者不能长得一样。
   const batteryHtml = battery
     ? `<span class="todo-battery" data-tone="${battery.tone}"${battery.overdue ? ' data-overdue="true" role="img"' : ''} title="${battery.label}" aria-label="${battery.label}"><i style="--battery:${battery.overdue ? 100 : battery.percent}%"></i><b>${battery.overdue ? '!' : `${battery.percent}%`}</b></span>`
     : '';
   const isEditing = editingTodo?.priority === priority && editingTodo?.id === item.id;
+  const rescheduleDeadline = deadlineState.overdue
+    ? window.NotchDomain.defaultTodoDeadlineForScope('today', new Date())
+    : null;
+  const rescheduleAction = rescheduleDeadline
+    ? `<button class="todo-reschedule-action" type="button" data-action="reschedule-today" title="移到今天" aria-label="将${safeText}移到今天">今天</button>`
+    : '';
   const contentHtml = isEditing
-    ? `<div class="todo-inline-editor"><input class="todo-inline-name" value="${safeText}" maxlength="80" aria-label="修改待办名称" />${batteryHtml}<button class="todo-inline-deadline" type="button" data-action="edit-deadline">${deadline || '日期'}</button><button class="todo-inline-save" type="button" data-action="save-edit" aria-label="保存修改">✓</button></div>`
-    : `<button class="todo-copy" type="button" data-action="edit" title="${safeText}" aria-label="修改：${safeText}"><span class="todo-text">${safeText}</span>${batteryHtml}${deadline ? `<time class="todo-ddl" datetime="${escapeHtml(item.deadline)}">${escapeHtml(deadline)}</time>` : ''}</button>`;
+    ? `<div class="todo-inline-editor"><input class="todo-inline-name" value="${safeText}" maxlength="80" aria-label="修改待办名称" />${batteryHtml}<button class="todo-inline-deadline" type="button" data-action="edit-deadline">${deadline}</button><button class="todo-inline-save" type="button" data-action="save-edit" aria-label="保存修改">✓</button></div>`
+    : `<div class="todo-copy-row"><button class="todo-copy" type="button" data-action="edit" title="${safeText}" aria-label="修改：${safeText}"><span class="todo-text">${safeText}</span>${batteryHtml}<time class="todo-ddl" datetime="${escapeHtml(item.deadline)}" title="${escapeHtml(deadlineState.title)}">${escapeHtml(deadline)}</time></button>${rescheduleAction}</div>`;
   return `
-    <li class="todo-item${doneClass}${selectedClass}" data-id="${safeId}" data-priority="${priority}">
+    <li class="todo-item${doneClass}${overdueClass}${selectedClass}" data-id="${safeId}" data-priority="${priority}">
       <button class="checkbox" type="button" data-action="toggle" aria-label="${toggleLabel}" aria-pressed="${item.done}">${checkSvg()}</button>
       ${contentHtml}
       <button class="delete" type="button" data-action="delete" aria-label="删除：${safeText}">×</button>
@@ -312,17 +357,43 @@ function animateTodoOrder(priority, previousPositions) {
   });
 }
 
+function todosVisibleInScope(priority, now = Date.now()) {
+  return window.NotchDomain.sortTodosForDisplay(
+    window.NotchDomain.filterTodosByTimeScope(data[priority] || [], todoTimeScope, now)
+  );
+}
+
+function completedTodoDisclosureHtml(priority, completed) {
+  if (!completed.length) return '';
+  const expanded = todoCompletedExpanded[priority];
+  return `<li class="todo-completed-disclosure">
+    <button type="button" data-todo-completed-toggle="${priority}" aria-expanded="${expanded}">
+      <span>已完成</span><b>${completed.length}</b><i aria-hidden="true"></i>
+    </button>
+  </li>${expanded ? completed.map((item) => todoItemHtml(priority, item)).join('') : ''}`;
+}
+
 function renderList(priority, options = {}) {
   const list = document.querySelector(`.todo-list[data-priority="${priority}"]`);
   if (!list) return;
-  const items = window.NotchDomain.sortTodosForDisplay(data[priority] || []);
-  list.innerHTML = items.map((item) => todoItemHtml(priority, item)).join('');
+  const items = todosVisibleInScope(priority);
+  const pending = items.filter((item) => item.done !== true);
+  const completed = items.filter((item) => item.done === true);
+  const empty = pending.length || completed.length
+    ? ''
+    : `<li class="todo-scope-empty">${todoTimeScope === 'week' && !window.NotchDomain.defaultTodoDeadlineForScope('week') ? '本周余下已安排完' : '当前范围没有待办'}</li>`;
+  list.innerHTML = `${pending.map((item) => todoItemHtml(priority, item)).join('')}${completedTodoDisclosureHtml(priority, completed)}${empty}`;
   updateTodoBulkButton(priority);
   animateTodoOrder(priority, options.previousPositions);
   if (options.focusId) {
-    requestAnimationFrame(() => list.querySelector(
-      `.todo-item[data-id="${CSS.escape(options.focusId)}"] [data-action="${options.focusAction || 'toggle'}"]`
-    )?.focus({ preventScroll: true }));
+    requestAnimationFrame(() => {
+      const target = list.querySelector(
+        `.todo-item[data-id="${CSS.escape(options.focusId)}"] [data-action="${options.focusAction || 'toggle'}"]`
+      );
+      const fallback = list.querySelector(`[data-todo-completed-toggle="${priority}"]`)
+        || document.querySelector(`.add-row input[data-priority="${priority}"]`);
+      (target || fallback)?.focus({ preventScroll: true });
+    });
   }
 }
 
@@ -338,19 +409,54 @@ function updateTodoBulkButton(priority) {
 function updateCount(priority) {
   const countEl = document.querySelector(`.count[data-priority="${priority}"]`);
   if (!countEl) return;
-  const items = data[priority] || [];
-  const pending = items.filter((t) => !t.done).length;
+  const pending = todosVisibleInScope(priority).filter((todo) => todo.done !== true).length;
   countEl.textContent = String(pending);
 }
 
+function renderTodoPlanner(now = new Date()) {
+  const counts = window.NotchDomain.todoTimeScopeCounts(allTodoItems(), now);
+  todoScopeButtons.forEach((button) => {
+    const scope = button.dataset.todoScope;
+    const selected = scope === todoTimeScope;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+    const count = button.querySelector('[data-todo-scope-count]');
+    if (count) count.textContent = String(counts[scope] || 0);
+  });
+  if (todoOverdueJump && todoOverdueCount) {
+    todoOverdueJump.hidden = counts.overdue === 0;
+    todoOverdueCount.textContent = String(counts.overdue);
+    todoOverdueJump.setAttribute('aria-label', `查看 ${counts.overdue} 项逾期待办`);
+  }
+  const boundaries = window.NotchDomain.todoTimeBoundaries(now);
+  if (todoScopePeriod && boundaries) {
+    const today = new Date(boundaries.startToday);
+    const lastWeekDay = new Date(boundaries.startNextWeek - 1);
+    const labels = {
+      today: `${today.getMonth() + 1}月${today.getDate()}日`,
+      week: boundaries.startTomorrow >= boundaries.startNextWeek
+        ? '本周余下已结束'
+        : `${new Date(boundaries.startTomorrow).getMonth() + 1}/${new Date(boundaries.startTomorrow).getDate()} - ${lastWeekDay.getMonth() + 1}/${lastWeekDay.getDate()}`,
+      later: `${new Date(boundaries.startNextWeek).getMonth() + 1}月${new Date(boundaries.startNextWeek).getDate()}日以后`,
+      all: counts.unscheduled ? `含 ${counts.unscheduled} 项待整理` : '所有未完成与已完成',
+    };
+    todoScopePeriod.textContent = labels[todoTimeScope];
+  }
+  document.querySelector('.todo-page')?.setAttribute('data-todo-scope', todoTimeScope);
+}
+
 function renderAll() {
+  renderTodoPlanner();
   PRIORITIES.forEach((p) => {
     renderList(p);
     updateCount(p);
   });
 }
 
-setInterval(() => PRIORITIES.forEach(renderList), 60_000);
+setInterval(() => {
+  if (editingTodo || todoEditorContext) return;
+  renderAll();
+}, 60_000);
 
 // 渲染重建 innerHTML 后，给指定条目挂一次性动画类；动画结束即卸载，不污染后续渲染
 function flashItemClass(priority, id, cls) {
@@ -401,6 +507,7 @@ function editTodo(priority, id, text, deadline) {
   data[priority][index] = updated;
   saveData(data);
   renderList(priority, { previousPositions, focusId: id, focusAction: 'edit' });
+  updateCount(priority);
   return true;
 }
 
@@ -412,6 +519,7 @@ function toggleTodo(priority, id) {
   const restoreFocus = document.activeElement?.closest('.todo-item')?.dataset.id === id;
   list[idx].done = !list[idx].done;
   const nowDone = list[idx].done;
+  if (nowDone) todoCompletedExpanded[priority] = true;
   saveData(data);
   renderList(priority, {
     previousPositions,
@@ -431,13 +539,13 @@ function deleteTodo(priority, id) {
     `.todo-item[data-priority="${priority}"][data-id="${CSS.escape(id)}"]`
   );
   const shouldRestoreFocus = !!(itemEl && itemEl.contains(document.activeElement));
-  const nearbyItem = itemEl && (itemEl.nextElementSibling || itemEl.previousElementSibling);
-  if (itemEl) itemEl.remove();
+  const nearbyId = itemEl && (itemEl.nextElementSibling || itemEl.previousElementSibling)?.dataset.id;
   saveData(data);
+  renderList(priority);
   updateCount(priority);
   if (shouldRestoreFocus) {
     const nextFocus =
-      (nearbyItem && nearbyItem.querySelector('[data-action="toggle"]')) ||
+      (nearbyId && document.querySelector(`.todo-item[data-id="${CSS.escape(nearbyId)}"] [data-action="toggle"]`)) ||
       document.querySelector(`.add-row input[data-priority="${priority}"]`);
     if (nextFocus) nextFocus.focus({ preventScroll: true });
   }
@@ -823,6 +931,7 @@ async function setActiveTab(name) {
     // renderClipList 延后只是缩略图晚一点出现，可接受。
     const _tabNameForDeferred = name; // 闭包捕获当前目标 Tab
     const runHeavyLoads = () => {
+      if (_tabNameForDeferred === 'todo') refreshTodoTemporalView();
       if (_tabNameForDeferred === 'clip') renderClipList();
       if (_tabNameForDeferred === 'notes') renderNotesLibrary();
     };
@@ -1002,6 +1111,53 @@ document.querySelectorAll('.todo-category-name[data-category]').forEach((input) 
 
 applyTodoCategoryNames();
 
+function refreshScopedTodoDraftDeadlines(now = new Date()) {
+  document.querySelectorAll('.todo-deadline-trigger[data-deadline-priority]').forEach((trigger) => {
+    if (trigger.dataset.deadlineSource === 'manual') return;
+    delete trigger.dataset.deadline;
+    delete trigger.dataset.deadlineSource;
+    applyDefaultTodoDeadline(trigger, now);
+  });
+}
+
+function setTodoTimeScope(scope, { focusOverdue = false } = {}) {
+  if (!TODO_TIME_SCOPES.includes(scope)) return false;
+  todoTimeScope = scope;
+  editingTodo = null;
+  PRIORITIES.forEach((priority) => {
+    todoSelections[priority].clear();
+    todoSelectionAnchors[priority] = null;
+    todoCompletedExpanded[priority] = false;
+  });
+  closeTodoEditor();
+  refreshScopedTodoDraftDeadlines();
+  renderAll();
+  if (focusOverdue) {
+    requestAnimationFrame(() => document.querySelector('.todo-item.overdue [data-action="toggle"]')?.focus({ preventScroll: true }));
+  }
+  return true;
+}
+
+todoScopeButtons.forEach((button, index) => {
+  button.addEventListener('click', () => setTodoTimeScope(button.dataset.todoScope));
+  button.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const offset = event.key === 'ArrowRight' ? 1 : -1;
+    const next = todoScopeButtons[(index + offset + todoScopeButtons.length) % todoScopeButtons.length];
+    next.focus({ preventScroll: true });
+    setTodoTimeScope(next.dataset.todoScope);
+  });
+});
+
+todoOverdueJump?.addEventListener('click', () => setTodoTimeScope('today', { focusOverdue: true }));
+
+window.NotchTodo = {
+  getTimeScope: () => todoTimeScope,
+  setTimeScope: (scope) => setTodoTimeScope(scope),
+  getScopeCounts: () => ({ ...window.NotchDomain.todoTimeScopeCounts(allTodoItems()) }),
+};
+
 const todoEditorBackdrop = document.getElementById('todo-date-popover');
 const todoEditorMonth = document.getElementById('todo-editor-month');
 const todoCalendarPrevious = document.getElementById('todo-calendar-previous');
@@ -1131,6 +1287,30 @@ todoCalendarGrid?.addEventListener('click', (event) => {
   renderTodoCalendar();
   applyTodoEditorSelection(true);
 });
+
+document.querySelectorAll('[data-todo-date-shortcut]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const now = new Date();
+    const shortcut = button.dataset.todoDateShortcut;
+    let selected = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 30, 0, 0);
+    if (shortcut === 'tomorrow') selected.setDate(selected.getDate() + 1);
+    if (shortcut === 'weekend') selected.setDate(selected.getDate() + (7 - selected.getDay()) % 7);
+    if (shortcut === 'next-week') selected.setDate(selected.getDate() + (selected.getDay() === 0 ? 1 : 8 - selected.getDay()));
+    if (shortcut === 'today' && selected <= now) {
+      const safeToday = window.NotchDomain.defaultTodoDeadlineForScope('today', now);
+      if (safeToday) selected = new Date(safeToday);
+    }
+    todoEditorYear = selected.getFullYear();
+    todoEditorMonthIndex = selected.getMonth();
+    todoEditorDay = selected.getDate();
+    fillTodoTimeOptions();
+    if (todoEditorHour) todoEditorHour.value = String(selected.getHours());
+    if (todoEditorMinute) todoEditorMinute.value = String(selected.getMinutes());
+    renderTodoCalendar();
+    applyTodoEditorSelection(true);
+  });
+});
+
 function moveTodoCalendar(offset) {
   const shifted = window.NotchDomain.shiftCalendarMonth({
     year: todoEditorYear,
@@ -1157,12 +1337,18 @@ document.addEventListener('pointerdown', (event) => {
 
 function applyDefaultTodoDeadline(trigger, now = new Date()) {
   if (!trigger || (trigger.dataset.deadline && trigger.dataset.deadlineSource !== 'default')) return;
-  const deadline = window.NotchDomain.defaultTodoDeadline(now);
-  if (!deadline) return;
+  const deadline = window.NotchDomain.defaultTodoDeadlineForScope(todoTimeScope, now);
+  if (!deadline) {
+    delete trigger.dataset.deadline;
+    delete trigger.dataset.deadlineSource;
+    trigger.querySelector('span').textContent = '选择日期';
+    trigger.classList.remove('selected');
+    return;
+  }
   trigger.dataset.deadline = deadline;
   trigger.dataset.deadlineSource = 'default';
   trigger.querySelector('span').textContent = new Intl.DateTimeFormat('zh-CN', {
-    day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(deadline));
   trigger.classList.add('selected');
 }
@@ -1220,13 +1406,21 @@ PRIORITIES.forEach((priority) => {
   const list = document.querySelector(`.todo-list[data-priority="${priority}"]`);
   if (!list) return;
   list.addEventListener('click', (e) => {
+    const completedToggle = e.target.closest('[data-todo-completed-toggle]');
+    if (completedToggle) {
+      const targetPriority = completedToggle.dataset.todoCompletedToggle;
+      todoCompletedExpanded[targetPriority] = !todoCompletedExpanded[targetPriority];
+      renderList(targetPriority);
+      requestAnimationFrame(() => document.querySelector(`[data-todo-completed-toggle="${targetPriority}"]`)?.focus({ preventScroll: true }));
+      return;
+    }
     const item = e.target.closest('.todo-item');
     if (!item) return;
     const id = item.dataset.id;
     if (e.shiftKey) {
       e.preventDefault();
       const result = window.NotchDomain.updateRangeSelection(
-        window.NotchDomain.sortTodosForDisplay(data[priority] || []).map((todo) => todo.id),
+        todosVisibleInScope(priority).map((todo) => todo.id),
         [...todoSelections[priority]],
         id,
         todoSelectionAnchors[priority],
@@ -1258,6 +1452,12 @@ PRIORITIES.forEach((priority) => {
       if (!todo || !name || !todo.deadline) return;
       editingTodo = null;
       editTodo(priority, id, name, todo.deadline);
+    } else if (action === 'reschedule-today') {
+      const todo = (data[priority] || []).find((candidate) => candidate.id === id);
+      const deadline = window.NotchDomain.defaultTodoDeadlineForScope('today', new Date());
+      if (!todo || !deadline) return;
+      editTodo(priority, id, todo.text, deadline);
+      showStatusToast('已移到今天');
     } else if (action === 'delete') {
       deleteTodo(priority, id);
     }
@@ -1297,6 +1497,7 @@ const clockHEl = document.getElementById('clock-h');
 const clockMEl = document.getElementById('clock-m');
 const clockSsEl = document.getElementById('clock-ss');
 let todoDefaultRefreshKey = '';
+let todoScopeRefreshDay = '';
 
 function pad2(n) {
   return n < 10 ? '0' + n : String(n);
@@ -1314,12 +1515,28 @@ function tickClock() {
     const dateStr = `${WEEKDAYS[now.getDay()]} · ${now.getMonth() + 1}/${now.getDate()}`;
     if (clockDateEl.textContent !== dateStr) clockDateEl.textContent = dateStr;
   }
-  const refreshKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}-${now.getHours() > 23 || (now.getHours() === 23 && now.getMinutes() >= 30)}`;
+  const dayKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+  const refreshKey = `${dayKey}-${now.getHours() > 23 || (now.getHours() === 23 && now.getMinutes() >= 30)}`;
   if (refreshKey !== todoDefaultRefreshKey) {
     todoDefaultRefreshKey = refreshKey;
     refreshDefaultTodoDeadlines(now);
   }
+  if (dayKey !== todoScopeRefreshDay && !editingTodo && !todoEditorContext) {
+    todoScopeRefreshDay = dayKey;
+    renderAll();
+  }
 }
+
+function refreshTodoTemporalView() {
+  if (editingTodo || todoEditorContext) return;
+  refreshDefaultTodoDeadlines(new Date());
+  renderAll();
+}
+
+window.addEventListener('focus', refreshTodoTemporalView);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) refreshTodoTemporalView();
+});
 
 tickClock();
 setInterval(tickClock, 1000);

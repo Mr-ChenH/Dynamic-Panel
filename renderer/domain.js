@@ -379,6 +379,84 @@
     });
   }
 
+  function todoTimeBoundaries(now = new Date()) {
+    const current = now instanceof Date ? new Date(now.getTime()) : new Date(now);
+    if (!Number.isFinite(current.getTime())) return null;
+    const startToday = new Date(current.getFullYear(), current.getMonth(), current.getDate());
+    const startTomorrow = new Date(current.getFullYear(), current.getMonth(), current.getDate() + 1);
+    const daysUntilNextMonday = current.getDay() === 0 ? 1 : 8 - current.getDay();
+    const startNextWeek = new Date(current.getFullYear(), current.getMonth(), current.getDate() + daysUntilNextMonday);
+    return {
+      now: current.getTime(),
+      startToday: startToday.getTime(),
+      startTomorrow: startTomorrow.getTime(),
+      startNextWeek: startNextWeek.getTime(),
+    };
+  }
+
+  function todoTimeBucket(todo, now = Date.now()) {
+    const boundaries = todoTimeBoundaries(now);
+    const deadline = Date.parse(String(todo && todo.deadline || ''));
+    if (!boundaries || !Number.isFinite(deadline)) return 'unscheduled';
+    if (todo && todo.done !== true && deadline < boundaries.now) return 'overdue';
+    if (deadline < boundaries.startToday) return 'past';
+    if (deadline < boundaries.startTomorrow) return 'today';
+    if (deadline < boundaries.startNextWeek) return 'week';
+    return 'later';
+  }
+
+  function filterTodosByTimeScope(items, scope = 'today', now = Date.now()) {
+    const rows = Array.isArray(items) ? items : [];
+    if (scope === 'all') return rows.slice();
+    return rows.filter((todo) => {
+      const bucket = todoTimeBucket(todo, now);
+      if (scope === 'today') return bucket === 'overdue' || bucket === 'today';
+      return bucket === scope;
+    });
+  }
+
+  function todoTimeScopeCounts(items, now = Date.now()) {
+    const counts = { today: 0, week: 0, later: 0, all: 0, overdue: 0, unscheduled: 0 };
+    (Array.isArray(items) ? items : []).forEach((todo) => {
+      if (!todo || todo.done === true) return;
+      const bucket = todoTimeBucket(todo, now);
+      counts.all += 1;
+      if (bucket === 'overdue') {
+        counts.overdue += 1;
+        counts.today += 1;
+      } else if (bucket === 'today' || bucket === 'week' || bucket === 'later') {
+        counts[bucket] += 1;
+      } else {
+        counts.unscheduled += 1;
+      }
+    });
+    return counts;
+  }
+
+  function defaultTodoDeadlineForScope(scope = 'today', now = new Date()) {
+    const current = now instanceof Date ? new Date(now.getTime()) : new Date(now);
+    const boundaries = todoTimeBoundaries(current);
+    if (!boundaries) return null;
+    let target;
+    if (scope === 'week') {
+      target = new Date(current.getFullYear(), current.getMonth(), current.getDate() + 1, 23, 30, 0, 0);
+      if (target.getTime() >= boundaries.startNextWeek) return null;
+    } else if (scope === 'later') {
+      target = new Date(boundaries.startNextWeek);
+      target.setHours(23, 30, 0, 0);
+    } else {
+      target = new Date(current.getFullYear(), current.getMonth(), current.getDate(), 23, 30, 0, 0);
+      if (target.getTime() <= current.getTime()) {
+        target = new Date(Math.min(
+          new Date(current.getFullYear(), current.getMonth(), current.getDate(), 23, 59, 59, 999).getTime(),
+          current.getTime() + 30 * 60 * 1000
+        ));
+      }
+      if (target.getTime() <= current.getTime()) return null;
+    }
+    return target.toISOString();
+  }
+
   function filterCredentials(items, query) {
     const rows = Array.isArray(items) ? items : [];
     const keyword = String(query || '').trim().toLocaleLowerCase();
@@ -921,6 +999,11 @@
     createTodo,
     updateTodo,
     sortTodosForDisplay,
+    todoTimeBoundaries,
+    todoTimeBucket,
+    filterTodosByTimeScope,
+    todoTimeScopeCounts,
+    defaultTodoDeadlineForScope,
     filterCredentials,
     credentialRowAction,
     visiblePanelTabs,

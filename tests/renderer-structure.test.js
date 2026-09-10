@@ -24,6 +24,19 @@ test('clipboard history renders a dated timeline with filtered result counts', (
   assert.match(stylesCss, /\.clip-timeline-node/);
 });
 
+test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', () => {
+  assert.equal((html.match(/data-todo-scope="(?:today|week|later|all)"/g) || []).length, 4);
+  assert.equal((html.match(/data-todo-date-shortcut="(?:today|tomorrow|weekend|next-week)"/g) || []).length, 4);
+  assert.match(appJs, /filterTodosByTimeScope\(data\[priority\]/);
+  assert.match(appJs, /todoTimeScopeCounts\(allTodoItems\(\)/);
+  assert.match(appJs, /data-todo-completed-toggle/);
+  assert.match(appJs, /defaultTodoDeadlineForScope\(todoTimeScope/);
+  assert.match(appJs, /window\.addEventListener\('focus', refreshTodoTemporalView\)/);
+  assert.match(stylesCss, /\.todo-scope-control/);
+  assert.match(stylesCss, /\.todo-completed-disclosure/);
+  assert.doesNotMatch(appJs, /localStorage\.setItem\([^\n]*todo-time-scope/);
+});
+
 test('Windows collapsed notch stays compact and grows only on approach', () => {
   assert.match(appJs, /app\.dataset\.platform\s*=\s*window\.notchAPI\?\.platform/);
   const compactRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch \{([\s\S]*?)\n\}/)?.[1] || '';

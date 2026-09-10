@@ -36,6 +36,11 @@ const {
   todoTimeBattery,
   updateRangeSelection,
   sortTodosForDisplay,
+  todoTimeBoundaries,
+  todoTimeBucket,
+  filterTodosByTimeScope,
+  todoTimeScopeCounts,
+  defaultTodoDeadlineForScope,
   preferredLinkGroupId,
   moveLinkToGroup,
   moveLinkToPosition,
@@ -435,6 +440,52 @@ test('todos sort unfinished by DDL and creation time with completed items last',
     { id: 'early-old', done: false, deadline: '2026-08-21T00:00:00.000Z', createdAt: 1 },
   ]);
   assert.deepEqual(rows.map((row) => row.id), ['early-old', 'early-new', 'late', 'done']);
+});
+
+test('todo time scopes use local day and Monday week boundaries without overlap', () => {
+  const now = new Date(2026, 8, 9, 12, 0, 0, 0);
+  const at = (day, hour = 23) => new Date(2026, 8, day, hour, 0, 0, 0).toISOString();
+  const items = [
+    { id: 'overdue', done: false, deadline: at(8) },
+    { id: 'today', done: false, deadline: at(9) },
+    { id: 'week', done: false, deadline: at(13) },
+    { id: 'later', done: false, deadline: at(14) },
+    { id: 'done-today', done: true, deadline: at(9) },
+    { id: 'done-past', done: true, deadline: at(8) },
+    { id: 'unscheduled', done: false, deadline: '' },
+  ];
+
+  const boundaries = todoTimeBoundaries(now);
+  assert.equal(new Date(boundaries.startNextWeek).getDay(), 1);
+  assert.equal(todoTimeBucket(items[0], now), 'overdue');
+  assert.equal(todoTimeBucket(items[5], now), 'past');
+  assert.deepEqual(filterTodosByTimeScope(items, 'today', now).map((item) => item.id), [
+    'overdue', 'today', 'done-today',
+  ]);
+  assert.deepEqual(filterTodosByTimeScope(items, 'week', now).map((item) => item.id), ['week']);
+  assert.deepEqual(filterTodosByTimeScope(items, 'later', now).map((item) => item.id), ['later']);
+  assert.equal(filterTodosByTimeScope(items, 'all', now).length, items.length);
+  assert.deepEqual(todoTimeScopeCounts(items, now), {
+    today: 2,
+    week: 1,
+    later: 1,
+    all: 5,
+    overdue: 1,
+    unscheduled: 1,
+  });
+});
+
+test('todo scope defaults stay visible in their selected range', () => {
+  const wednesday = new Date(2026, 8, 9, 12, 0, 0, 0);
+  const sunday = new Date(2026, 8, 13, 12, 0, 0, 0);
+  assert.equal(todoTimeBucket({ deadline: defaultTodoDeadlineForScope('today', wednesday) }, wednesday), 'today');
+  assert.equal(todoTimeBucket({ deadline: defaultTodoDeadlineForScope('week', wednesday) }, wednesday), 'week');
+  assert.equal(todoTimeBucket({ deadline: defaultTodoDeadlineForScope('later', wednesday) }, wednesday), 'later');
+  assert.equal(defaultTodoDeadlineForScope('week', sunday), null);
+  const lateNight = new Date(2026, 8, 9, 23, 45, 0, 0);
+  const lateNightDefault = new Date(defaultTodoDeadlineForScope('today', lateNight));
+  assert.equal(lateNightDefault.getDate(), lateNight.getDate());
+  assert.ok(lateNightDefault > lateNight);
 });
 
 test('credential search matches service or account without exposing passwords', () => {
