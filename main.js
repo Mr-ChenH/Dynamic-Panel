@@ -215,7 +215,6 @@ const CREDENTIALS_VAULT_FILE = 'credentials.vault.json';
 const APP_SETTINGS_FILE = 'app-settings.json';
 const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
 const WORKSPACE_DATA_FILE = 'workspace.json';
-const MIRROR_IMAGE_FILE = 'mirror-cover.jpg';
 const workspacePersistenceGate = createWorkspacePersistenceGate();
 const SODA_MUSIC_APP = '/Applications/汽水音乐.app';
 const TRANSCRIPTION_MODEL = 'qwen3-asr-flash-realtime';
@@ -249,9 +248,7 @@ let collapseGeneration = 0;
 let hideWhenCollapsed = false;
 let isQuitting = false;
 let mediaPermissionRequests = 0;
-let mediaPermissionBatchHadCamera = false;
 let transientSystemInteractionRequests = 0;
-let cameraBlurDeferred = false;
 let sodaMusicPlaying = false;
 const mediaPermissionCoordinator = createForegroundMediaPermissionCoordinator();
 
@@ -1048,16 +1045,10 @@ function createWindow() {
 
   // 失焦时让渲染层走完整退场动画，再由渲染层请求缩小原生窗口。
   mainWindow.on('blur', () => {
-    if (mediaPermissionRequests > 0 || transientSystemInteractionRequests > 0) {
-      cameraBlurDeferred = true;
-      return;
-    }
+    if (mediaPermissionRequests > 0 || transientSystemInteractionRequests > 0) return;
     requestRendererCollapse();
   });
 
-  mainWindow.on('focus', () => {
-    cameraBlurDeferred = false;
-  });
   mainWindow.on('show', () => {
     syncHoverSpacePolling();
     syncDisplayFollowPolling();
@@ -1198,9 +1189,6 @@ function showOwnedOpenDialog(options) {
     options,
     (delta) => {
       transientSystemInteractionRequests = Math.max(0, transientSystemInteractionRequests + delta);
-      if (delta < 0 && transientSystemInteractionRequests === 0 && mediaPermissionRequests === 0) {
-        cameraBlurDeferred = false;
-      }
     }
   );
 }
@@ -1216,7 +1204,7 @@ function copyWorkspaceAssets(sourceRoot, targetRoot) {
       fs.cpSync(source, target, { recursive: true, force: false, errorOnExist: false });
     } catch (error) {}
   }
-  for (const filename of [WORKSPACE_DATA_FILE, MIRROR_IMAGE_FILE]) {
+  for (const filename of [WORKSPACE_DATA_FILE]) {
     const source = path.join(sourceRoot, filename);
     const target = path.join(targetRoot, filename);
     try {
@@ -1318,45 +1306,6 @@ function openRendererPanel(channel) {
   else send();
 }
 
-function mirrorImagePath() {
-  return workspacePath(MIRROR_IMAGE_FILE);
-}
-
-function mirrorImageDataUrl() {
-  try {
-    const image = nativeImage.createFromPath(mirrorImagePath());
-    if (image.isEmpty()) return null;
-    return image.toDataURL();
-  } catch (error) {
-    return null;
-  }
-}
-
-async function chooseMirrorImage() {
-  const result = await showOwnedOpenDialog({
-    title: '替换镜子配图',
-    properties: ['openFile'],
-    filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'heic'] }],
-  });
-  const selected = !result.canceled && result.filePaths && result.filePaths[0];
-  if (!selected) return { ok: true, canceled: true };
-  try {
-    const image = nativeImage.createFromPath(selected);
-    if (image.isEmpty()) throw new Error('invalid_image');
-    const size = image.getSize();
-    if (!size.width || !size.height || size.width * size.height > 60_000_000) throw new Error('image_too_large');
-    fs.writeFileSync(mirrorImagePath(), image.toJPEG(92), { mode: 0o600 });
-    const dataUrl = mirrorImageDataUrl();
-    if (dataUrl && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('mirror:image-changed', dataUrl);
-    }
-    return { ok: true, canceled: false, dataUrl };
-  } catch (error) {
-    await dialog.showMessageBox({ type: 'error', title: '无法替换配图', message: '请选择一张有效且尺寸适中的图片。' });
-    return { ok: false, error: 'invalid_image' };
-  }
-}
-
 function refreshTrayMenu() {
   if (!tray) return;
   const autoLaunch = isAutoLaunchEnabled();
@@ -1366,10 +1315,6 @@ function refreshTrayMenu() {
     {
       label: 'API 配置…',
       click: () => openRendererPanel('app:open-api-settings'),
-    },
-    {
-      label: '替换镜子配图…',
-      click: chooseMirrorImage,
     },
     {
       label: '显示功能',
@@ -1569,31 +1514,13 @@ async function requestMacMediaAccess(mediaType) {
     // 并把应用激活，让“不允许 / 允许”确实处在可点击的最前方。
     activate: () => app.focus({ steal: true }),
     track: (delta) => {
-      if (delta > 0 && mediaType === 'camera') mediaPermissionBatchHadCamera = true;
       mediaPermissionRequests = Math.max(0, mediaPermissionRequests + delta);
-      if (delta >= 0 || mediaPermissionRequests > 0) return;
-      const shouldCollapse = cameraBlurDeferred && mediaPermissionBatchHadCamera;
-      mediaPermissionBatchHadCamera = false;
-      cameraBlurDeferred = false;
-      if (!shouldCollapse) return;
-      const targetWindow = mainWindow;
-      setTimeout(() => {
-        if (
-          mainWindow === targetWindow &&
-          targetWindow &&
-          !targetWindow.isDestroyed() &&
-          !targetWindow.isFocused()
-        ) {
-          requestRendererCollapse();
-        }
-      }, 200);
     },
     request: () => systemPreferences.askForMediaAccess(mediaType),
   });
 }
 
-// macOS 渲染层 getUserMedia 不会自动弹 TCC 授权，必须由主进程申请摄像头/麦克风权限。
-ipcMain.handle('media:camera', () => requestMacMediaAccess('camera'));
+// macOS 渲染层 getUserMedia 不会自动弹 TCC 授权，必须由主进程申请麦克风权限。
 ipcMain.handle('media:microphone', () => requestMacMediaAccess('microphone'));
 
 ipcMain.handle('tasks:recent', () => taskCompletionHistory);
@@ -1615,12 +1542,10 @@ ipcMain.handle('shell:openPath', (event, p) => {
 // 绝不能拼进 URL：x-apple.systempreferences: 能打开任意设置面板。
 const PRIVACY_SETTINGS_PANES = process.platform === 'win32' ? {
   microphone: 'ms-settings:privacy-microphone',
-  camera: 'ms-settings:privacy-webcam',
 } : {
   accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
   'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
-  camera: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
 };
 
 ipcMain.handle('shell:open-privacy-settings', (event, pane) => {
@@ -2297,9 +2222,6 @@ async function rememberPasteTarget() {
   }
   return previousPasteTarget;
 }
-
-ipcMain.handle('mirror:get-image', () => mirrorImageDataUrl());
-ipcMain.handle('mirror:choose-image', () => chooseMirrorImage());
 
 function getCredentialsVaultPath() {
   return path.join(app.getPath('userData'), CREDENTIALS_VAULT_FILE);

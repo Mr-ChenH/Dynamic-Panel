@@ -54,7 +54,7 @@ const {
   createExclusiveAsyncTask,
 } = domain;
 
-const HOME_MODULES = ['music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands'];
+const HOME_MODULES = ['music', 'pomodoro', 'recorder', 'windows', 'note', 'commands'];
 
 test('an exclusive async task coalesces repeated starts until the first attempt settles', async () => {
   let release;
@@ -669,15 +669,14 @@ test('home widget sizes fill the complete bento capacity without blank cells', (
 });
 
 test('home widget packing fills all four rows even when logical order would fragment the grid', () => {
-  const order = ['recorder', 'windows', 'commands', 'mirror', 'music', 'note', 'pomodoro'];
+  const order = ['recorder', 'windows', 'commands', 'music', 'note', 'pomodoro'];
   const sizes = {
-    recorder: 'small',
+    recorder: 'medium',
     windows: 'large',
-    commands: 'mini',
-    mirror: 'medium',
+    commands: 'small',
     music: 'medium',
     note: 'medium',
-    pomodoro: 'mini',
+    pomodoro: 'small',
   };
   const layout = packHomeWidgetLayout(order, sizes, 12, 4);
   assert.ok(layout);
@@ -697,20 +696,20 @@ test('home widget packing fills all four rows even when logical order would frag
 test('hidden homepage modules are deduplicated and normalized to module order', () => {
   assert.deepEqual(
     normalizeHiddenHomeModules(['mirror', 'unknown', 'mirror', 'music'], HOME_MODULES),
-    ['music', 'mirror']
+    ['music']
   );
   assert.deepEqual(normalizeHiddenHomeModules('mirror', HOME_MODULES), []);
   assert.deepEqual(normalizeHiddenHomeModules([...HOME_MODULES], HOME_MODULES), []);
 });
 
 test('homepage visibility refuses to hide the final visible module', () => {
-  const sixHidden = HOME_MODULES.slice(0, 6);
+  const fiveHidden = HOME_MODULES.slice(0, 5);
   assert.deepEqual(
-    updateHomeModuleVisibility(sixHidden, HOME_MODULES, 'commands', false),
-    { ok: false, error: 'at_least_one_required', hiddenIds: sixHidden }
+    updateHomeModuleVisibility(fiveHidden, HOME_MODULES, 'commands', false),
+    { ok: false, error: 'at_least_one_required', hiddenIds: fiveHidden }
   );
   assert.deepEqual(
-    updateHomeModuleVisibility(['mirror'], HOME_MODULES, 'mirror', true),
+    updateHomeModuleVisibility(['note'], HOME_MODULES, 'note', true),
     { ok: true, hiddenIds: [] }
   );
   assert.deepEqual(
@@ -720,7 +719,7 @@ test('homepage visibility refuses to hide the final visible module', () => {
 });
 
 test('every non-empty homepage widget subset exactly covers the bento grid', () => {
-  const order = ['music', 'pomodoro', 'windows', 'recorder', 'mirror', 'note', 'commands'];
+  const order = ['music', 'pomodoro', 'windows', 'recorder', 'note', 'commands'];
   const sizes = {
     music: 'medium', pomodoro: 'mini', windows: 'large', recorder: 'small',
     mirror: 'medium', note: 'medium', commands: 'mini',
@@ -736,12 +735,12 @@ test('every non-empty homepage widget subset exactly covers the bento grid', () 
 });
 
 test('five-widget layout chooses the largest preference and breaks ties by saved order', () => {
-  const order = ['music', 'pomodoro', 'windows', 'recorder', 'mirror', 'note', 'commands'];
+  const order = ['music', 'pomodoro', 'windows', 'recorder', 'note', 'commands'];
   const sizes = {
     music: 'medium', pomodoro: 'mini', windows: 'large', recorder: 'small',
     mirror: 'large', note: 'medium', commands: 'mini',
   };
-  const layout = resolveHomeWidgetLayout(order, sizes, ['pomodoro', 'commands'], 12, 4);
+  const layout = resolveHomeWidgetLayout(order, sizes, ['commands'], 12, 4);
   assert.deepEqual(layout.placements.windows, { column: 0, row: 0, width: 4, height: 4 });
   assert.equal(layout.variants.windows, 'tall');
 });
@@ -796,15 +795,6 @@ test('shouldTogglePanelForSpace toggles plain Space but never steals typing inpu
   assert.equal(shouldTogglePanelForSpace({ key: ' ', repeat: true, editable: false }), false);
   assert.equal(shouldTogglePanelForSpace({ key: ' ', repeat: false, editable: true }), false);
   assert.equal(shouldTogglePanelForSpace({ key: ' ', repeat: false, editable: false, metaKey: true }), false);
-});
-
-test('mirror pinch zooms only a live camera and stays within safe bounds', () => {
-  assert.equal(domain.shouldHandleMirrorPinch?.({ live: false, ctrlKey: true }), false);
-  assert.equal(domain.shouldHandleMirrorPinch?.({ live: true, ctrlKey: false }), false);
-  assert.equal(domain.shouldHandleMirrorPinch?.({ live: true, ctrlKey: true }), true);
-  assert.equal(domain.adjustMirrorZoom?.(1, -100), 1.2);
-  assert.equal(domain.adjustMirrorZoom?.(1, 100), 1);
-  assert.equal(domain.adjustMirrorZoom?.(2.55, -100), 2.6);
 });
 
 test('todo time battery reports the remaining share with exact color boundaries', () => {

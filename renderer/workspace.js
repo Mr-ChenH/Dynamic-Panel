@@ -727,8 +727,6 @@
   const settingsLlmStatus = document.getElementById('settings-llm-status');
   const settingsFeatureList = document.getElementById('settings-feature-list');
   const settingsHomeModuleList = document.getElementById('settings-home-module-list');
-  const settingsMirrorPreview = document.getElementById('settings-mirror-preview');
-  const settingsMirrorChoose = document.getElementById('settings-mirror-choose');
   const settingsShortcutValue = document.getElementById('settings-shortcut-value');
   const settingsShortcutChange = document.getElementById('settings-shortcut-change');
   const settingsDefaultTab = document.getElementById('settings-default-tab');
@@ -926,12 +924,6 @@
     settingsInlineNote.classList.toggle('error', error);
   }
 
-  function applySettingsMirrorCover(dataUrl) {
-    if (settingsMirrorPreview && typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
-      settingsMirrorPreview.src = dataUrl;
-    }
-  }
-
   function renderSettingsPanel() {
     const summary = Domain.settingsSummary({
       appSettings: settingsAppSettings,
@@ -998,11 +990,10 @@
 
   async function refreshSettingsPanel() {
     if (!window.notchAPI) return;
-    const [appSettings, workspace, config, mirrorImage] = await Promise.all([
+    const [appSettings, workspace, config] = await Promise.all([
       window.notchAPI.getAppSettings?.().catch(() => null),
       window.notchAPI.getWorkspace?.().catch(() => null),
       window.notchAPI.getTranscriptionConfig?.().catch(() => null),
-      window.notchAPI.getMirrorImage?.().catch(() => null),
     ]);
     if (appSettings) settingsAppSettings = appSettings;
     if (workspace) settingsWorkspace = workspace;
@@ -1011,7 +1002,6 @@
       updateTranscriptionConfigUi();
       updateRecordingUi();
     }
-    applySettingsMirrorCover(mirrorImage);
     renderSettingsPanel();
   }
 
@@ -1712,19 +1702,6 @@
       : input.checked ? '首页组件已恢复' : '首页组件已隐藏';
     if (typeof showStatusToast === 'function') showStatusToast(message);
   });
-  settingsMirrorChoose?.addEventListener('click', async () => {
-    if (!window.notchAPI?.chooseMirrorImage) return;
-    settingsMirrorChoose.disabled = true;
-    const result = await window.notchAPI.chooseMirrorImage().catch(() => ({ ok: false }));
-    settingsMirrorChoose.disabled = false;
-    if (result?.canceled) return;
-    if (!result?.ok) {
-      setSettingsNote('镜子配图替换失败。', true);
-      return;
-    }
-    applySettingsMirrorCover(result.dataUrl);
-    setSettingsNote('首页镜子配图已更新。');
-  });
   settingsShortcutChange?.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('notch:record-shortcut'));
   });
@@ -1772,7 +1749,6 @@
     renderSettingsPanel();
   });
   window.notchAPI?.onWorkspaceChanged?.(() => refreshSettingsPanel());
-  window.notchAPI?.onMirrorImageChanged?.(applySettingsMirrorCover);
 
   async function loadRecordingAudio(recording, container) {
     if (!window.notchAPI || !recording.audioPath) return;

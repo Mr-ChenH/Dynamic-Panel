@@ -95,7 +95,7 @@ function createForegroundMediaPermissionCoordinator(defaults = {}) {
       activeRequests += 1;
       updateGuard(1);
       try {
-        // Concurrent camera/microphone requests share one layer lease. Restoring
+        // Concurrent media permission requests share one layer lease. Restoring
         // after the first request would put the panel back above the second TCC prompt.
         if (isFirstRequest) {
           layerOwner = targetWindow;

@@ -50,7 +50,6 @@
 - 剪贴板：默认关闭（`DEFAULT_FEATURES.clip = false`），可在菜单栏「显示功能」中启用。历史记录由主进程轮询采集，不再占用任何全局快捷键（见 `clipboardServicePolicy`）
 - 链接：只允许公开 http/https；主进程抓取标题时必须阻止本机、内网与不安全重定向
 - 录制：音频写入 `userData/recordings/`，转写与元数据保存在 LocalStorage；可选百炼 Qwen3-ASR 实时转写，API Key 必须经 `safeStorage` 加密或环境变量读取
-- 镜子：首页中间列使用 1:1 方形；只有主动点击才开启，离开首页或收起时立即释放摄像头 track
 - 当前窗口：通过 macOS 辅助功能枚举和聚焦，使用系统应用图标；同应用多窗口编号；隐藏项保存在 LocalStorage；聚焦 IPC 只接受最近扫描缓存中的窗口 ID
 - 笔记：首页随笔记保存后进入独立笔记页，可搜索、重命名、编辑和删除
 - 动效：窗口边界变更不使用系统动画；视觉动效由渲染层完成，并支持 `prefers-reduced-motion`
@@ -73,7 +72,6 @@
 
 - NEVER 在渲染进程直接 `require('electron')`
 - NEVER 让窗口可被拖出刘海位置；显示与模式切换必须贴顶居中
-- NEVER 让摄像头常驻；离开首页或收起时立即释放 track
 - NEVER 在用户未主动点击时启动麦克风；结束录音或退出应用时必须释放音频 track
 - NEVER 把剪贴板图片 dataURL 存入 LocalStorage
 - NEVER 提交 `node_modules` 或 `dist`
@@ -85,4 +83,4 @@
 
 - 当前窗口行为与样式细节
 - LocalStorage 数据结构
-- 已知 macOS、多屏、菜单栏与摄像头适配问题
+- 已知 macOS、多屏与菜单栏适配问题

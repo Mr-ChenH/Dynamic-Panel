@@ -86,8 +86,8 @@ async function main() {
   await until(() => evaluate('Boolean(window.NotchHome && window.NotchWorkspace && window.notchAPI)'), 'renderer initialization');
   assert.equal(await evaluate('window.notchAPI.platform'), 'win32');
   assert.equal(await evaluate('window.notchAPI.getAppSettings().then(s => s.features.clip)'), false);
-  assert.equal(await evaluate('document.getElementById("mirror-video").srcObject === null'), true);
-  assert.deepEqual(await evaluate('window.NotchHome.getVisibility().visibleIds'), ['pomodoro', 'recorder', 'mirror', 'note', 'commands']);
+  assert.equal(await evaluate('document.querySelector("[data-home-module=mirror]")'), null);
+  assert.deepEqual(await evaluate('window.NotchHome.getVisibility().visibleIds'), ['pomodoro', 'recorder', 'note', 'commands']);
   assert.equal(await evaluate('window.NotchHome.setModuleVisible("music", true).ok'), false);
   assert.equal(await evaluate('window.notchAPI.listWindows().then(r => r.error)'), 'unsupported');
   await evaluate('document.getElementById("notch").click()');
@@ -118,12 +118,8 @@ async function main() {
       navigator.mediaDevices.getUserMedia = async (...args) => {
         const stream = await original(...args); window.smokeTracks.push(...stream.getTracks()); return stream;
       };
-      document.getElementById('mirror-stage').click();
+      document.getElementById('record-start').click();
     })()`);
-    await until(() => evaluate('window.smokeTracks.some(t => t.kind === "video" && t.readyState === "live")'), 'fake camera starts on click');
-    await evaluate('document.getElementById("tab-button-todo").click()');
-    await until(() => evaluate('window.smokeTracks.every(t => t.readyState === "ended")'), 'camera released leaving home');
-    await evaluate('document.getElementById("tab-button-home").click(); document.getElementById("record-start").click()');
     await until(() => evaluate('window.NotchWorkspace.isRecordingActive() && window.smokeTracks.some(t => t.kind === "audio" && t.readyState === "live")'), 'fake recording starts');
     await delay(1500);
     await evaluate('document.getElementById("record-stop").click()');
@@ -140,7 +136,7 @@ async function main() {
   await until(() => evaluate('window.notchAPI.listTaskCompletions().then(r => r.some(i => i.title === "Windows smoke complete"))'), 'notification recorded');
   await evaluate('document.getElementById("tab-button-settings").click()');
   await delay(300);
-  assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("[data-settings-home-module]")).filter(i => !i.closest("label").hidden).map(i => i.dataset.settingsHomeModule)'), ['pomodoro', 'recorder', 'mirror', 'note', 'commands']);
+  assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("[data-settings-home-module]")).filter(i => !i.closest("label").hidden).map(i => i.dataset.settingsHomeModule)'), ['pomodoro', 'recorder', 'note', 'commands']);
   const screenshot = await send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(path.join(evidence, retained ? 'retained.png' : 'windows-settings.png'), Buffer.from(screenshot.data, 'base64'));
   assert.deepEqual(exceptions, [], 'No uncaught renderer errors');
@@ -154,7 +150,7 @@ async function main() {
   await until(() => child.exitCode !== null, 'normal application exit');
   shutdown.close();
   assert.equal(child.exitCode, 0, 'Application exits cleanly before reinstall/uninstall');
-  fs.writeFileSync(path.join(evidence, retained ? 'retained.json' : 'smoke.json'), JSON.stringify({ ok: true, platform: process.platform, retained, profile, checks: ['real startup', 'five home modules', 'IPC', 'clipboard copy', 'auto-launch', 'shortcuts', 'encrypted credentials', 'fake camera release', 'fake recording release and persistence', 'notifications', 'settings'] }, null, 2));
+  fs.writeFileSync(path.join(evidence, retained ? 'retained.json' : 'smoke.json'), JSON.stringify({ ok: true, platform: process.platform, retained, profile, checks: ['real startup', 'four Windows home modules', 'IPC', 'clipboard copy', 'auto-launch', 'shortcuts', 'encrypted credentials', 'fake recording release and persistence', 'notifications', 'settings'] }, null, 2));
   console.log(`Windows application smoke passed (${retained ? 'retained profile' : 'fresh profile'})`);
 }
 main().catch(async (error) => {

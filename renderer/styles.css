@@ -33,7 +33,6 @@
 
   --home-clock-surface: var(--surface-1);
   --home-note-surface: var(--surface-1);
-  --home-mirror-surface: var(--surface-1);
   --home-clip-surface: var(--surface-1);
 
   /* 剪贴板卡片：类型只通过浅描边区分，卡片尺寸统一。 */
@@ -65,7 +64,6 @@
   --note-icon-size: 14px;
   --note-mode-w: 88px;
   --note-task-box-size: 13px;
-  --home-mirror-size: 180px;
 
   /* ============ 间距 · 8pt ============ */
   --hairline-w: 1px;
@@ -663,13 +661,13 @@ body {
   color: var(--text-3);
 }
 
-/* ============ 首页 · 中心镜子工作台 ============ */
+/* ============ 首页 · Bento 工作台 ============ */
 .home-bento {
   display: grid;
   grid-template-columns: 190px 270px minmax(280px, 1fr) 230px;
-  grid-template-rows: var(--home-mirror-size) minmax(0, 1fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   grid-template-areas:
-    "clock windows mirror commands"
+    "clock windows note commands"
     "recorder windows note commands";
   gap: var(--s-3);
   height: 100%;
@@ -680,7 +678,6 @@ body {
 .home-recorder { grid-area: recorder; }
 .home-commands { grid-area: commands; }
 .home-note     { grid-area: note; }
-.home-mirror   { grid-area: mirror; }
 .home-clipfav  { grid-area: clipfav; }
 
 /* 时钟·日期 */
@@ -1161,121 +1158,6 @@ body {
   font-weight: 500;
   letter-spacing: 0.4px;
   color: var(--text-3);
-}
-
-/* 镜子 */
-.home-mirror {
-  width: var(--home-mirror-size);
-  height: var(--home-mirror-size);
-  aspect-ratio: 1;
-  place-self: center;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--s-1);
-  min-width: 0;
-  min-height: 0;
-  background: var(--home-mirror-surface);
-  overflow: hidden;
-}
-
-.mirror-stage {
-  width: 100%;
-  height: 100%;
-  border-radius: var(--r-tile);
-  overflow: hidden;
-  position: relative;
-  padding: 0;
-  border: none;
-  background: var(--surface-2);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mirror-video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1) scale(var(--mirror-zoom, 1));
-  display: block;
-  opacity: 0;
-  transition: opacity var(--d-base) var(--ease-out);
-}
-
-.mirror-zoom {
-  position: absolute;
-  top: var(--s-2);
-  right: var(--s-2);
-  z-index: 2;
-  padding: 3px 6px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-pill);
-  background: rgba(0, 0, 0, 0.62);
-  color: var(--text-2);
-  font: var(--fs-micro) var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  opacity: 0;
-  transform: translateY(-3px);
-  transition: opacity var(--d-fast) var(--ease), transform var(--d-fast) var(--ease);
-  pointer-events: none;
-}
-
-.mirror-stage:hover .mirror-zoom,
-.mirror-stage:focus-visible .mirror-zoom {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.home-mirror.live .mirror-video {
-  opacity: 1;
-}
-
-.home-mirror.live .mirror-placeholder {
-  opacity: 0;
-}
-
-.mirror-placeholder {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  color: var(--text-3);
-  transition: opacity var(--d-fast) var(--ease);
-}
-
-.mirror-placeholder svg {
-  width: 30px;
-  height: 30px;
-}
-
-.mirror-label {
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.4px;
-  color: var(--text-3);
-}
-
-.mirror-hint {
-  font-size: 10.5px;
-  font-weight: 400;
-  letter-spacing: 0.2px;
-  color: var(--text-4);
-  text-align: center;
-  max-width: 160px;
-  padding: 0 var(--s-3);
-}
-
-.home-mirror.live .mirror-hint {
-  visibility: hidden;
 }
 
 /* ============ 首页 · 收藏剪贴竖列 ============ */
@@ -2670,10 +2552,6 @@ body {
 }
 
 @media (max-width: 900px) {
-  :root {
-    --home-mirror-size: 160px;
-  }
-
   .home-bento {
     grid-template-columns: 150px 190px minmax(200px, 1fr) 180px;
     gap: var(--s-2);
@@ -2856,8 +2734,7 @@ body {
 .home-windows,
 .home-recorder,
 .home-commands,
-.home-note,
-.home-mirror {
+.home-note {
   grid-area: auto;
 }
 
@@ -2939,98 +2816,6 @@ body {
   border-color: rgba(143, 182, 255, .5);
   box-shadow: inset 0 0 0 1px rgba(143,182,255,.18), 0 14px 34px rgba(0,0,0,.3);
 }
-
-/* 镜子是纯图像卡片，第二层图像只在指针附近参与折射。 */
-.home-mirror {
-  width: auto;
-  height: auto;
-  aspect-ratio: auto;
-  place-self: stretch;
-  padding: 0;
-  background: #08090b;
-}
-
-.mirror-stage {
-  --liquid-x: 50%;
-  --liquid-y: 50%;
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  background: #08090b;
-  outline: none;
-}
-
-.mirror-photo {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  object-position: 50% 76%;
-  transform: scale(1.015);
-  transition: transform 700ms var(--ease-out), filter 300ms var(--ease), opacity 220ms var(--ease);
-}
-
-.mirror-video {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-  opacity: 0;
-  pointer-events: none;
-  transform: scaleX(-1) scale(var(--mirror-zoom, 1));
-  transform-origin: center;
-  transition: opacity 220ms var(--ease-out), transform 160ms var(--ease-out);
-  will-change: transform;
-}
-
-.home-mirror.live .mirror-photo { opacity: 0; }
-.home-mirror.live .mirror-video { opacity: 1; }
-.home-mirror.live .mirror-liquid-layer { opacity: 0; }
-.home-mirror.live .mirror-stage { cursor: zoom-in; }
-.home-mirror.camera-starting .mirror-photo:first-child {
-  filter: brightness(.82) saturate(.88);
-  transform: scale(1.035);
-}
-
-.mirror-liquid-layer {
-  opacity: 0;
-  filter: url(#mirror-liquid-filter) saturate(1.08) contrast(1.03);
-  -webkit-mask-image: radial-gradient(circle 66px at var(--liquid-x) var(--liquid-y), #000 0 34%, rgba(0,0,0,.9) 50%, transparent 74%);
-  mask-image: radial-gradient(circle 66px at var(--liquid-x) var(--liquid-y), #000 0 34%, rgba(0,0,0,.9) 50%, transparent 74%);
-  transform: translate(var(--liquid-shift-x, 0), var(--liquid-shift-y, 0)) scale(1.075);
-  transition: opacity 160ms var(--ease), transform 240ms var(--ease-out);
-}
-
-.home-mirror.liquid-active .mirror-photo:first-child {
-  transform: scale(1.04);
-  filter: saturate(.93) brightness(.93);
-}
-.home-mirror.liquid-active .mirror-liquid-layer { opacity: .92; }
-
-.mirror-ripple {
-  position: absolute;
-  left: var(--liquid-x);
-  top: var(--liquid-y);
-  width: 18px;
-  height: 18px;
-  border: 1px solid rgba(255,255,255,.55);
-  border-radius: 50%;
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(.25);
-  pointer-events: none;
-  z-index: 4;
-}
-.home-mirror.ripple-active .mirror-ripple { animation: mirror-ripple 720ms var(--ease-out); }
-@keyframes mirror-ripple {
-  0% { opacity: .75; transform: translate(-50%, -50%) scale(.35); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(8); }
-}
-.mirror-filter-defs { position: absolute; pointer-events: none; }
 
 /* 距离感应 hover：相邻项目也会轻微抬升，接近 macOS Dock 的连续曲线。 */
 .window-app-mark {
@@ -3204,47 +2989,6 @@ body {
 .home-recorder[data-state='recording'] .record-start span {
   box-shadow: 0 0 calc(12px + var(--recording-level, 0) * 24px) rgba(255,95,87,.7);
 }
-
-/* ============ 镜子 PixelReveal + 带尾迹水波 ============ */
-.mirror-water-canvas,
-.mirror-pixel-reveal {
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-.mirror-water-canvas { mix-blend-mode: screen; opacity: .92; }
-.mirror-pixel-reveal {
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  grid-template-rows: repeat(8, 1fr);
-  overflow: hidden;
-  opacity: 0;
-}
-.mirror-pixel-reveal i {
-  display: block;
-  background: #090a0d;
-  transform: scale(0);
-  transform-origin: center;
-}
-.mirror-pixel-reveal.revealing { opacity: 1; }
-.mirror-pixel-reveal.revealing i {
-  animation: mirror-pixel-away 620ms var(--ease-out) both;
-  animation-delay: var(--pixel-delay);
-}
-@keyframes mirror-pixel-away {
-  0% { opacity: 1; transform: scale(1.08); }
-  62% { opacity: .88; transform: scale(.72); }
-  100% { opacity: 0; transform: scale(0); }
-}
-.mirror-liquid-layer {
-  -webkit-mask-image: radial-gradient(circle 92px at var(--liquid-x) var(--liquid-y), #000 0 30%, rgba(0,0,0,.94) 50%, rgba(0,0,0,.38) 72%, transparent 100%);
-  mask-image: radial-gradient(circle 92px at var(--liquid-x) var(--liquid-y), #000 0 30%, rgba(0,0,0,.94) 50%, rgba(0,0,0,.38) 72%, transparent 100%);
-  transition: opacity 240ms var(--ease), transform 420ms var(--ease-out);
-}
-.home-mirror.liquid-active .mirror-liquid-layer { opacity: 1; }
 
 /* ============ 可编辑待办分类 ============ */
 .todo-category-name {
@@ -3503,9 +3247,7 @@ body {
 .home-commands[data-widget-size='mini'] .command-add,
 .home-commands[data-widget-size='mini'] .command-list,
 .home-note[data-widget-size='mini'] .note-body,
-.home-note[data-widget-size='mini'] .note-format-actions,
-.home-mirror[data-widget-size='mini'] .mirror-stage { display: none; }
-.home-mirror[data-widget-size='mini']::before { content: '镜子'; color: var(--text-2); font-size: 10px; }
+.home-note[data-widget-size='mini'] .note-format-actions { display: none; }
 .home-recorder[data-widget-size='mini'] .recorder-head { overflow: hidden; white-space: nowrap; }
 .home-recorder[data-widget-size='mini'] .recorder-controls { left: 10px; bottom: 8px; transform: scale(.78); transform-origin: left bottom; }
 .home-music[data-widget-size='mini'] { display: grid; place-items: center; padding: 8px; }
@@ -3647,7 +3389,6 @@ body {
 .settings-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-3); }
 .settings-card-heading > div { display: flex; flex-direction: column; gap: 3px; }
 .settings-card-heading strong,
-.settings-mirror-card strong { color: var(--text-1); font-size: 16px; font-weight: 640; }
 .settings-card-heading > small { color: var(--text-4); font-size: 9px; }
 .settings-card p { margin: 0; color: var(--text-4); font-size: 9px; line-height: 1.55; }
 
@@ -3680,10 +3421,6 @@ body {
 .settings-feature-grid input:disabled + i,
 .settings-auto-launch-row input:disabled + i { opacity: .45; }
 
-.settings-mirror-card { display: grid; grid-template-columns: 154px minmax(0,1fr); align-items: center; gap: 18px; }
-.settings-mirror-card img { width: 154px; height: 154px; border-radius: 16px; object-fit: cover; box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 12px 32px rgba(0,0,0,.28); }
-.settings-mirror-card > div { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 7px; }
-.settings-mirror-card p { max-width: 250px; }
 
 .settings-device-card { display: flex; flex-direction: column; }
 .settings-device-row { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; border-bottom: 1px solid var(--hairline-soft); }
@@ -4039,8 +3776,7 @@ body {
 /* 最小组件仍是“摘要态”，而不是把主体隐藏后留下空壳。 */
 .home-windows[data-widget-size='mini'] .window-list,
 .home-commands[data-widget-size='mini'] .command-list,
-.home-note[data-widget-size='mini'] .note-body,
-.home-mirror[data-widget-size='mini'] .mirror-stage { display: flex; }
+.home-note[data-widget-size='mini'] .note-body { display: flex; }
 .home-windows[data-widget-size='mini'] { padding: 9px; }
 .home-windows[data-widget-size='mini'] .tile-head { margin-bottom: 3px; }
 .home-windows[data-widget-size='mini'] .window-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 2px; overflow: hidden; }
@@ -4062,9 +3798,6 @@ body {
 .home-note[data-widget-size='mini'] .note-body { min-height: 0; overflow: hidden; }
 .home-note[data-widget-size='mini'] .note-input { display: none !important; }
 .home-note[data-widget-size='mini'] .note-preview { display: -webkit-box !important; overflow: hidden; -webkit-line-clamp: 3; -webkit-box-orient: vertical; font-size: 8px; line-height: 1.35; }
-.home-mirror[data-widget-size='mini'] { padding: 0; }
-.home-mirror[data-widget-size='mini']::before { content: none; }
-.home-mirror[data-widget-size='mini'] .mirror-stage { width: 100%; height: 100%; }
 
 /* 2026-08-22：随手输入、紧凑日期浮层与录音控制最终层。 */
 .home-recorder {
@@ -5382,7 +5115,7 @@ body {
 .home-bento > .home-pomodoro[data-layout-variant='full'] > .pomodoro-toggle,
 .home-bento > .home-pomodoro[data-layout-variant='full'] > .pomodoro-reset { width: 46px; height: 46px; }
 
-/* 录音、列表、笔记和镜子都在容器内部消化增量空间。 */
+/* 录音、列表和笔记都在容器内部消化增量空间。 */
 .home-bento > .home-recorder[data-layout-variant] { position: relative; display: flex; flex-direction: column; padding-bottom: 52px; }
 .home-bento > .home-recorder[data-layout-variant] .recorder-head { min-width: 0; overflow: hidden; }
 .home-bento > .home-recorder[data-layout-variant] .home-transcript { min-width: 0; min-height: 0; overflow: hidden; }
@@ -5427,11 +5160,6 @@ body {
 .home-bento > .home-note[data-layout-variant] .note-persist-actions { transform: none; }
 .home-bento > .home-note[data-layout-variant='mini'] { padding: 8px; }
 .home-bento > .home-note[data-layout-variant='mini'] .note-input { font-size: 8px; line-height: 1.42; padding: 2px; }
-
-.home-bento > .home-mirror[data-layout-variant] { padding: 0; }
-.home-bento > .home-mirror[data-layout-variant] .mirror-stage { display: block; width: 100%; height: 100%; }
-.home-bento > .home-mirror[data-layout-variant] .mirror-video,
-.home-bento > .home-mirror[data-layout-variant] .mirror-photo { width: 100%; height: 100%; object-fit: cover; }
 
 /* 设置左栏允许独立滚动，第三张卡不会挤压或覆盖既有内容。 */
 .settings-column-primary {

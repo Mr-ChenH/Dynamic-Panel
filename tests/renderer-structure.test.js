@@ -53,6 +53,14 @@ test('notes have a dedicated top-level tab and management panel', () => {
   assert.match(html, /id="notes-detail"/);
 });
 
+test('home and settings remove the mirror module completely', () => {
+  assert.doesNotMatch(html, /home-mirror|mirror-stage|mirror-video|data-settings-home-module="mirror"/);
+  assert.doesNotMatch(stylesCss, /home-mirror|mirror-stage|mirror-video|--home-mirror|镜子/);
+  assert.doesNotMatch(appJs, /HOME_MODULE_REGISTRY[^\n]*mirror|startMirror|stopMirror|getUserMedia/);
+  assert.doesNotMatch(workspaceJs, /getMirrorImage|chooseMirrorImage|settingsMirrorPreview/);
+  assert.doesNotMatch(mainJs, /MIRROR_IMAGE_FILE|mirror:choose-image|media:camera|替换镜子配图/);
+});
+
 test('home scratch note keeps only the save action', () => {
   const homeNote = html.match(/<section class="tile home-note"[\s\S]*?<\/section>/)?.[0] || '';
   assert.match(homeNote, /id="note-save-btn"/);
@@ -80,7 +88,6 @@ test('homepage visibility has one storage key, exact validation, and lifecycle e
   assert.match(appJs, /window\.NotchHome\s*=/);
   assert.match(appJs, /notch:home-modules-changed/);
   assert.match(appJs, /notch:home-layout-error/);
-  assert.match(appJs, /stopMirror\(\)/);
   assert.match(appJs, /new Set\(homeTiles\.map\(\(tile\) => tile\.dataset\.homeModule\)\)/);
 });
 
@@ -88,7 +95,7 @@ test('settings exposes exactly one switch for every homepage widget', () => {
   const switches = [...html.matchAll(/data-settings-home-module="([^"]+)"/g)]
     .map((match) => match[1]);
   assert.deepEqual(switches, [
-    'music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands',
+    'music', 'pomodoro', 'recorder', 'windows', 'note', 'commands',
   ]);
   assert.match(workspaceJs, /isRecordingActive/);
   assert.match(workspaceJs, /recording_active/);
