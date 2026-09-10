@@ -51,6 +51,7 @@ const {
   selectTranscriptionSettings,
   createWorkspacePersistenceGate,
   hoverSpacePollingPolicy,
+  collapsedDisplayFollowPolicy,
   reduceClipboardObservation,
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,
@@ -280,6 +281,7 @@ let lastClipImageProbeAt = 0;
 let clipPollingGeneration = 0;
 let spaceShortcutTimer = null;
 let spaceShortcutRegistered = false;
+let displayFollowTimer = null;
 let configuredShortcut = '';
 let previousPasteTarget = null;
 let windowScanCache = new Map();
@@ -396,6 +398,7 @@ function applyMode(mode, display) {
     refreshTrayMenu();
   }
   syncHoverSpacePolling();
+  syncDisplayFollowPolling();
 }
 
 // 纯重新定位不能改变收起事务，否则屏幕变化会取消 watchdog 并重新吞掉鼠标。
@@ -1038,8 +1041,14 @@ function createWindow() {
   mainWindow.on('focus', () => {
     cameraBlurDeferred = false;
   });
-  mainWindow.on('show', syncHoverSpacePolling);
-  mainWindow.on('hide', syncHoverSpacePolling);
+  mainWindow.on('show', () => {
+    syncHoverSpacePolling();
+    syncDisplayFollowPolling();
+  });
+  mainWindow.on('hide', () => {
+    syncHoverSpacePolling();
+    syncDisplayFollowPolling();
+  });
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
@@ -1052,6 +1061,7 @@ function createWindow() {
     cancelCollapseWatchdog();
     hideWhenCollapsed = false;
     mainWindow = null;
+    stopDisplayFollowPolling();
   });
 
   mainWindow.on('close', (event) => {
@@ -3116,6 +3126,32 @@ function syncHoverSpacePolling() {
   else stopHoverSpaceShortcut();
 }
 
+function followCursorDisplay() {
+  if (!mainWindow || mainWindow.isDestroyed() || currentMode !== 'collapsed') return;
+  const targetDisplay = getTargetDisplay();
+  const windowDisplay = getWindowDisplay();
+  if (targetDisplay.id !== windowDisplay.id) repositionWindow(targetDisplay);
+}
+
+function stopDisplayFollowPolling() {
+  if (displayFollowTimer) clearInterval(displayFollowTimer);
+  displayFollowTimer = null;
+}
+
+function syncDisplayFollowPolling() {
+  const policy = collapsedDisplayFollowPolicy({
+    visible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
+    mode: currentMode,
+    displayCount: screen.getAllDisplays().length,
+  });
+  if (!policy.enabled) {
+    stopDisplayFollowPolling();
+    return;
+  }
+  followCursorDisplay();
+  if (!displayFollowTimer) displayFollowTimer = setInterval(followCursorDisplay, policy.intervalMs);
+}
+
 ipcMain.handle('shortcut:hover-space-status', () => ({
   registered: spaceShortcutRegistered && globalShortcut.isRegistered('Space'),
   mode: currentMode,
@@ -3252,6 +3288,7 @@ function watchDisplayChanges() {
     timer = setTimeout(() => {
       if (!mainWindow) return;
       repositionWindow();
+      syncDisplayFollowPolling();
       if (!mainWindow.webContents.isDestroyed()) {
         mainWindow.webContents.send('window:metrics-changed', getLayoutMetrics());
       }
@@ -3300,6 +3337,7 @@ app.on('will-quit', () => {
   cancelCollapseWatchdog();
   clearTodoReminderTimer();
   stopHoverSpaceShortcut();
+  stopDisplayFollowPolling();
   clearTaskNotificationTimers();
   stopTaskNotificationServer();
   closeAllTranscriptionSessions();

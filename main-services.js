@@ -504,6 +504,13 @@ function hoverSpacePollingPolicy({ shortcut, visible, mode } = {}) {
   };
 }
 
+function collapsedDisplayFollowPolicy({ visible, mode, displayCount } = {}) {
+  return {
+    enabled: visible === true && mode === 'collapsed' && Number(displayCount) > 1,
+    intervalMs: 200,
+  };
+}
+
 const CONFIGURABLE_FEATURES = new Set(['todo', 'notes', 'links', 'recordings', 'credentials', 'clip']);
 const DEFAULT_PANEL_TABS = new Set(['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings']);
 
@@ -608,6 +615,7 @@ module.exports = {
   createForegroundMediaPermissionCoordinator,
   createWorkspacePersistenceGate,
   hoverSpacePollingPolicy,
+  collapsedDisplayFollowPolicy,
   updateFeaturePreference,
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,

@@ -29,6 +29,7 @@ const {
   selectTranscriptionSettings,
   createWorkspacePersistenceGate,
   hoverSpacePollingPolicy,
+  collapsedDisplayFollowPolicy,
   reduceClipboardObservation,
   createForegroundMediaPermissionCoordinator,
 } = require('../main-services');
@@ -170,6 +171,16 @@ test('Hover + Space polls only while the collapsed strip is visible', () => {
   assert.equal(hoverSpacePollingPolicy({ shortcut: 'Space', visible: true, mode: 'expanded' }).enabled, false);
   assert.equal(hoverSpacePollingPolicy({ shortcut: 'Space', visible: false, mode: 'collapsed' }).enabled, false);
   assert.equal(hoverSpacePollingPolicy({ shortcut: 'Command+Shift+P', visible: true, mode: 'collapsed' }).enabled, false);
+});
+
+test('collapsed panel follows the cursor only when multiple displays are active', () => {
+  assert.deepEqual(collapsedDisplayFollowPolicy({ visible: true, mode: 'collapsed', displayCount: 2 }), {
+    enabled: true,
+    intervalMs: 200,
+  });
+  assert.equal(collapsedDisplayFollowPolicy({ visible: true, mode: 'collapsed', displayCount: 1 }).enabled, false);
+  assert.equal(collapsedDisplayFollowPolicy({ visible: true, mode: 'expanded', displayCount: 2 }).enabled, false);
+  assert.equal(collapsedDisplayFollowPolicy({ visible: false, mode: 'collapsed', displayCount: 2 }).enabled, false);
 });
 
 test('isPrivateAddress blocks loopback, private, link-local and unique-local ranges', () => {
