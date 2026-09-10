@@ -21,6 +21,7 @@ const {
   shiftCalendarMonth,
   defaultTodoDeadline,
   normalizeTodoCategoryNames,
+  migrateTodoCategoryNames,
   normalizeHomeWidgetSizes,
   packHomeWidgetLayout,
   normalizeHiddenHomeModules,
@@ -665,8 +666,14 @@ test('home layout swaps complete slot assignments without duplicates', () => {
   });
 });
 
-test('todo category names migrate to work streams and reject blank edits', () => {
+test('todo category names use stable areas and preserve customized legacy values', () => {
   const defaults = {
+    P0: '学习与课程',
+    P1: '内容与创作',
+    P2: '产品与开发',
+    P3: '生活与事务',
+  };
+  const legacyDefaults = {
     P0: '课程',
     P1: '自媒体&写作',
     P2: 'Vibe coding',
@@ -675,9 +682,16 @@ test('todo category names migrate to work streams and reject blank edits', () =>
   assert.deepEqual(normalizeTodoCategoryNames(null, defaults), defaults);
   assert.deepEqual(normalizeTodoCategoryNames({ P0: '  教学产品  ', P1: '', P4: '无效' }, defaults), {
     P0: '教学产品',
-    P1: '自媒体&写作',
-    P2: 'Vibe coding',
-    P3: '日常',
+    P1: '内容与创作',
+    P2: '产品与开发',
+    P3: '生活与事务',
+  });
+  assert.deepEqual(migrateTodoCategoryNames(legacyDefaults, defaults, legacyDefaults), defaults);
+  assert.deepEqual(migrateTodoCategoryNames({ ...legacyDefaults, P2: '客户端开发' }, defaults, legacyDefaults), {
+    P0: '学习与课程',
+    P1: '内容与创作',
+    P2: '客户端开发',
+    P3: '生活与事务',
   });
 });
 

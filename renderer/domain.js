@@ -722,6 +722,17 @@
     }));
   }
 
+  function migrateTodoCategoryNames(value, defaults, legacyDefaults) {
+    const fallback = defaults && typeof defaults === 'object' ? { ...defaults } : {};
+    const legacy = legacyDefaults && typeof legacyDefaults === 'object' ? legacyDefaults : {};
+    const source = value && typeof value === 'object' ? value : {};
+    const migrated = Object.fromEntries(Object.keys(fallback).map((key) => {
+      const saved = String(source[key] || '').replace(/\s+/g, ' ').trim();
+      return [key, saved && saved !== legacy[key] ? saved : fallback[key]];
+    }));
+    return normalizeTodoCategoryNames(migrated, fallback);
+  }
+
   function normalizeHomeWidgetSizes(value, defaults, preferredId, capacity = Infinity) {
     const fallback = defaults && typeof defaults === 'object' ? { ...defaults } : {};
     const allowed = new Set(['mini', 'small', 'medium', 'large']);
@@ -1024,6 +1035,7 @@
     normalizeHomeLayout,
     swapHomeLayoutSlots,
     normalizeTodoCategoryNames,
+    migrateTodoCategoryNames,
     normalizeHomeWidgetSizes,
     packHomeWidgetLayout,
     normalizeHiddenHomeModules,

@@ -25,6 +25,10 @@ test('clipboard history renders a dated timeline with filtered result counts', (
 });
 
 test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', () => {
+  for (const name of ['学习与课程', '内容与创作', '产品与开发', '生活与事务']) {
+    assert.match(html, new RegExp(`value="${name}"`));
+  }
+  assert.match(appJs, /migrateTodoCategoryNames/);
   assert.equal((html.match(/data-todo-scope="(?:today|week|later|all)"/g) || []).length, 4);
   assert.equal((html.match(/data-todo-date-shortcut="(?:today|tomorrow|weekend|next-week)"/g) || []).length, 4);
   assert.match(appJs, /filterTodosByTimeScope\(data\[priority\]/);

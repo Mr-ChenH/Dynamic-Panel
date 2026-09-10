@@ -2,6 +2,12 @@ const STORAGE_KEY = 'notch-todo-data';
 const PRIORITIES = ['P0', 'P1', 'P2', 'P3'];
 const TODO_CATEGORY_KEY = 'notch-todo-category-names-v1';
 const TODO_CATEGORY_DEFAULTS = {
+  P0: '学习与课程',
+  P1: '内容与创作',
+  P2: '产品与开发',
+  P3: '生活与事务',
+};
+const LEGACY_TODO_CATEGORY_DEFAULTS = {
   P0: '课程',
   P1: '自媒体&写作',
   P2: 'Vibe coding',
@@ -196,9 +202,10 @@ function allTodoItems() {
 
 function loadTodoCategoryNames() {
   try {
-    return window.NotchDomain.normalizeTodoCategoryNames(
+    return window.NotchDomain.migrateTodoCategoryNames(
       JSON.parse(localStorage.getItem(TODO_CATEGORY_KEY) || 'null'),
-      TODO_CATEGORY_DEFAULTS
+      TODO_CATEGORY_DEFAULTS,
+      LEGACY_TODO_CATEGORY_DEFAULTS
     );
   } catch (error) {
     return { ...TODO_CATEGORY_DEFAULTS };
@@ -218,8 +225,10 @@ function applyTodoCategoryNames() {
     const name = todoCategoryNames[categoryId];
     const input = document.querySelector(`.todo-category-name[data-category="${categoryId}"]`);
     const addInput = document.querySelector(`.add-row input[data-priority="${categoryId}"]`);
+    const deadlineButton = document.querySelector(`.todo-deadline-trigger[data-deadline-priority="${categoryId}"]`);
     if (input) input.value = name;
     if (addInput) addInput.setAttribute('aria-label', `添加${name}待办`);
+    if (deadlineButton) deadlineButton.setAttribute('aria-label', `选择${name}待办截止时间`);
   });
 }
 if (window.notchAPI && typeof window.notchAPI.scheduleTodoReminders === 'function') {
