@@ -238,6 +238,37 @@ body {
   background: var(--text-1);
 }
 
+/* Windows 没有物理刘海遮挡，常驻黑条应比原生透明画布更克制。
+   画布仍保持 200 × 38，保证定位和 Hover + Space 命中区域稳定；
+   只有可见岛体在接近时增大，离开后自动回到紧凑尺寸。 */
+#app[data-platform='win32'].collapsed .notch {
+  width: 160px;
+  height: 16px;
+  padding-bottom: 1px;
+  border-radius: 0 0 5px 5px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22);
+  transition:
+    width var(--d-base) var(--ease-out),
+    height var(--d-base) var(--ease-out),
+    border-radius var(--d-base) var(--ease-out),
+    background var(--d-fast) var(--ease-out),
+    box-shadow var(--d-fast) var(--ease-out);
+}
+
+#app[data-platform='win32'].collapsed .notch:hover,
+#app[data-platform='win32'].collapsed .notch:focus-visible {
+  width: 184px;
+  height: 30px;
+  border-radius: 0 0 9px 9px;
+  background: #080808;
+  box-shadow: 0 7px 18px rgba(0, 0, 0, 0.30);
+}
+
+#app[data-platform='win32'].collapsed .notch:not(:hover) .notch-dot {
+  width: 12px;
+  height: 2px;
+}
+
 #app.expanded .notch-dot {
   opacity: 0;
 }

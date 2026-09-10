@@ -7,10 +7,22 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
+const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
   assert.match(appJs, /const starFilledSvg\s*=/);
+});
+
+test('Windows collapsed notch stays compact and grows only on approach', () => {
+  assert.match(appJs, /app\.dataset\.platform\s*=\s*window\.notchAPI\?\.platform/);
+  const compactRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
+  const hoverRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch:hover,[\s\S]*?\{([\s\S]*?)\n\}/)?.[1] || '';
+  assert.match(compactRule, /width:\s*160px/);
+  assert.match(compactRule, /height:\s*16px/);
+  assert.match(compactRule, /width var\(--d-base\)/);
+  assert.match(hoverRule, /width:\s*184px/);
+  assert.match(hoverRule, /height:\s*30px/);
 });
 
 test('notes have a dedicated top-level tab and management panel', () => {

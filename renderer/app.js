@@ -9,6 +9,7 @@ const TODO_CATEGORY_DEFAULTS = {
 };
 
 const app = document.getElementById('app');
+app.dataset.platform = window.notchAPI?.platform || 'darwin';
 const notch = document.getElementById('notch');
 const panel = document.getElementById('panel');
 const statusToast = document.getElementById('status-toast');
