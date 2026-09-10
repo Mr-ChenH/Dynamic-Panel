@@ -1,0 +1,94 @@
+[tools]
+node = "22.19.0"
+
+[tasks.install]
+description = "Install locked desktop and website dependencies"
+sources = ["package-lock.json", "website/package-lock.json"]
+outputs = ["node_modules/.package-lock.json", "website/node_modules/.package-lock.json"]
+run = [
+  "npm ci",
+  "npm --prefix website ci",
+]
+
+[tasks.clean]
+description = "Remove generated desktop and website build outputs"
+run = '''node -e "const fs = require('node:fs'); for (const path of ['dist.noindex', 'website/dist', 'website/.vinext', 'website/.next']) fs.rmSync(path, { recursive: true, force: true });"'''
+
+[tasks.test]
+description = "Run desktop and website tests"
+depends = ["install"]
+run = [
+  "npm test",
+  "npm --prefix website test",
+]
+
+[tasks.lint]
+description = "Lint the website"
+depends = ["install"]
+run = "npm --prefix website run lint"
+
+[tasks.check]
+description = "Run all desktop and website checks"
+depends = ["install"]
+run = [
+  "npm test",
+  "npm --prefix website run lint",
+  "npm --prefix website test",
+]
+
+[tasks.run]
+description = "Run the Electron desktop application"
+depends = ["install"]
+run = "npm start"
+raw = true
+
+[tasks."run:website"]
+description = "Run the website development server"
+depends = ["install"]
+dir = "website"
+env = { WRANGLER_LOG_PATH = ".wrangler/wrangler.log" }
+run = "npm exec vinext dev"
+raw = true
+
+[tasks.build]
+description = "Run all checks and build the production website"
+depends = ["check"]
+dir = "website"
+env = { WRANGLER_LOG_PATH = ".wrangler/wrangler.log" }
+run = "npm exec vinext build"
+
+[tasks."build:website"]
+description = "Build the production website"
+depends = ["install"]
+dir = "website"
+env = { WRANGLER_LOG_PATH = ".wrangler/wrangler.log" }
+run = "npm exec vinext build"
+
+[tasks.pack]
+description = "Create an unpacked Electron application for the current platform"
+depends = ["check"]
+run = "npm run pack"
+
+[tasks.package]
+description = "Create the Windows NSIS installer or macOS DMG for the current platform"
+depends = ["check"]
+run = '''node -e "const { spawnSync } = require('node:child_process'); const script = process.platform === 'win32' ? 'build:win' : process.platform === 'darwin' ? 'build' : ''; if (!script) { console.error('Packaging is supported only on Windows and macOS.'); process.exit(1); } const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'; const result = spawnSync(npm, ['run', script], { stdio: 'inherit' }); process.exit(result.status ?? 1);"'''
+raw = true
+
+[tasks."package:windows"]
+description = "Create the Windows x64 NSIS installer (Windows only)"
+depends = ["check"]
+run = [
+  '''node -e "if (process.platform !== 'win32') { console.error('package:windows must run on Windows.'); process.exit(1); }"''',
+  "npm run build:win",
+]
+raw = true
+
+[tasks."package:macos"]
+description = "Create the Apple Silicon DMG (macOS only)"
+depends = ["check"]
+run = [
+  '''node -e "if (process.platform !== 'darwin') { console.error('package:macos must run on macOS.'); process.exit(1); }"''',
+  "npm run build",
+]
+raw = true
