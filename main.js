@@ -388,7 +388,7 @@ function cancelCollapseWatchdog() {
 function applyMode(mode, display) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   cancelCollapseWatchdog();
-  mainWindow.setBounds(getBoundsForMode(mode, display));
+  applyWindowGeometry(mode, display);
   mainWindow.setIgnoreMouseEvents(false);
   currentMode = mode;
   if (mode === 'expanded') hideWhenCollapsed = false;
@@ -404,7 +404,20 @@ function applyMode(mode, display) {
 // 纯重新定位不能改变收起事务，否则屏幕变化会取消 watchdog 并重新吞掉鼠标。
 function repositionWindow(display) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  mainWindow.setBounds(getBoundsForMode(currentMode, display));
+  applyWindowGeometry(currentMode, display);
+}
+
+function applyWindowGeometry(mode, display) {
+  if (process.platform !== 'win32') {
+    mainWindow.setBounds(getBoundsForMode(mode, display));
+    return;
+  }
+  const layout = platformPolicy.windowsPanelLayout(display || getWindowDisplay(), mode === 'expanded');
+  const current = mainWindow.getBounds();
+  if (['x', 'y', 'width', 'height'].some((key) => current[key] !== layout.bounds[key])) {
+    mainWindow.setBounds(layout.bounds, false);
+  }
+  mainWindow.setShape(layout.shape);
 }
 
 function beginNativeCollapse() {
@@ -982,7 +995,9 @@ ipcMain.on('task-notification:dismissed', (event, eventId) => {
 });
 
 function createWindow() {
-  const initial = getCenteredBounds(COLLAPSED_WIDTH, getCollapsedHeight(getTargetDisplay()));
+  const initial = process.platform === 'win32'
+    ? platformPolicy.windowsPanelLayout(getTargetDisplay(), false).bounds
+    : getCenteredBounds(COLLAPSED_WIDTH, getCollapsedHeight(getTargetDisplay()));
 
   mainWindow = new BrowserWindow({
     width: initial.width,
@@ -1012,6 +1027,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // 折叠窗口长期不聚焦时仍需保持首次展开帧率；后台视觉循环均由渲染层自行停机。
+      backgroundThrottling: false,
     },
   });
 
@@ -3103,7 +3120,7 @@ function startHoverSpaceShortcut() {
       return;
     }
     const point = screen.getCursorScreenPoint();
-    const bounds = mainWindow.getBounds();
+    const bounds = getBoundsForMode('collapsed');
     const hovering = point.x >= bounds.x && point.x < bounds.x + bounds.width
       && point.y >= bounds.y && point.y < bounds.y + bounds.height;
     setHoverSpaceShortcut(hovering);
@@ -3156,7 +3173,7 @@ ipcMain.handle('shortcut:hover-space-status', () => ({
   registered: spaceShortcutRegistered && globalShortcut.isRegistered('Space'),
   mode: currentMode,
   cursor: screen.getCursorScreenPoint(),
-  bounds: mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null,
+  bounds: mainWindow && !mainWindow.isDestroyed() ? getBoundsForMode(currentMode) : null,
 }));
 
 // 渲染层请求把图片文件读成 dataURL 回显（contextIsolation 下 file:// 受限，走 IPC 读盘）

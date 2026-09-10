@@ -8,6 +8,23 @@ test('Windows strip avoids a top taskbar and expanded panel stays in usable desk
   assert.deepEqual(platform.panelBounds('win32', display, true), { x: -1580, y: -152, width: 1240, height: 616 });
 });
 
+test('Windows mode changes keep the same canvas and restrict collapsed input to the strip', () => {
+  for (const display of [
+    { bounds: { x: -1920, y: -200, width: 1920, height: 1080 }, workArea: { x: -1920, y: -152, width: 1920, height: 1032 } },
+    { bounds: { x: 0, y: 0, width: 800, height: 600 }, workArea: { x: 48, y: 0, width: 752, height: 560 } },
+  ]) {
+    const collapsed = platform.windowsPanelLayout(display, false);
+    const expanded = platform.windowsPanelLayout(display, true);
+    assert.deepEqual(collapsed.bounds, expanded.bounds);
+    assert.deepEqual(expanded.shape, []);
+    const strip = platform.panelBounds('win32', display, false);
+    assert.deepEqual(collapsed.shape, [{
+      x: strip.x - expanded.bounds.x, y: strip.y - expanded.bounds.y,
+      width: 200, height: 38,
+    }]);
+  }
+});
+
 test('Windows small scaled desktops leave 24 DIP margins around constrained content', () => {
   const display = { bounds: { x: 0, y: 0, width: 800, height: 600 }, workArea: { x: 48, y: 0, width: 752, height: 560 } };
   assert.deepEqual(platform.panelBounds('win32', display, true), { x: 72, y: 0, width: 704, height: 536 });

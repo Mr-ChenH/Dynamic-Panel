@@ -879,6 +879,8 @@ async function main() {
     const panelMotionAudit = await window.webContents.executeJavaScript(`
       (async () => {
         const appSurface = document.getElementById('app');
+        const originalPlatform = appSurface.dataset.platform;
+        appSurface.dataset.platform = 'win32';
         appSurface.classList.remove('expanded', 'opening', 'closing');
         appSurface.classList.add('collapsed');
         const waitForClass = async (name) => {
@@ -908,16 +910,61 @@ async function main() {
           })
         )));
         const masonryReveal = document.getElementById('home-bento').classList.contains('masonry-reveal');
+        const shellStyle = getComputedStyle(document.querySelector('.panel'), '::before');
+        const shellClipPath = shellStyle.clipPath;
+        const shellTransitionProperty = shellStyle.transitionProperty;
         document.getElementById('notch').click();
         const collapsed = await waitForClass('collapsed');
-        return { opened, collapsed, tileEntranceAnimations, contentLayerHasScale, masonryReveal };
+        // Isolate the handoff from pointer hover and animation progress. Both states
+        // must paint the same shell and grip, including when keyboard focus returns.
+        const grip = document.querySelector('.notch-dot');
+        const notchElement = document.getElementById('notch');
+        notchElement.style.transition = 'none';
+        notchElement.style.pointerEvents = 'none';
+        grip.style.transition = 'none';
+        const appearance = () => {
+          const shell = getComputedStyle(notchElement);
+          const dot = getComputedStyle(grip);
+          const shellRect = notchElement.getBoundingClientRect();
+          const dotRect = grip.getBoundingClientRect();
+          return [shell.width, shell.height, shell.backgroundColor, shell.borderRadius,
+            shell.boxShadow, dot.width, dot.height, dot.opacity,
+            dotRect.left - shellRect.left, dotRect.top - shellRect.top];
+        };
+        appSurface.classList.remove('collapsed');
+        appSurface.classList.add('expanded', 'closing');
+        const beforeHandoff = appearance();
+        appSurface.classList.remove('expanded', 'closing');
+        appSurface.classList.add('collapsed');
+        notchElement.focus({ preventScroll: true });
+        const afterHandoff = appearance();
+        notchElement.style.removeProperty('transition');
+        notchElement.style.removeProperty('pointer-events');
+        grip.style.removeProperty('transition');
+        appSurface.dataset.platform = originalPlatform;
+        return {
+          opened,
+          collapsed,
+          tileEntranceAnimations,
+          contentLayerHasScale,
+          masonryReveal,
+          shellClipPath,
+          shellTransitionProperty,
+          beforeHandoff,
+          afterHandoff,
+        };
       })()
     `);
+    assert.deepEqual(panelMotionAudit.beforeHandoff, panelMotionAudit.afterHandoff,
+      'Windows closing/collapsed handoff must preserve shell and grip appearance even after focus restoration');
     assert.equal(panelMotionAudit.opened, true);
     assert.equal(panelMotionAudit.collapsed, true);
     assert.equal(panelMotionAudit.tileEntranceAnimations, 0, '展开时不得再同时启动七张卡片的错峰缩放入场');
     assert.equal(panelMotionAudit.masonryReveal, false, '首页卡片不应在每次展开时重播入场');
     assert.equal(panelMotionAudit.contentLayerHasScale, false, '展开/收起不应缩放整个大面积内容层');
+    assert.equal(panelMotionAudit.shellClipPath, 'none', 'Windows 外壳不得通过大面积 clip-path 重绘展开');
+    assert.match(panelMotionAudit.shellTransitionProperty, /transform/, 'Windows 外壳应通过合成器 transform 展开');
+    assert.doesNotMatch(panelMotionAudit.shellTransitionProperty, /clip-path/, 'Windows 外壳过渡不得包含 clip-path');
 
     const lifecycleAudit = await window.webContents.executeJavaScript(`
       (async () => {
@@ -1095,6 +1142,27 @@ async function main() {
     assert.equal(autoLayoutMotionAudit.rapidDuplicateGhosts, false, '连续切换必须先清理上一轮 Auto Layout ghost');
     assert.ok(autoLayoutMotionAudit.rapidMaxTileAnimations <= 1, '连续切换不得叠加多轮组件动画');
     assert.equal(autoLayoutMotionAudit.rapidGhostsAfter, 0, '连续切换结束后不得残留 Auto Layout ghost');
+
+    if (process.platform === 'win32') {
+      const { screen } = require('electron');
+      const { windowsPanelLayout } = require('../platform');
+      const display = screen.getDisplayMatching(window.getBounds());
+      const layout = windowsPanelLayout(display, true);
+      window.setBounds(layout.bounds, false);
+      const stableBounds = window.getBounds();
+      let nativeResizes = 0;
+      const onResize = () => { nativeResizes += 1; };
+      // Flush the initial positioning before checking repeated mode handoffs.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      window.on('resize', onResize);
+      for (const expanded of [false, true, false, true, false]) {
+        window.setShape(windowsPanelLayout(display, expanded).shape);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        assert.deepEqual(window.getBounds(), stableBounds, 'Windows shape handoff must keep the native canvas bounds');
+      }
+      window.removeListener('resize', onResize);
+      assert.equal(nativeResizes, 0, 'Windows mode handoffs must not resize the native surface');
+    }
   } finally {
     if (window.webContents.debugger.isAttached()) window.webContents.debugger.detach();
     window.destroy();

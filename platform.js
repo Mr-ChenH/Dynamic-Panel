@@ -28,8 +28,22 @@
     const height = expanded ? Math.min(616, Math.max(strip, area.height - 24)) : strip;
     return { x: Math.round(area.x + (area.width - width) / 2), y: area.y, width, height };
   }
+  // Windows keeps its compositor surface at workspace size across mode changes.
+  // The native shape clips both drawing and input to the collapsed strip.
+  function windowsPanelLayout(display, expanded) {
+    const bounds = panelBounds('win32', display, true);
+    const strip = panelBounds('win32', display, false);
+    return {
+      bounds,
+      shape: expanded ? [] : [{
+        x: strip.x - bounds.x, y: strip.y - bounds.y,
+        width: strip.width, height: strip.height,
+      }],
+    };
+  }
+
   function portableMediaPath(directory, value) {
     return `${directory}/${String(value).replace(/\\/g, '/').split('/').pop()}`;
   }
-  return { capabilities, effectiveHiddenModules, panelBounds, portableMediaPath };
+  return { capabilities, effectiveHiddenModules, panelBounds, windowsPanelLayout, portableMediaPath };
 });

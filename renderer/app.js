@@ -541,8 +541,8 @@ function syncPanelAccessibility(expanded) {
   notch.tabIndex = expanded ? -1 : 0;
 }
 
-// 原生窗口只提供动画需要的透明画布；用户看到的黑色岛体由 CSS 连续形变。
-// 收起必须等岛体退场完成后再缩原生窗口，避免最后一帧被裁掉。
+// 原生窗口提供透明画布；用户看到的岛体由 CSS 连续形变。
+// 退场完成后再收紧原生区域：Windows 保留画布并设置 shape，macOS 缩小窗口。
 async function setMode(expanded) {
   if (modeBusy) {
     pendingMode = expanded;
@@ -568,11 +568,15 @@ async function setMode(expanded) {
       // offsetWidth 只强制布局，不强制绘制；而 rAF 回调发生在绘制之前。
       // 必须等两帧、确认 .opening 的透明折叠条真的进了合成器，再让主进程放大窗口，
       // 否则放大时被钉在新原点上的仍是那条黑色折叠条（菜单栏黑块闪烁的成因）。
-      await nextAnimationFrame();
-      await nextAnimationFrame();
+      if (app.dataset.platform !== 'win32') {
+        await nextAnimationFrame();
+        await nextAnimationFrame();
+      }
       await ipcSetMode('expanded');
-      await nextAnimationFrame();
-      await nextAnimationFrame();
+      if (app.dataset.platform !== 'win32') {
+        await nextAnimationFrame();
+        await nextAnimationFrame();
+      }
       app.classList.remove('opening');
       app.classList.add('expanded');
       // 展开后面板从隐藏变为可见，tab 尺寸此时才可量，校准激活胶囊位置
@@ -592,6 +596,7 @@ async function setMode(expanded) {
       await motion;
       await nextAnimationFrame();
       await nextAnimationFrame();
+      // 收起目标在缩窗前后保持相同外观；不要插入透明帧或重新播放淡入。
       await ipcSetMode('collapsed');
       app.classList.remove('expanded', 'closing', 'opening');
       app.classList.add('collapsed');

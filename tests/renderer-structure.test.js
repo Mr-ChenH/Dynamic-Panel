@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
+const mainJs = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
@@ -17,12 +18,31 @@ test('clipboard rows define both favorite icons before rendering entries', () =>
 test('Windows collapsed notch stays compact and grows only on approach', () => {
   assert.match(appJs, /app\.dataset\.platform\s*=\s*window\.notchAPI\?\.platform/);
   const compactRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
-  const hoverRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch:hover,[\s\S]*?\{([\s\S]*?)\n\}/)?.[1] || '';
+  const hoverRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch:hover \{([\s\S]*?)\n\}/)?.[1] || '';
+  const closingRule = stylesCss.match(/#app\[data-platform='win32'\]\.closing \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
   assert.match(compactRule, /width:\s*160px/);
   assert.match(compactRule, /height:\s*16px/);
   assert.match(compactRule, /width var\(--d-base\)/);
   assert.match(hoverRule, /width:\s*184px/);
   assert.match(hoverRule, /height:\s*30px/);
+  assert.match(closingRule, /width:\s*160px/);
+  assert.match(closingRule, /height:\s*16px/);
+  assert.match(closingRule, /background:\s*var\(--bg-base\)/);
+  assert.doesNotMatch(appJs, /native-resizing/);
+});
+
+test('Windows panel motion stays on compositor-only properties', () => {
+  const shellRule = stylesCss.match(/#app\[data-platform='win32'\] \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
+  const expandedRule = stylesCss.match(/#app\[data-platform='win32'\]\.expanded \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
+  const closingShellRule = stylesCss.match(/#app\[data-platform='win32'\]\.closing \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
+  const mainWindowOptions = mainJs.match(/mainWindow = new BrowserWindow\(\{([\s\S]*?)\n  \}\);/)?.[1] || '';
+  assert.match(mainWindowOptions, /backgroundThrottling:\s*false/);
+  assert.match(shellRule, /clip-path:\s*none/);
+  assert.match(shellRule, /transform:\s*scaleX\(0\.15\)/);
+  assert.match(shellRule, /will-change:\s*transform, opacity/);
+  assert.match(expandedRule, /transform:\s*scaleX\(1\)/);
+  assert.match(closingShellRule, /transform:\s*scaleX\(0\.13\)/);
+  assert.doesNotMatch(shellRule, /transition:[\s\S]*clip-path/);
 });
 
 test('notes have a dedicated top-level tab and management panel', () => {

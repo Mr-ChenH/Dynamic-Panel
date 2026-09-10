@@ -255,8 +255,7 @@ body {
     box-shadow var(--d-fast) var(--ease-out);
 }
 
-#app[data-platform='win32'].collapsed .notch:hover,
-#app[data-platform='win32'].collapsed .notch:focus-visible {
+#app[data-platform='win32'].collapsed .notch:hover {
   width: 184px;
   height: 30px;
   border-radius: 0 0 9px 9px;
@@ -375,6 +374,68 @@ body {
 #app.closing .panel > .panels {
   opacity: 0;
   transition: opacity var(--d-fast) var(--ease-out);
+}
+
+/* Windows 收起时直接过渡到最终紧凑尺寸，避免先回到 200 × 38 再跳成 160 × 16。 */
+#app[data-platform='win32'].closing .notch {
+  width: 160px;
+  height: 16px;
+  align-items: flex-end;
+  padding-bottom: 1px;
+  border-radius: 0 0 5px 5px;
+  background: var(--bg-base);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22);
+  transition:
+    width var(--d-base) var(--ease-out),
+    height var(--d-base) var(--ease-out),
+    border-radius var(--d-base) var(--ease-out),
+    background var(--d-fast) var(--ease-out),
+    box-shadow var(--d-fast) var(--ease-out);
+}
+
+/* closing 与 expanded 共存；覆盖 expanded 的隐藏药丸规则，
+   让抓握条在收拢阶段就位，切换 collapsed 时不再重新淡入。 */
+#app[data-platform='win32'].closing .notch-dot {
+  width: 12px;
+  height: 2px;
+  opacity: 1;
+}
+
+/* 交接使用同一外观，避免背景、圆角和阴影再次播放过渡。
+   键盘焦点仍使用抓握条描边，不用恢复焦点触发尺寸放大。 */
+#app[data-platform='win32'].collapsed .notch:not(:hover) {
+  background: var(--bg-base);
+}
+
+/* Windows 透明窗口上逐帧裁剪复杂渐变会造成大面积重绘。
+   外壳改走合成器 transform，内容层仍只做 opacity，避免文字与控件被缩放。 */
+#app[data-platform='win32'] .panel::before {
+  clip-path: none;
+  transform: scaleX(0.15);
+  transform-origin: 50% 0;
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+  transition:
+    transform 240ms var(--ease-island),
+    opacity var(--d-micro) var(--ease-out);
+}
+
+#app[data-platform='win32'].expanded .panel::before {
+  clip-path: none;
+  transform: scaleX(1);
+  opacity: 1;
+  transition:
+    transform 240ms var(--ease-island),
+    opacity var(--d-micro) var(--ease-out);
+}
+
+#app[data-platform='win32'].closing .panel::before {
+  clip-path: none;
+  transform: scaleX(0.13);
+  opacity: 0;
+  transition:
+    transform 220ms var(--ease-soft),
+    opacity var(--d-island-shell-fade) var(--ease-out) 170ms;
 }
 
 /* ============ 顶栏 ============ */
