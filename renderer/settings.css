@@ -1,0 +1,60 @@
+/* One navigation rail and one content scroller; cards size to their contents. */
+#transcription-settings-backdrop .transcription-settings-card { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; }
+#transcription-settings-backdrop .transcription-settings-actions { flex-shrink: 0; }
+#settings-page.settings-organized {
+  --settings-rail: 164px;
+  --settings-gap: 20px;
+  --settings-padding: 24px;
+  display: grid;
+  grid-template-columns: var(--settings-rail) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--settings-gap);
+  height: 100%; min-height: 0; overflow: hidden;
+}
+.settings-sidebar { min-width: 0; min-height: 0; padding: 16px 0; overflow-y: auto; }
+.settings-sidebar h2 { margin: 0 12px 20px; color: var(--text-1); font-size: 19px; font-weight: 600; }
+.settings-navigation { display: flex; flex-direction: column; gap: 6px; }
+.settings-navigation button { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--text-3); font: 12px var(--font); text-align: left; cursor: pointer; }
+.settings-navigation button svg { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.settings-navigation button:hover { background: var(--surface-2); color: var(--text-1); }
+.settings-navigation button[aria-selected='true'] { color: var(--text-1); background: rgba(142,178,255,.12); }
+.settings-navigation button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.settings-content { min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; padding: 4px 4px 16px 0; scroll-padding-block: 16px; }
+.settings-organized .settings-card { display: flex; flex-direction: column; height: auto; min-height: 0; overflow: visible; padding: var(--settings-padding); border-radius: 16px; background: var(--surface-1); }
+.settings-organized .settings-card[hidden] { display: none !important; }
+.settings-organized .settings-card-heading { flex-wrap: wrap; gap: 12px; padding-bottom: 20px; border-bottom: 1px solid var(--hairline); }
+.settings-organized .settings-card-heading > div { min-width: 0; gap: 7px; }
+.settings-organized .settings-card-heading strong { order: -1; color: var(--text-1); font-size: 18px; font-weight: 600; }
+.settings-organized .settings-card-heading .tile-label { color: var(--text-3); font-size: 11px; font-weight: 400; letter-spacing: 0; }
+.settings-organized .settings-card-heading > small { color: var(--text-3); font-size: 10px; line-height: 1.6; }
+.settings-organized .settings-device-row { flex: 0 0 auto; min-height: 68px; padding: 14px 0; gap: 16px; }
+.settings-organized .settings-device-row > div { flex: 1; gap: 5px; }
+.settings-organized .settings-device-row span { font-size: 12px; color: var(--text-2); }
+.settings-organized .settings-device-row strong { font-size: 11px; font-weight: 400; color: var(--text-3); white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.settings-organized #settings-shortcut-value { color: var(--text-1); font-family: var(--font-mono); }
+.settings-organized .settings-device-row button, .settings-organized .settings-default-tab-row select { min-height: 32px; padding: 5px 12px; font-size: 11px; }
+.settings-organized .settings-workspace-path { max-width: none; }
+.settings-organized .settings-device-actions { flex-wrap: wrap; justify-content: flex-end; }
+.settings-organized .settings-inline-note { margin-top: 0 !important; min-height: 0; padding-top: 10px; overflow-wrap: anywhere; }
+.settings-organized .settings-inline-note:empty { display: none; }
+.settings-organized .settings-feature-grid, .settings-organized .settings-home-module-grid { overflow: visible; flex: 0 0 auto; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.settings-organized .settings-feature-grid label, .settings-organized .settings-home-module-grid label { min-height: 70px; padding: 14px; transform: none; }
+.settings-organized .settings-feature-grid b, .settings-organized .settings-home-module-grid b { font-size: 12px; }
+.settings-organized .settings-feature-grid small, .settings-organized .settings-home-module-grid small { font-size: 10px; line-height: 1.5; }
+.settings-organized .settings-status-list { grid-template-columns: 1fr; gap: 10px; margin: 20px 0 16px; }
+.settings-organized .settings-status-list > div { min-height: 56px; padding: 14px; }
+.settings-organized .settings-status-list span { white-space: normal; font-size: 12px; }
+.settings-organized .settings-status-list small { font-size: 11px; }
+.settings-organized .settings-card p { font-size: 11px; line-height: 1.7; }
+.settings-content::-webkit-scrollbar, .settings-sidebar::-webkit-scrollbar { width: 5px; }
+.settings-content::-webkit-scrollbar-thumb, .settings-sidebar::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--r-pill); }
+@media (max-width: 700px) {
+  #settings-page.settings-organized { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 8px; --settings-padding: 18px; }
+  .settings-sidebar { padding: 0; overflow-x: auto; }
+  .settings-sidebar h2 { display: none; }
+  .settings-navigation { flex-direction: row; gap: 4px; }
+  .settings-navigation button { width: auto; flex-shrink: 0; min-height: 36px; padding: 8px 10px; }
+  .settings-content { padding-right: 0; }
+  .settings-organized .settings-workspace-row { align-items: flex-start; flex-wrap: wrap; }
+  .settings-organized .settings-workspace-row > div { flex-basis: 100%; }
+}

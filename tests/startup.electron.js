@@ -303,6 +303,40 @@ app.on('web-contents-created', (_event, contents) => {
         const shot = path.join(__dirname, '../dist.noindex/launcher-review.png');
         fs.mkdirSync(path.dirname(shot), { recursive: true }); fs.writeFileSync(shot, capture.toPNG());
         await contents.executeJavaScript('window.NotchLauncher.close()');
+        await contents.executeJavaScript(`window.NotchPanel.navigate({tab:'settings'})`);
+        const settingsLayout=await contents.executeJavaScript(`(async()=>{
+          const page=document.getElementById('settings-page'),content=page.querySelector('.settings-content');
+          const previous={width:page.style.width,height:page.style.height};
+          let accessible=true,onePane=true,noOverflow=true;
+          for(const width of [1100,640]){
+            page.style.width=width+'px';page.style.height='340px';
+            for(const button of page.querySelectorAll('[data-settings-category]')){
+              button.click();await new Promise(resolve=>requestAnimationFrame(resolve));
+              const panes=[...content.querySelectorAll('.settings-card')].filter(card=>!card.hidden);
+              onePane=onePane&&panes.length===1;noOverflow=noOverflow&&content.scrollWidth<=content.clientWidth+1;
+              const controls=[...panes[0].querySelectorAll('button,select,input')].filter(control=>control.getClientRects().length&&getComputedStyle(control).visibility!=='hidden');
+              for(const control of controls){
+                control.scrollIntoView({block:'nearest'});
+                const rect=control.getBoundingClientRect(),bounds=content.getBoundingClientRect();
+                accessible=accessible&&rect.top>=bounds.top-1&&rect.bottom<=bounds.bottom+1;
+              }
+            }
+          }
+          page.style.width=previous.width;page.style.height=previous.height;
+          page.querySelector('[data-settings-category="api"]').click();
+          document.getElementById('settings-api-configure').click();await new Promise(resolve=>setTimeout(resolve,80));
+          const dialog=document.querySelector('.transcription-settings-card');
+          const scrollable=getComputedStyle(dialog).overflowY==='auto';
+          document.getElementById('transcription-settings-save').scrollIntoView({block:'nearest'});
+          const save=document.getElementById('transcription-settings-save').getBoundingClientRect(),bounds=dialog.getBoundingClientRect();
+          const apiReachable=save.top>=bounds.top&&save.bottom<=bounds.bottom+1;
+          document.getElementById('transcription-settings-close').click();
+          await new Promise(resolve=>setTimeout(resolve,250));
+          page.querySelector('[data-settings-category="general"]').click();content.scrollTop=0;
+          return {accessible,onePane,noOverflow,scrollable,apiReachable};
+        })()`);
+        assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,scrollable:true,apiReachable:true});
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-review.png'),(await contents.capturePage()).toPNG());
         console.log('Production workspace, note attachment and launcher checks passed');
         app.quit();
       } catch (error) { console.error(error); app.exit(1); }

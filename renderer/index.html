@@ -10,6 +10,7 @@
     <title>TO-DO Panel</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="launcher.css" />
+    <link rel="stylesheet" href="settings.css" />
   </head>
   <body>
     <div id="app" class="collapsed">
@@ -474,6 +475,9 @@
                   <div class="settings-device-row">
                     <div><span>唤出快捷键</span><strong id="settings-shortcut-value">Space</strong></div>
                     <button id="settings-shortcut-change" type="button">重新设置</button>
+                  </div>
+                  <div class="settings-device-row">
+                    <div><span>搜索与启动器</span><strong>搜索来源、快捷键和本地扩展</strong></div>
                     <button id="settings-launcher-open" type="button">启动器设置</button>
                   </div>
                   <label class="settings-device-row settings-default-tab-row">
@@ -597,6 +601,7 @@
     <script src="app.js"></script>
     <script src="workspace.js"></script>
     <script src="launcher.js"></script>
+    <script src="settings.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>
