@@ -52,6 +52,7 @@
 - 录制：音频写入 `userData/recordings/`，转写与元数据保存在 LocalStorage；可选百炼 Qwen3-ASR 实时转写，API Key 必须经 `safeStorage` 加密或环境变量读取
 - 当前窗口：通过 macOS 辅助功能枚举和聚焦，使用系统应用图标；同应用多窗口编号；隐藏项保存在 LocalStorage；聚焦 IPC 只接受最近扫描缓存中的窗口 ID
 - 笔记：独立笔记页可直接新建、搜索、重命名、自动保存、Markdown 编辑/预览和删除；图片支持粘贴、拖入与文件选择，统一转为 PNG 写入 `workspace/note-images/<noteId>/`，正文只保存 `/` 分隔的相对引用。单图原始输入不超过 20 MB、最长边压到 2400px；删除笔记时删除其专属附件目录
+- 启动器：复用主窗口 launcher 模式，默认 Cmd/Ctrl+Space，可在顶栏搜索或设置中进入；收藏/别名/usage 使用 `notch-launcher-*-v1`，原有数据结构保持不变。扩展安装、启用与快捷键仅本机保存；进程扩展启用 Node 文件权限，仅直接读自身代码、读写专属 storagePath，禁止子进程/原生插件/Worker；网络无系统级隔离，仍只安装可信代码，不称为 OS 沙箱。专属数据可逐个导出/导入，代码与授权不得自动迁移。跨应用焦点适配位于 `launcher/focus.js`，使用 koffi 调用本机 API。运行代码在 `launcher/`、界面在 `renderer/launcher.js`，详见 `docs/launcher-extension-development.md`。
 - 动效：窗口边界变更不使用系统动画；视觉动效由渲染层完成，并支持 `prefers-reduced-motion`
 - 通知：独立 `400 × 96` 无焦点窗口；HTTP 只监听 `127.0.0.1:43821` 的 `/notify/<source>`，来源白名单 `codex` / `claude` / `gpt`；Codex 与 Claude Code 分别由 `scripts/codex-notify.js`、`scripts/claude-notify.js` 转发，子代理结束与云端会话不弹提醒
 

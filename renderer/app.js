@@ -22,6 +22,7 @@ const statusToast = document.getElementById('status-toast');
 const statusToastMessage = document.getElementById('status-toast-message');
 const statusToastAction = document.getElementById('status-toast-action');
 
+
 function collectLocalStorageSnapshot() {
   const result = {};
   for (let index = 0; index < localStorage.length; index += 1) {
@@ -754,6 +755,7 @@ notch.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (window.NotchLauncher?.isOpen()) return;
   const target = event.target instanceof Element ? event.target : null;
   const editable = Boolean(target && target.closest(
     'input, textarea, select, [contenteditable]:not([contenteditable="false"]), audio, video'
@@ -784,6 +786,7 @@ panel.addEventListener('click', (e) => {
 // Escape 不会原生到达页面（被浏览器层吞掉），由主进程 before-input-event 转发
 if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
   window.notchAPI.onEscape(() => {
+    if (window.NotchLauncher?.handleEscape()) return;
     const el = document.activeElement;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
       el.blur();
@@ -803,12 +806,16 @@ if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
 }
 
 if (window.notchAPI && typeof window.notchAPI.onToggleShortcut === 'function') {
-  window.notchAPI.onToggleShortcut(() => setMode(!isExpanded));
+  window.notchAPI.onToggleShortcut(async () => {
+    if (window.NotchLauncher?.isOpen()) await window.NotchLauncher.close();
+    setMode(!isExpanded);
+  });
 }
 
 // 失焦与点击收起共用同一个状态机，保证退场节奏一致。
 if (window.notchAPI && typeof window.notchAPI.onCollapseRequest === 'function') {
   window.notchAPI.onCollapseRequest(() => {
+    if (window.NotchLauncher?.isOpen()) { window.NotchLauncher.close(); return; }
     if (isExpanded) setMode(false);
   });
 }
@@ -4147,3 +4154,34 @@ renderAll();
 renderClipList(); // 首屏确保 clip-list DOM 就绪时渲染一次（幂等）
 renderClipFavs(); // 首屏渲染收藏剪贴块
 initTab();
+
+window.NotchPanel = {
+  isExpanded: () => isExpanded,
+  busy: () => modeBusy,
+  setNativeMode: ipcSetMode,
+  validateTarget(target) {
+    if (target.tab && !TABS.includes(target.tab)) throw Error('该功能尚未启用');
+    if (target.id && target.tab === 'notes' && !loadNoteArchive().some((n) => n.id === target.id)) throw Error('笔记已不存在');
+    if (target.id && target.tab === 'todo' && !PRIORITIES.some((p) => (data[p] || []).some((t) => String(t.id) === String(target.id)))) throw Error('待办已不存在');
+    if (target.id && target.tab === 'links' && !window.NotchWorkspace.hasLink(target.id)) throw Error('链接已不存在');
+  },
+  async navigate(target) {
+    window.NotchPanel.validateTarget(target);
+    await setMode(true);
+    await setActiveTab(target.tab || 'home');
+    if (target.tab === 'notes' && target.id && !window.NotchNotes.select(target.id)) throw Error('笔记已不存在');
+    if (target.tab === 'links' && target.id && !window.NotchWorkspace.selectLink(target.id)) throw Error('链接已不存在');
+    if (target.create === 'note') window.NotchNotes.create();
+    if (target.tab === 'todo') {
+      setTodoTimeScope('all');
+      if (target.id) {
+        const priority = PRIORITIES.find((p) => (data[p] || []).some((t) => String(t.id) === String(target.id)));
+        if (priority) { todoCompletedExpanded[priority] = true; renderList(priority); }
+      }
+      requestAnimationFrame(() => {
+        if (target.id) document.querySelector(`[data-id="${CSS.escape(String(target.id))}"]`)?.scrollIntoView({ block: 'center' });
+        else document.querySelector('#tab-todo .add-row input')?.focus();
+      });
+    }
+  },
+};

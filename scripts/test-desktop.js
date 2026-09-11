@@ -14,7 +14,7 @@ function run(executable, args) {
     process.exit(result.status || 1);
   }
 }
-run(process.execPath, ['--test', ...fs.readdirSync(path.join(root, 'tests')).filter((name) => name.endsWith('.test.js')).map((name) => `tests/${name}`)]);
+run(process.execPath, ['--test', '--test-concurrency=2', ...fs.readdirSync(path.join(root, 'tests')).filter((name) => name.endsWith('.test.js')).map((name) => `tests/${name}`)]);
 env.TODO_TEST_LOG = path.join(root, 'dist.noindex', 'windows-smoke', 'renderer-test.log');
 fs.mkdirSync(path.dirname(env.TODO_TEST_LOG), { recursive: true });
 fs.writeFileSync(env.TODO_TEST_LOG, '');
@@ -24,6 +24,6 @@ for (const file of ['notch-focus', 'retained-workspace', 'startup']) {
   run(require('electron'), [`tests/${file}.electron.js`]);
   fs.rmSync(testProfile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
-for (const file of ['main.js', 'main-services.js', 'platform.js', 'preload.js', 'renderer/domain.js', 'renderer/effects.js', 'renderer/app.js', 'renderer/workspace.js', 'renderer/icon-motion.js', 'renderer/notification.js', 'build/afterPack.js', 'scripts/codex-notify.js', 'scripts/claude-notify.js', 'scripts/smoke-app.js']) {
+for (const file of ['main.js', 'main-services.js', 'platform.js', 'preload.js', 'launcher/domain.js', 'launcher/storage-schema.js', 'launcher/data-transfer.js', 'launcher/focus.js', 'launcher/paths.js', 'launcher/extension-runner.js', 'launcher/extension-schema.js', 'launcher/extension-host.js', 'launcher/service.js', 'renderer/launcher.js', 'renderer/domain.js', 'renderer/effects.js', 'renderer/app.js', 'renderer/workspace.js', 'renderer/icon-motion.js', 'renderer/notification.js', 'build/afterPack.js', 'scripts/codex-notify.js', 'scripts/claude-notify.js', 'scripts/smoke-app.js']) {
   run(process.execPath, ['--check', file]);
 }

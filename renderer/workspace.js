@@ -2640,6 +2640,17 @@
   loadCredentials();
 
   window.NotchWorkspace = {
+    hasLink: (id) => linkGroups.some((g) => (g.links || []).some((l) => String(l.id) === String(id))),
+    selectLink(id) {
+      const group = linkGroups.find((g) => (g.links || []).some((l) => String(l.id) === String(id)));
+      if (!group) return false;
+      group.collapsed = false; renderLinkGroups();
+      requestAnimationFrame(() => {
+        const row = document.querySelector(`[data-link-id="${CSS.escape(String(id))}"]`);
+        row?.scrollIntoView({ block: 'center' }); row?.querySelector('button')?.focus();
+      });
+      return true;
+    },
     refreshWindows,
     startRecording,
     isRecordingActive: isRecordingBusy,
