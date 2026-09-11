@@ -48,6 +48,39 @@
 .settings-organized .settings-card p { font-size: 11px; line-height: 1.7; }
 .settings-content::-webkit-scrollbar, .settings-sidebar::-webkit-scrollbar { width: 5px; }
 .settings-content::-webkit-scrollbar-thumb, .settings-sidebar::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--r-pill); }
+#settings-launcher-status[data-state='ready'] { color: #65d9a1 !important; }
+#settings-launcher-status[data-state='warning'] { color: #ffb16d !important; }
+.settings-launcher-card .launcher-manager { display:flex;flex-direction:column;gap:0;padding:22px 0 0;overflow:visible;flex:none; }
+.settings-launcher-card .launcher-setting-row { display:flex;align-items:center;justify-content:space-between;gap:18px;min-height:58px;padding:10px 0;border-bottom:1px solid var(--hairline-soft); }
+.settings-launcher-card .launcher-setting-copy { min-width:0;display:flex;flex-direction:column;gap:4px; }
+.settings-launcher-card .launcher-setting-copy span { color:var(--text-2);font-size:12px; }
+.settings-launcher-card .launcher-setting-copy small { color:var(--text-4);font-size:10px;line-height:1.4; }
+.settings-launcher-card .launcher-setting-row input:not([type='checkbox']) { flex:0 0 220px; }
+.settings-launcher-card .launcher-section-heading { margin:26px 0 10px;padding-bottom:9px;border-bottom:1px solid var(--hairline);color:var(--text-1);font-size:14px;font-weight:600; }
+.settings-launcher-card .launcher-section-heading:first-of-type { margin-top:24px; }
+.settings-launcher-card .launcher-source-row { display:flex;align-items:center;justify-content:space-between;min-height:42px;padding:8px 12px;border-radius:9px;background:var(--surface-2);color:var(--text-2);font-size:11px;cursor:pointer; }
+.settings-launcher-card .launcher-source-row + .launcher-source-row { margin-top:6px; }
+.settings-launcher-card .launcher-source-row:hover { background:var(--surface-3); }
+.settings-launcher-card .launcher-source-row input { width:16px;height:16px;accent-color:var(--focus-ring); }
+.settings-launcher-card .launcher-manager > button:not(.launcher-source-row) { margin-top:14px; }
+.settings-launcher-card .launcher-manager > p { margin:8px 0 0;color:var(--text-3);line-height:1.6; }
+.settings-launcher-card .launcher-extension { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 12px;margin-top:8px;padding:14px;border:1px solid var(--hairline-soft);border-radius:10px;background:var(--surface-2); }
+.settings-launcher-card .launcher-extension p { grid-column:1 / -1; }
+.settings-launcher-card .launcher-extension details { grid-column:1 / -1; }
+.settings-launcher-card .launcher-extension > button { margin:0; }
+.settings-launcher-card .launcher-extension > strong { grid-column:1 / -1; }
+.settings-launcher-card .launcher-extension > small { color:var(--text-3); }
+.settings-launcher-card .launcher-extension > button:last-child { background:rgba(255,95,87,.08);color:#ff9b93; }
+.settings-launcher-card .launcher-manager[hidden] { display:none; }
+.settings-launcher-card .launcher-manager h3 { margin:12px 0 0;font-size:14px;color:var(--text-1); }
+.settings-launcher-card .launcher-manager > h3:first-child { display:none; }
+.settings-launcher-card .launcher-manager label { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--text-2); }
+.settings-launcher-card .launcher-manager input:not([type='checkbox']) { min-width:0;max-width:100%;flex:0 1 260px;min-height:34px;border:1px solid var(--hairline);border-radius:var(--r-input);background:var(--surface-2);padding:8px;color:var(--text-1); }
+.settings-launcher-card .launcher-manager button { min-height:32px;padding:6px 12px;border:1px solid var(--hairline);border-radius:var(--r-input);background:var(--surface-2);color:var(--text-2);font:11px var(--font);cursor:pointer;align-self:flex-start; }
+.settings-launcher-card .launcher-manager button:focus-visible,.settings-launcher-card .launcher-manager input:focus-visible { outline:2px solid var(--focus-ring);outline-offset:2px; }
+.settings-launcher-card .launcher-extension { padding:16px 0; }
+.settings-launcher-card .launcher-extension strong { flex-basis:100%;font-size:13px;overflow-wrap:anywhere; }
+.settings-launcher-card .launcher-extension details { order:2; }
 @media (max-width: 700px) {
   #settings-page.settings-organized { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 8px; --settings-padding: 18px; }
   .settings-sidebar { padding: 0; overflow-x: auto; }

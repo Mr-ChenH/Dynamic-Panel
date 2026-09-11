@@ -4,7 +4,10 @@
   if (!root || !window.NotchPanel) return;
   const input = document.getElementById('launcher-search');
   const list = document.getElementById('launcher-results');
-  const status = document.getElementById('launcher-status');
+  const searchStatus=document.getElementById('launcher-status');
+  const settingsStatus=document.getElementById('settings-launcher-status');
+  const status={set textContent(value){(openState?searchStatus:settingsStatus).textContent=value;},get textContent(){return (openState?searchStatus:settingsStatus).textContent;}};
+  let settingsRevision=0;
   const actions = document.getElementById('launcher-actions');
   const manager = document.getElementById('launcher-manager');
   let openState = false, transition = false, wasExpanded = false, previousFocus, previousInert;
@@ -85,7 +88,7 @@
     try {
       const result = await operation();
       if (!result?.ok) { if (result?.error !== 'cancelled') status.textContent = `操作失败：${result?.error || '请重试'}`; return; }
-      if (openState && !manager.hidden) await showManager();
+      if (!manager.hidden) await renderSettings();
     } finally { running = false; if (pendingClose) { pendingClose = false; await close(); } }
   }
   let localSignature = [], localIndex = [];
@@ -236,7 +239,7 @@
     if (transition) { if (openState) pendingClose = true; return; }
     if (window.NotchPanel.busy()) return;
     if (openState) return close();
-    transition = true;
+    transition = true; settingsRevision++;
     wasExpanded = window.NotchPanel.isExpanded(); previousFocus = document.activeElement;
     const panel = document.getElementById('panel'); previousInert = panel.inert; panel.inert = true;
     openState = true; root.hidden = false; document.body.classList.add('launcher-open');
@@ -336,27 +339,42 @@
     actions.querySelector('button').focus();
   }
   async function showManager() {
-    const managerRevision = generation + 1;
-    ++generation; stopRegex(); clearTimeout(timer); api?.cancelLauncher?.();
-    input.disabled = true;
-    manager.hidden = false; list.hidden = true; actions.hidden = true; manager.replaceChildren();
-    const title = document.createElement('h3'); title.textContent = '启动器设置'; manager.append(title);
-    const label = document.createElement('label'); label.textContent = '全局快捷键（留空禁用）';
+    if(running||transition)return;
+    if(openState)await close('action');
+    await window.NotchPanel.navigate({tab:'settings'});
+    window.NotchSettings.select('launcher');
+  }
+  async function renderSettings() {
+    const managerRevision=++settingsRevision;
+    let config,appSettings;
+    try {[config,appSettings]=await Promise.all([api.launcherSettings(),api.getAppSettings()]);}
+    catch {if(managerRevision===settingsRevision&&!openState)settingsStatus.textContent='无法读取启动器设置，请重新选择此分类';return;}
+    if(managerRevision!==settingsRevision||openState)return;
+    if(config?.ok)settings=config;
+    features=appSettings?.features||{};
+    manager.hidden=false;manager.replaceChildren();
+    const label = document.createElement('label'); label.className='launcher-setting-row launcher-shortcut-row';
+    const shortcutName=document.createElement('span');shortcutName.textContent='全局快捷键';
+    const shortcutHint=document.createElement('small');shortcutHint.textContent='留空可禁用';
+    label.append(Object.assign(document.createElement('div'),{className:'launcher-setting-copy'}));label.firstChild.append(shortcutName,shortcutHint);
     const shortcut = document.createElement('input'); shortcut.value = settings.shortcut; shortcut.setAttribute('aria-label', '启动器全局快捷键'); label.append(shortcut); manager.append(label);
-    const timeoutLabel = document.createElement('label'); timeoutLabel.textContent = '扩展查询超时（毫秒，300–5000）';
+    const timeoutLabel = document.createElement('label'); timeoutLabel.className='launcher-setting-row';
+    const timeoutCopy=document.createElement('div');timeoutCopy.className='launcher-setting-copy';const timeoutName=document.createElement('span');timeoutName.textContent='扩展查询超时';const timeoutHint=document.createElement('small');timeoutHint.textContent='动态搜索等待时间，300–5000ms';timeoutCopy.append(timeoutName,timeoutHint);timeoutLabel.append(timeoutCopy);
     const timeout = document.createElement('input'); timeout.type = 'number'; timeout.min = '300'; timeout.max = '5000'; timeout.step = '100'; timeout.value = settings.queryTimeoutMs || 800; timeout.setAttribute('aria-label', '扩展查询超时'); timeoutLabel.append(timeout); manager.append(timeoutLabel);
-    const executionLabel = document.createElement('label'); executionLabel.textContent = '扩展执行超时（毫秒，500–10000）';
+    const executionLabel = document.createElement('label'); executionLabel.className='launcher-setting-row';
+    const executionCopy=document.createElement('div');executionCopy.className='launcher-setting-copy';const executionName=document.createElement('span');executionName.textContent='扩展执行超时';const executionHint=document.createElement('small');executionHint.textContent='动作最长等待时间，500–10000ms';executionCopy.append(executionName,executionHint);executionLabel.append(executionCopy);
     const executionTimeout = document.createElement('input'); executionTimeout.type='number'; executionTimeout.min='500';executionTimeout.max='10000';executionTimeout.step='500';executionTimeout.value=settings.executeTimeoutMs||5000;executionTimeout.setAttribute('aria-label','扩展执行超时');executionLabel.append(executionTimeout);manager.append(executionLabel);
     const checks = {};
     for (const [key, name] of Object.entries({ apps: '本机应用', workspace: '工作区内容', clipboard: '剪贴板文字（需先启用剪贴板功能）', extensions: '本地扩展' })) {
-      const l = document.createElement('label'), check = document.createElement('input'); check.type = 'checkbox'; check.checked = settings.sources[key]; checks[key] = check; l.append(check, name); manager.append(l);
+      const l = document.createElement('label');l.className='launcher-source-row';const copy=document.createElement('span');copy.textContent=name;const check = document.createElement('input'); check.type = 'checkbox'; check.checked = settings.sources[key]; checks[key] = check; l.append(copy, check); manager.append(l);
     }
+    const sourcesHeading=document.createElement('h3');sourcesHeading.className='launcher-section-heading';sourcesHeading.textContent='搜索来源';manager.append(sourcesHeading);
     manager.append(button('保存设置', async () => {
       const next = { shortcut: shortcut.value.trim(), queryTimeoutMs: Number(timeout.value), executeTimeoutMs: Number(executionTimeout.value), sources: Object.fromEntries(Object.entries(checks).map(([key, check]) => [key, check.checked])) };
       const response = await api.saveLauncherSettings(next);
       if (response?.ok) { settings = next; status.textContent = '已保存'; } else status.textContent = '快捷键无效或已被占用，设置未保存';
     }));
-    const savedTitle = document.createElement('h3'); savedTitle.textContent = '收藏与别名'; manager.append(savedTitle);
+    const savedTitle = document.createElement('h3'); savedTitle.className='launcher-section-heading'; savedTitle.textContent = '收藏与别名'; manager.append(savedTitle);
     const aliases = stored('aliases', {}), favorites = stored('favorites', []);
     const known = new Map([...localResults(), ...remote].map(r => [r.id, r]));
     const ids = [...new Set([...favorites, ...Object.keys(aliases)])];
@@ -373,14 +391,16 @@
         if (value) current[id] = value; else delete current[id]; if (save('aliases', current)) status.textContent = '别名已保存';
       }), button('移除记录', async () => {
         const current = stored('aliases', {}), usage = stored('usage', {}); delete current[id]; delete usage[id];
-        if (saveRecords({ aliases: current, usage, favorites: stored('favorites', []).filter(value => value !== id) })) await showManager();
+        if (saveRecords({ aliases: current, usage, favorites: stored('favorites', []).filter(value => value !== id) })) await renderSettings();
       })); manager.append(line);
     }
-    const extTitle = document.createElement('h3'); extTitle.textContent = '本地扩展'; manager.append(extTitle);
+    const extTitle = document.createElement('h3'); extTitle.className='launcher-section-heading'; extTitle.textContent = '本地扩展'; manager.append(extTitle);
     const warning = document.createElement('p'); warning.textContent = '扩展只能直接读取自身代码并读写专属数据目录；派生进程、原生插件和 Worker 被禁用。网络尚无系统级隔离，仍仅安装信任的代码。'; manager.append(warning);
     manager.append(button('从目录安装扩展', () => manageOperation(() => api.installLauncherExtension())));
-    const response = await api?.listLauncherExtensions?.();
-    if (!openState || manager.hidden || managerRevision !== generation) return;
+    let response;
+    try {response=await api?.listLauncherExtensions?.();}
+    catch {if(managerRevision===settingsRevision&&!openState)settingsStatus.textContent='扩展列表读取失败，请重新选择此分类';return;}
+    if (openState || manager.hidden || managerRevision !== settingsRevision) return;
     for (const ext of response?.items || []) {
       const section = document.createElement('section'); section.className = 'launcher-extension';
       const name = document.createElement('strong'); name.textContent = `${ext.name} ${ext.version}`;
@@ -393,8 +413,9 @@
       section.append(button('导出数据',()=>manageOperation(()=>api.transferLauncherData(ext.id,'export'))),button('导入数据',()=>manageOperation(()=>api.transferLauncherData(ext.id,'import'))));
       section.append(name, detail, button('复制诊断', async () => { await api.writeClipboard({ type: 'text', text: JSON.stringify({ id: ext.id, version: ext.version, enabled: ext.enabled, error: ext.error || null, lastRunAt: ext.lastRunAt, history: ext.history }) }); status.textContent = '已复制诊断'; }), button(ext.enabled ? '禁用' : '启用', () => manageOperation(() => api.toggleLauncherExtension(ext.id, !ext.enabled))), button('卸载', () => manageOperation(() => api.removeLauncherExtension(ext.id)))); manager.append(section);
     }
-    status.textContent = settings.registered === false ? '默认快捷键未注册，请设置其他组合键' : '设置仅保存在本机；收藏和别名随工作区保存';
-    shortcut.focus();
+    settingsStatus.dataset.state=settings.registered===false?'warning':'ready';
+    settingsStatus.textContent = settings.registered === false ? '默认快捷键未注册，请设置其他组合键' : '设置仅保存在本机；收藏和别名随工作区保存';
+    // Keep category navigation focus; the form follows in normal Tab order.
   }
   function escape() {
     if (!actions.hidden) { actions.hidden = true; input.focus(); }
@@ -436,11 +457,11 @@
   document.getElementById('launcher-action-button').addEventListener('click', showActions);
   document.getElementById('launcher-close').addEventListener('click', escape);
   document.getElementById('launcher-open').addEventListener('click', open);
-  document.getElementById('settings-launcher-open').addEventListener('click', async () => { await open(); await showManager(); });
+  document.getElementById('settings-launcher-open').addEventListener('click', showManager);
   api?.onLauncherPartial?.((payload) => {
     if (!openState || !manager.hidden || payload.requestId !== generation || !Array.isArray(payload.items)) return;
     remote = window.LauncherDomain.mergeLauncherResults([payload.items,remote]); resultsVersion++; pendingProviders = payload.pending || []; render();
   });
   api?.onLauncherToggle?.(open); api?.onLauncherClose?.(() => { if (actions.hidden) close('blur'); });
-  window.NotchLauncher = { open, close, escape, handleEscape: () => { if (!openState && !transition && performance.now() >= escapeGuardUntil) return false; if (openState) escape(); return true; }, isOpen: () => openState, refresh: search };
+  window.NotchLauncher = { open, close, escape, renderSettings, hideSettings:()=>{settingsRevision++;manager.hidden=true;},  openSettings:showManager, handleEscape: () => { if (!openState && !transition && performance.now() >= escapeGuardUntil) return false; if (openState) escape(); return true; }, isOpen: () => openState, refresh: search };
 })();

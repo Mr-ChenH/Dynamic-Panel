@@ -38,7 +38,7 @@
         <div id="launcher-status" class="launcher-status" aria-live="polite"></div>
         <div id="launcher-results" class="launcher-results" role="listbox" aria-label="启动器结果"></div>
         <div id="launcher-actions" class="launcher-actions" aria-label="结果动作" hidden></div>
-        <div id="launcher-manager" class="launcher-manager" hidden></div>
+
         <div class="launcher-footer"><span>↑↓ 选择 · Enter 执行</span><button id="launcher-action-button" type="button">动作 ⌘/Ctrl K</button><button id="launcher-manage" type="button">管理</button></div>
       </section>
 
@@ -431,6 +431,11 @@
 
           <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true" inert>
             <div class="settings-page" id="settings-page" aria-label="TO-DO Panel 设置">
+              <section class="tile settings-card settings-launcher-card">
+                <div class="settings-card-heading"><div><span class="tile-label">搜索与扩展</span><strong>搜索与启动器</strong></div></div>
+                <p id="settings-launcher-status" class="settings-inline-note" role="status" aria-live="polite"></p>
+                <div id="launcher-manager" class="launcher-manager" hidden></div>
+              </section>
               <div class="settings-column settings-column-primary">
                 <section class="tile settings-card settings-api-card">
                   <div class="settings-card-heading">

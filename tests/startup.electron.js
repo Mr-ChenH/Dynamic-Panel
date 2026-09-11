@@ -98,10 +98,10 @@ app.on('web-contents-created', (_event, contents) => {
           await new Promise(resolve => setTimeout(resolve, 30));
           const failedVisible = window.NotchLauncher.isOpen() && document.getElementById('launcher-status').textContent.includes('不存在');
           const failedUsage = JSON.parse(localStorage.getItem('notch-launcher-usage-v1') || '{}')['note:stale-note'];
-          document.getElementById('launcher-manage').click();
-          await new Promise(resolve => setTimeout(resolve, 30));
-          const managerInputDisabled = search.disabled;
-          window.NotchLauncher.escape();
+          await window.NotchLauncher.openSettings();
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const managerInputDisabled = !window.NotchLauncher.isOpen() && document.getElementById('settings-pane-launcher').contains(document.getElementById('launcher-manager'));
+          await window.NotchLauncher.open();
           const restoredInput = !search.disabled;
           await window.NotchLauncher.close();
           data.P0.push({ id:'completed-launcher-test', text:'Completed target', done:true, deadline:Date.now() });
@@ -140,7 +140,7 @@ app.on('web-contents-created', (_event, contents) => {
           const contextMenu = !document.getElementById('launcher-actions').hidden;
           window.NotchLauncher.escape();
           localStorage.setItem('notch-launcher-aliases-v1', JSON.stringify({ 'command:a':'alpha', 'command:b':'beta' }));
-          document.getElementById('launcher-manage').click();
+          await window.NotchLauncher.openSettings();
           const manager = document.getElementById('launcher-manager');
           const historyDeadline=performance.now()+2000;
           while(!manager.textContent.includes('最近运行记录')&&performance.now()<historyDeadline)await new Promise(resolve=>setTimeout(resolve,20));
@@ -148,10 +148,10 @@ app.on('web-contents-created', (_event, contents) => {
           const b = sections.find(section => section.querySelector('strong')?.textContent === 'command:b');
           b.querySelector('input').value = 'ＡＬＰＨＡ';
           [...b.querySelectorAll('button')].find(button => button.textContent === '保存别名').click();
-          const duplicateRejected = document.getElementById('launcher-status').textContent.includes('占用') && JSON.parse(localStorage.getItem('notch-launcher-aliases-v1'))['command:b'] === 'beta';
+          const duplicateRejected = document.getElementById('settings-launcher-status').textContent.includes('占用') && JSON.parse(localStorage.getItem('notch-launcher-aliases-v1'))['command:b'] === 'beta';
           const history = manager.textContent.includes('最近运行记录');
           const timeout = manager.querySelector('input[type=number]').value;
-          window.NotchLauncher.escape();
+          await window.NotchLauncher.open();
           return { grouped, contextMenu, duplicateRejected, history, timeout };
         })()`);
         assert.deepEqual(managerChecks, { grouped:true, contextMenu:true, duplicateRejected:true, history:true, timeout:'800' });
@@ -169,7 +169,7 @@ app.on('web-contents-created', (_event, contents) => {
           const transientProtected = ![...document.querySelectorAll('#launcher-actions button')].some(b=>b.textContent==='收藏'||b.textContent==='保存别名');
           window.NotchLauncher.escape();
           if(oldNotes===null)localStorage.removeItem(noteKey);else localStorage.setItem(noteKey,oldNotes);
-          document.getElementById('launcher-manage').click(); await new Promise(resolve=>setTimeout(resolve,50));
+          await window.NotchLauncher.openSettings(); await new Promise(resolve=>setTimeout(resolve,150));
           const section=[...document.querySelectorAll('#launcher-manager .launcher-extension')].find(s=>s.querySelector('strong')?.textContent==='command:a');
           const original=Storage.prototype.setItem;
           const before=localStorage.getItem('notch-launcher-aliases-v1');
@@ -178,13 +178,13 @@ app.on('web-contents-created', (_event, contents) => {
             Storage.prototype.setItem=function(key,value){if(key==='notch-launcher-aliases-v1')throw new DOMException('full','QuotaExceededError');return original.call(this,key,value);};
             section.querySelector('input').value='changed';
             [...section.querySelectorAll('button')].find(b=>b.textContent==='保存别名').click();
-            failureVisible=document.getElementById('launcher-status').textContent.includes('无法保存')&&localStorage.getItem('notch-launcher-aliases-v1')===before;
+            failureVisible=document.getElementById('settings-launcher-status').textContent.includes('无法保存')&&localStorage.getItem('notch-launcher-aliases-v1')===before;
             let fail=true;
             Storage.prototype.setItem=function(key,value){if(key==='notch-launcher-favorites-v1'&&fail){fail=false;throw new DOMException('full','QuotaExceededError');}return original.call(this,key,value);};
             [...section.querySelectorAll('button')].find(b=>b.textContent==='移除记录').click();
-            rolledBack=localStorage.getItem('notch-launcher-aliases-v1')===before&&document.getElementById('launcher-status').textContent.includes('撤回');
+            rolledBack=localStorage.getItem('notch-launcher-aliases-v1')===before&&document.getElementById('settings-launcher-status').textContent.includes('撤回');
           } finally {Storage.prototype.setItem=original;}
-          window.NotchLauncher.escape();
+          await window.NotchLauncher.open();
           return {fallback,retained,distinctUrls:firstUrl!==secondUrl,transientProtected,failureVisible,rolledBack};
         })()`);
         assert.deepEqual(auditFixes,{fallback:'note:audit-b',retained:'note:audit-b',distinctUrls:true,transientProtected:true,failureVisible:true,rolledBack:true});
@@ -287,7 +287,8 @@ app.on('web-contents-created', (_event, contents) => {
             const observer=new MutationObserver(()=>{observer.disconnect();requestAnimationFrame(()=>{painted=performance.now();});});observer.observe(list,{childList:true});
             const started=performance.now();await window.NotchLauncher.open();await new Promise(resolve=>requestAnimationFrame(resolve));
             observer.disconnect();search.removeEventListener('focus',focus);
-            samples.push({focusMs:focused-started,firstFrameMs:painted-started});
+            const focusTime=Number.isFinite(focused)?focused:performance.now();const paintTime=Number.isFinite(painted)?painted:performance.now();
+            samples.push({focusMs:focusTime-started,firstFrameMs:paintTime-started});
             if(i<4)await window.NotchLauncher.close();
           }
           return {samples,scope:'Programmatic launcher open through production preload/native mode, warm app cache; excludes OS hotkey delivery'};
@@ -315,6 +316,10 @@ app.on('web-contents-created', (_event, contents) => {
             page.style.width=width+'px';page.style.height='340px';
             for(const button of page.querySelectorAll('[data-settings-category]')){
               button.click();await new Promise(resolve=>requestAnimationFrame(resolve));
+              if(button.dataset.settingsCategory==='launcher'){
+                const deadline=performance.now()+2000;
+                while(document.getElementById('launcher-manager').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
+              }
               const panes=[...content.querySelectorAll('.settings-card')].filter(card=>!card.hidden);
               onePane=onePane&&panes.length===1;noOverflow=noOverflow&&content.scrollWidth<=content.clientWidth+1;
               const controls=[...panes[0].querySelectorAll('button,select,input')].filter(control=>control.getClientRects().length&&getComputedStyle(control).visibility!=='hidden');
@@ -339,6 +344,9 @@ app.on('web-contents-created', (_event, contents) => {
           return {accessible,onePane,noOverflow,scrollable,apiReachable};
         })()`);
         assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,scrollable:true,apiReachable:true});
+        await contents.executeJavaScript(`window.NotchSettings.select('launcher')`);await new Promise(resolve=>setTimeout(resolve,350));
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-launcher-review.png'),(await contents.capturePage()).toPNG());
+        await contents.executeJavaScript(`window.NotchSettings.select('general')`);await new Promise(resolve=>setTimeout(resolve,250));
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-review.png'),(await contents.capturePage()).toPNG());
         const largeLinks=await contents.executeJavaScript(`(async()=>{
           await window.NotchPanel.navigate({tab:'links'});
