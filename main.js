@@ -27,6 +27,7 @@ const platformPolicy = require('./platform');
 const { createLauncherService } = require('./launcher/service');
 const { resolveLaunchPath } = require('./launcher/paths');
 const launcherFocus = require('./launcher/focus').createFocusService();
+const launcherApplications = require('./launcher/application-actions').createApplicationActions({readShortcut:file=>shell.readShortcutLink(file),owner:()=>mainWindow&&!mainWindow.isDestroyed()?mainWindow.getNativeWindowHandle().readBigUInt64LE(0):null});
 const PLATFORM_CAPABILITIES = platformPolicy.capabilities(process.platform);
 const {
   validNoteId,
@@ -1362,9 +1363,9 @@ launcherHandler('launcher:save-settings', (payload) => {
   return { ok: true };
 });
 launcherHandler('launcher:query', async (payload) => {
-  if (typeof payload?.query !== 'string' || payload.query.length > 1000) throw Error('invalid_query');
+  if (typeof payload?.query !== 'string' || payload.query.length > 1000 || payload.regexMode !== undefined && typeof payload.regexMode !== 'boolean') throw Error('invalid_query');
   const owner = mainWindow;
-  return { ok: true, items: await getLauncherService().query(payload.query, launcherConfig().sources, (items, progress) => {
+  return { ok: true, items: await getLauncherService().query(payload.regexMode === true ? '' : payload.query, launcherConfig().sources, (items, progress) => {
     if (Number.isSafeInteger(payload.requestId) && owner && !owner.isDestroyed()) owner.webContents.send('launcher:partial', { requestId: payload.requestId, items, pending: progress?.pending || [] });
   }) };
 });
@@ -1446,6 +1447,13 @@ launcherHandler('launcher:run', async (payload) => {
   if (typeof payload?.id !== 'string') throw Error('invalid_action');
   let target = getLauncherService().target(payload.id);
   if (!target) throw Error('stale_result');
+  const mode=payload.mode===undefined?'default':payload.mode;
+  if(!['default','admin','new','focus'].includes(mode)||mode!=='default'&&target.type!=='open-app')throw Error('invalid_action');
+  if(mode!=='default') {
+    transientSystemInteractionRequests++;
+    try {return await getLauncherService().perform(target,action=>launcherApplications.run(action.path,mode));}
+    finally {transientSystemInteractionRequests--;}
+  }
   if (target.confirmation === 'confirm') {
     if (launcherManaging) throw Error('busy');
     launcherManaging = true;

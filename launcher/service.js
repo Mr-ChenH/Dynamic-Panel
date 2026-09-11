@@ -131,7 +131,7 @@ function createLauncherService({ dataRoot, executable, platform = process.platfo
           const full = path.join(directory, entry.name);
           if ((platform === 'darwin' && entry.isDirectory() && entry.name.toLowerCase().endsWith('.app')) || (platform === 'win32' && entry.isFile() && entry.name.toLowerCase().endsWith('.lnk'))) {
             const id = 'app:' + crypto.createHash('sha256').update(full).digest('hex').slice(0, 24);
-            found.push({ id, title: entry.name.replace(/\.(app|lnk)$/i, ''), subtitle: '应用', kind: 'app', path: full });
+            found.push({ id, title: entry.name.replace(/\.(app|lnk)$/i, ''), subtitle: '应用', kind: 'app', platform, appModes: platform==='win32'?['admin','new','focus']:['new','focus'], path: full });
           } else if (entry.isDirectory()) await scan(full, depth + 1);
         }
       }

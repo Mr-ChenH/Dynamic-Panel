@@ -140,8 +140,9 @@ app.on('web-contents-created', (_event, contents) => {
           window.NotchLauncher.escape();
           localStorage.setItem('notch-launcher-aliases-v1', JSON.stringify({ 'command:a':'alpha', 'command:b':'beta' }));
           document.getElementById('launcher-manage').click();
-          await new Promise(resolve => setTimeout(resolve, 40));
           const manager = document.getElementById('launcher-manager');
+          const historyDeadline=performance.now()+2000;
+          while(!manager.textContent.includes('最近运行记录')&&performance.now()<historyDeadline)await new Promise(resolve=>setTimeout(resolve,20));
           const sections = [...manager.querySelectorAll('.launcher-extension')];
           const b = sections.find(section => section.querySelector('strong')?.textContent === 'command:b');
           b.querySelector('input').value = 'ＡＬＰＨＡ';
@@ -211,6 +212,53 @@ app.on('web-contents-created', (_event, contents) => {
           return {separate,immediate,final,icons,unboxed};
         })()`);
         assert.deepEqual(visualChecks,{separate:true,immediate:true,final:true,icons:true,unboxed:true});
+        const regexChecks=await contents.executeJavaScript(`(async()=>{
+          const input=document.getElementById('launcher-search'),toggle=document.getElementById('launcher-regex'),status=document.getElementById('launcher-status');
+          const wait=async predicate=>{const end=performance.now()+2500;while(!predicate()&&performance.now()<end)await new Promise(r=>setTimeout(r,20));return predicate();};
+          toggle.click();input.value='^launcher verification text$';input.dispatchEvent(new Event('input'));
+          const matched=await wait(()=>document.querySelector('#launcher-results [data-result-id="command:launcher-copy"]')&&!document.getElementById('launcher-results').inert);
+          input.value='(';input.dispatchEvent(new Event('input'));
+          const invalid=await wait(()=>status.textContent.includes('正则错误'));
+          const before=localStorage.getItem('notch-home-commands');
+          localStorage.setItem('notch-home-commands',JSON.stringify([{id:'regex-slow',text:'a'.repeat(10000)+'!'}]));
+          input.value='^(a+)+$';input.dispatchEvent(new Event('input'));
+          const started=performance.now();await new Promise(r=>setTimeout(r,50));const responsive=performance.now()-started<350;
+          const timedOut=await wait(()=>status.textContent.includes('正则执行超时'));
+          localStorage.setItem('notch-home-commands',before);
+          input.value='verification';input.dispatchEvent(new Event('input'));
+          const recovered=await wait(()=>!document.getElementById('launcher-results').inert&&!!document.querySelector('[data-result-id="command:launcher-copy"]'));
+          input.value='^大写转换$';input.dispatchEvent(new Event('input'));
+          await wait(()=>!document.getElementById('launcher-results').inert&&[...document.querySelectorAll('.launcher-result')].some(row=>row.result.kind==='extension-query'));
+          [...document.querySelectorAll('.launcher-result')].find(row=>row.result.kind==='extension-query')?.click();
+          const commandScope=await wait(()=>toggle.getAttribute('aria-pressed')==='false'&&input.value==='大写转换 ');
+          input.value='';input.dispatchEvent(new Event('input'));
+          return {matched,invalid,responsive,timedOut,recovered,commandScope};
+        })()`);
+        assert.deepEqual(regexChecks,{matched:true,invalid:true,responsive:true,timedOut:true,recovered:true,commandScope:true});
+        if(process.platform==='win32') {
+          // Observe keyboard IPC without launching programs or displaying a real UAC prompt.
+          const {ipcMain}=require('electron'),applicationModes=[];
+          ipcMain.removeHandler('launcher:run');
+          ipcMain.handle('launcher:run',(_event,payload)=>{applicationModes.push(payload.mode);return {ok:false,error:'cancelled'};});
+          try {
+            const menus=await contents.executeJavaScript(`(async()=>{
+              const input=document.getElementById('launcher-search');input.value='';input.dispatchEvent(new Event('input'));
+              await new Promise(resolve=>setTimeout(resolve,350));
+              const target=[...document.querySelectorAll('.launcher-result')].find(row=>row.result?.kind==='app');
+              if(!target)return false;
+              input.dispatchEvent(new KeyboardEvent('keydown',{key:'Home',bubbles:true}));
+              for(let i=0;i<50&&document.querySelector('.launcher-result.selected')!==target;i++)input.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+              document.getElementById('launcher-action-button').click();
+              const menu=document.getElementById('launcher-actions').textContent;
+              window.NotchLauncher.escape();
+              for(const mods of [{ctrlKey:true,shiftKey:true},{ctrlKey:true},{altKey:true}]){
+                input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true,...mods}));await new Promise(resolve=>setTimeout(resolve,100));
+              }
+              return ['以管理员身份运行','新开窗口','切换到已打开窗口'].every(text=>menu.includes(text));
+            })()`);
+            assert.equal(menus,true);assert.deepEqual(applicationModes,['admin','new','focus']);
+          } finally {ipcMain.removeHandler('launcher:run');}
+        }
         const renderBenchmark = await contents.executeJavaScript(`(async () => {
           const key = 'notch-note-archive-v1', previous = localStorage.getItem(key);
           const search = document.getElementById('launcher-search');

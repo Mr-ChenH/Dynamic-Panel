@@ -37,11 +37,18 @@ function describeLauncherResult(result) {
   const prefix = result.id.split(':')[0];
   const labels = { app: '应用', note: '笔记', todo: '待办', link: '链接', command: '常用指令', clip: '剪贴板', builtin: '快捷操作', path: '文件与目录' };
   const actions = [
-    { id: 'primary', title: result.kind === 'copy' ? '复制' : result.kind === 'navigate' ? '打开来源' : '打开 / 执行', confirmation: result.confirmation || 'none', risk: result.risk || 'safe' },
+    { id: 'primary', title: result.kind === 'app' ? '打开应用' : result.kind === 'copy' ? '复制' : result.kind === 'navigate' ? '打开来源' : '打开 / 执行', confirmation: result.confirmation || 'none', risk: result.risk || 'safe' },
     { id: 'favorite', title: '收藏', confirmation: 'none', risk: 'safe' },
     { id: 'copy-title', title: '复制名称', confirmation: 'none', risk: 'safe' },
     { id: 'alias', title: '别名', confirmation: 'none', risk: 'safe' },
   ];
+  if(result.kind==='app') {
+    const modifier=result.platform==='darwin'?'⌘':'Ctrl';
+    for(const mode of result.appModes||[]) {
+      const spec={admin:['以管理员身份运行','Ctrl+Shift+Enter'],new:['新开窗口',`${modifier}+Enter`],focus:['切换到已打开窗口',result.platform==='darwin'?'⌥+Enter':'Alt+Enter']}[mode];
+      if(spec)actions.push({id:`app-${mode}`,mode,title:spec[0],shortcut:spec[1],confirmation:mode==='admin'?'system':'none',risk:mode==='admin'?'elevated':'safe'});
+    }
+  }
   if (result.copyTarget || result.target?.url || result.target?.text) actions.push({ id: 'copy-content', title: '复制内容', confirmation: 'none', risk: 'safe' });
   if (result.kind === 'url' && result.target?.id) actions.push({ id: 'source', title: '打开来源', confirmation: 'none', risk: 'safe' });
   const persistent = result.persistable !== false && result.kind !== 'path' && result.id !== 'builtin:url' && !result.id.startsWith('url:');

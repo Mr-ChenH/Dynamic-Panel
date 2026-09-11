@@ -13,12 +13,35 @@
   let settings = { shortcut: 'CommandOrControl+Space', sources: { apps: true, workspace: true, clipboard: false, extensions: true } };
   let features = {};
   const KEY = 'notch-launcher-';
+  let regexEnabled=false,regexWorker=null,regexTimer,regexJobKey='',regexResult=null,resultsVersion=0;
+  const regexKey=()=>`${generation}:${resultsVersion}`;
+  function stopRegex(){regexWorker?.terminate();regexWorker=null;clearTimeout(regexTimer);regexJobKey='';}
+  function regexReady(){return !regexEnabled||!input.value||regexResult?.key===regexKey()&&!regexResult.error;}
+  function requestRegex(candidates,aliases,final){
+    const key=regexKey();if(regexJobKey===key)return;
+    stopRegex();regexJobKey=key;
+    const finish=result=>{if(key!==regexKey()||!openState)return;stopRegex();regexResult={key,...result};render(final);};
+    try {
+      regexWorker=new Worker('launcher-regex-worker.js');
+      regexWorker.onmessage=event=>{if(event.data.key===key)finish(event.data);};
+      regexWorker.onerror=event=>{event.preventDefault();finish({error:'正则搜索暂时不可用'});};
+      regexTimer=setTimeout(()=>finish({error:'正则执行超时，请简化表达式'}),500);
+      regexWorker.postMessage({key,query:input.value,aliases,limit:50,results:candidates.map(({id,title,subtitle,keywords,persistable})=>({id,title,subtitle,keywords,persistable}))});
+    }catch{queueMicrotask(()=>finish({error:'无法启动正则搜索'}));}
+  }
+  function toggleRegex(){
+    if(running||!manager.hidden)return;
+    regexEnabled=!regexEnabled;stopRegex();regexResult=null;
+    document.getElementById('launcher-regex').setAttribute('aria-pressed',String(regexEnabled));
+    input.placeholder=regexEnabled?'正则表达式，例如 ^Chrome|笔记$':'搜索应用、笔记、链接…';
+    search();input.focus();
+  }
   function stored(key, fallback) {
     const value = data(KEY + key + '-v1', fallback);
     if (key === 'favorites') return value.filter(v => typeof v === 'string' && v.length <= 300).slice(-500);
     return Object.fromEntries(Object.entries(value).slice(-500).filter(([id, v]) => id.length <= 300 && (key === 'aliases' ? typeof v === 'string' && v.length <= 40 : v && Number.isFinite(v.count) && Number.isFinite(v.lastUsedAt))));
   }
-  function save(key, value) { try { localStorage.setItem(KEY + key + '-v1', JSON.stringify(value)); return true; } catch { status.textContent = '无法保存，存储空间可能已满'; return false; } }
+  function save(key, value) { try { localStorage.setItem(KEY + key + '-v1', JSON.stringify(value)); resultsVersion++; return true; } catch { status.textContent = '无法保存，存储空间可能已满'; return false; } }
   function saveRecords(records) {
     const previous = new Map();
     try {
@@ -45,7 +68,7 @@
     } catch { return fallback; }
   }
   function errorMessage(error) {
-    return ({ invalid_path: '路径不存在，或不支持直接打开此文件类型', app_open_failed: '无法打开，文件可能已移动或没有关联应用', extension_timeout: '扩展响应超时，可在设置中调整等待时间', extension_disabled: '扩展已停用', cancelled: '操作已取消', invalid_target: '结果已失效，请重新搜索', extension_cleanup_failed: '扩展未能正常退出，请重启应用后重试' })[error] || error;
+    return ({ app_window_not_found:'未找到该应用已打开的窗口；没有启动新实例',app_focus_denied:'系统未允许切换窗口，可能需要相同权限',app_not_found:'应用目标已不存在，请重新搜索',unsupported_app_target:'该快捷方式不指向可直接操作的应用程序',unsupported_app_action:'当前平台不支持此应用动作',elevation_cancelled_or_denied:'管理员启动已取消或被系统拒绝', invalid_path: '路径不存在，或不支持直接打开此文件类型', app_open_failed: '无法打开，文件可能已移动或没有关联应用', extension_timeout: '扩展响应超时，可在设置中调整等待时间', extension_disabled: '扩展已停用', cancelled: '操作已取消', invalid_target: '结果已失效，请重新搜索', extension_cleanup_failed: '扩展未能正常退出，请重启应用后重试' })[error] || error;
   }
   function button(text, handler) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = text;
@@ -67,6 +90,7 @@
   }
   let localSignature = [], localIndex = [];
   function withDirectUrl(result) {
+    if(regexEnabled)return result;
     const query = input.value.trim();
     if (!/^https?:\/\/\S+$/i.test(query)) return result;
     try { const url = new URL(query).href; return [...result, { id: `url:${url}`, persistable: false, title: query, subtitle: '在浏览器中打开公开网址', kind: 'url', target: { url } }]; } catch { return result; }
@@ -117,7 +141,13 @@
   }
   function render(final = false) {
     const favorites = stored('favorites', []), aliases = stored('aliases', {}), usage = stored('usage', {});
-    rows = window.LauncherDomain.searchLauncherResults(window.LauncherDomain.mergeLauncherResults([localResults(), remote]).map(window.LauncherDomain.describeLauncherResult).map((r) => ({ ...r, favorite: r.persistable && favorites.includes(r.id), usage: r.persistable ? usage[r.id] : undefined })), input.value, aliases, input.value.trim() ? 50 : 12);
+    const candidates=window.LauncherDomain.mergeLauncherResults([localResults(), remote]).map(window.LauncherDomain.describeLauncherResult).map(r=>({...r,favorite:r.persistable&&favorites.includes(r.id),usage:r.persistable?usage[r.id]:undefined}));
+    if(regexEnabled&&input.value){
+      if(regexResult?.key!==regexKey()) {requestRegex(candidates,aliases,final);status.textContent='正在匹配正则…';list.inert=true;list.setAttribute('aria-busy','true');return;}
+      if(regexResult.error){status.textContent=regexResult.error;input.setAttribute('aria-invalid','true');input.removeAttribute('aria-activedescendant');list.inert=true;list.setAttribute('aria-busy','false');return;}
+      const byId=new Map(candidates.map(r=>[r.id,r]));rows=regexResult.ids.map(id=>byId.get(id)).filter(Boolean);
+    }else rows=window.LauncherDomain.searchLauncherResults(candidates,input.value,aliases,input.value.trim()?50:12);
+    list.inert=false;input.removeAttribute('aria-invalid');
     rows = rows.map(window.LauncherDomain.describeLauncherResult);
     const groupName = (r) => !input.value.trim() && r.favorite ? '收藏' : !input.value.trim() && usage[r.id] ? '最近使用' : r.source.label;
     const groups = new Map(); rows.forEach(r => { const label = groupName(r); if (!groups.has(label)) groups.set(label, []); groups.get(label).push(r); });
@@ -173,6 +203,10 @@
     status.textContent = operationFeedback || (rows.length ? `${rows.length} 个结果` : '没有匹配结果，可在管理中开启来源或安装扩展') + (pendingProviders.length ? ` · 正在查询：${pendingProviders.map(p=>p.title).join('、')}` : '');
     if(invalidSources.size)status.textContent+=' · 部分数据格式或大小异常，未纳入搜索';
     list.setAttribute('aria-busy', String(pendingProviders.length > 0));
+    if(queuedRun?.generation===generation&&!searchPending&&regexReady()) {
+      const pending=queuedRun,target=rows.find(row=>row.id===pending.id);queuedRun=null;
+      queueMicrotask(()=>{if(!openState||pending.generation!==generation)return;if(target)run(target,pending.mode);else status.textContent='该结果已不再匹配，请重新选择';});
+    }
   }
   function search() {
     if (!openState || !manager.hidden || running) return;
@@ -182,18 +216,14 @@
     api?.cancelLauncher?.(); actions.hidden = true; render();
     timer = setTimeout(async () => {
       try {
-        const response = await api?.queryLauncher?.(input.value.slice(0, 1000), revision);
+        const response = await api?.queryLauncher?.(input.value.slice(0, 1000), revision, regexEnabled);
         if (revision !== generation || !openState) return;
         searchPending = false; pendingProviders = [];
         if (response?.ok) {
-          remote = response.items; render(true);
-          if(queuedRun?.generation===revision) {
-            const target=rows.find(row=>row.id===queuedRun.id);queuedRun=null;
-            if(target)await run(target);else status.textContent='该结果已不再匹配，请重新选择';
-          }
+          remote = response.items; resultsVersion++; render(true);
         }
-        else if (response) { render(true); status.textContent = '应用或扩展查询失败，工作区搜索仍然可用'; }
-      } catch { if (revision === generation) { searchPending = false; pendingProviders = []; render(true); status.textContent = '查询暂时不可用'; } }
+        else if (response) { queuedRun=null; render(true); status.textContent = '应用或扩展查询失败，工作区搜索仍然可用'; }
+      } catch { if (revision === generation) { searchPending = false; pendingProviders = []; queuedRun=null; render(true); status.textContent = '查询暂时不可用'; } }
     }, 30);
   }
   async function animateLauncher(opening) {
@@ -226,7 +256,7 @@
     if (reason !== 'dismiss') restoreFocusOnClose = false;
     if (!openState) return;
     if (transition || running) { pendingClose = true; return; }
-    transition = true; openState = false; ++generation; clearTimeout(timer); api?.cancelLauncher?.();
+    transition = true; openState = false; ++generation; stopRegex(); clearTimeout(timer); api?.cancelLauncher?.();
     await animateLauncher(false);
     root.hidden = true; document.body.classList.remove('launcher-open');
     document.getElementById('panel').inert = previousInert;
@@ -236,9 +266,11 @@
       await api?.finishLauncherFocus?.(restoreFocusOnClose);
     } finally { transition = false; escapeGuardUntil = performance.now() + 250; }
   }
-  async function run(r) {
+  async function run(r,mode='default') {
     if (running || !r || r.kind === 'error') return;
-    if(searchPending&&remote.some(row=>row.id===r.id)){queuedRun={id:r.id,generation};status.textContent='正在确认最新结果…';return;}
+    if(!regexReady()){status.textContent=regexResult?.error||'请等待正则匹配完成';return;}
+    if(mode!=='default'&&(!r.appModes?.includes(mode))){status.textContent='此应用或平台不支持该动作';return;}
+    if(searchPending&&remote.some(row=>row.id===r.id)){queuedRun={id:r.id,generation,mode};status.textContent='正在确认最新结果…';return;}
     let navigationToken;
     running = true; status.textContent = '正在执行…';
     try {
@@ -246,9 +278,12 @@
       let response = { ok: true };
       if (r.kind === 'copy') response = await api.writeClipboard({ type: 'text', text: r.target.text });
       else if (r.kind === 'url') response = await api.openLauncherUrl(r.target.url);
-      else if (r.kind !== 'navigate') response = await api.runLauncher(r.id);
+      else if (r.kind !== 'navigate') response = await api.runLauncher(r.id,mode);
       if (response === false || response?.ok === false) throw Error(response?.error || '执行失败');
-      if (response?.query != null) { input.value = response.query; running = false; search(); input.focus(); return; }
+      if (response?.query != null) {
+        if(regexEnabled){regexEnabled=false;stopRegex();regexResult=null;document.getElementById('launcher-regex').setAttribute('aria-pressed','false');input.placeholder='搜索应用、笔记、链接…';}
+        input.value = response.query; running = false; search(); input.focus(); return;
+      }
       navigationToken = response?.navigationToken;
       const navigation = r.kind === 'navigate' ? r.target : response?.navigation;
       if (navigation) { window.NotchPanel.validateTarget(navigation); await window.NotchPanel.navigate(navigation); }
@@ -270,9 +305,15 @@
     return [...localResults(),...remote].find(row=>row.id===entry[0])?.title || entry[0];
   }
   function showActions() {
-    const r = rows.find((item) => item.id === selectedId); if (!r || !manager.hidden) return;
+    const r = rows.find((item) => item.id === selectedId); if (!r || !manager.hidden || !regexReady()) return;
     actions.replaceChildren(); actions.hidden = false;
     actions.append(button(r.actions.find(a => a.id === 'primary').title, () => run(r)));
+    for(const action of r.actions.filter(a=>a.mode)){
+      const control=button('',()=>run(r,action.mode));
+      const label=document.createElement('span');label.textContent=action.title;
+      const key=document.createElement('kbd');key.textContent=action.shortcut;control.append(label,key);actions.append(control);
+    }
+    if(r.kind==='app'){const hint=document.createElement('p');hint.className='launcher-action-hint';hint.textContent='新窗口由应用决定；切换动作不会额外启动应用。';actions.append(hint);}
     if (r.persistable) actions.append(button(r.favorite ? '取消收藏' : '收藏', () => {
       const favorites = stored('favorites', []); if (!save('favorites', r.favorite ? favorites.filter((id) => id !== r.id) : [...new Set([...favorites, r.id])].slice(-500))) return; actions.hidden = true; render(); input.focus();
     }));
@@ -296,7 +337,7 @@
   }
   async function showManager() {
     const managerRevision = generation + 1;
-    ++generation; clearTimeout(timer); api?.cancelLauncher?.();
+    ++generation; stopRegex(); clearTimeout(timer); api?.cancelLauncher?.();
     input.disabled = true;
     manager.hidden = false; list.hidden = true; actions.hidden = true; manager.replaceChildren();
     const title = document.createElement('h3'); title.textContent = '启动器设置'; manager.append(title);
@@ -369,6 +410,12 @@
       if ((!event.shiftKey && index === focusable.length - 1) || (event.shiftKey && index <= 0)) { event.preventDefault(); focusable[event.shiftKey ? focusable.length - 1 : 0]?.focus(); }
       return;
     }
+    if(event.target===input&&event.altKey&&!event.ctrlKey&&!event.metaKey&&(event.code==='KeyR'||event.key.toLowerCase()==='r')){event.preventDefault();toggleRegex();return;}
+    if(event.key==='Enter'&&!event.isComposing&&manager.hidden&&(event.target===input||event.target.tagName!=='INPUT')){
+      const selected=rows.find(r=>r.id===selectedId);
+      const mode=event.altKey&&!event.ctrlKey&&!event.metaKey&&!event.shiftKey?'focus':(event.ctrlKey||event.metaKey)&&!event.altKey?(event.shiftKey?'admin':'new'):null;
+      if(mode&&selected?.kind==='app'){event.preventDefault();run(selected,mode);return;}
+    }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); showActions(); return; }
     if (event.key === 'Escape') { event.preventDefault(); /* Production Escape is forwarded by preload. */ if (!api?.onEscape) escape(); return; }
     if (!actions.hidden && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
@@ -382,6 +429,7 @@
       selectedId = rows[next]?.id || ''; preferredId = selectedId; render(); list.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
     } else if (event.key === 'Enter') { event.preventDefault(); run(rows.find((r) => r.id === selectedId)); }
   });
+  document.getElementById('launcher-regex').addEventListener('click',toggleRegex);
   input.addEventListener('input', (event) => { if (!event.isComposing) search(); });
   input.addEventListener('compositionend', search);
   document.getElementById('launcher-manage').addEventListener('click', showManager);
@@ -391,7 +439,7 @@
   document.getElementById('settings-launcher-open').addEventListener('click', async () => { await open(); await showManager(); });
   api?.onLauncherPartial?.((payload) => {
     if (!openState || !manager.hidden || payload.requestId !== generation || !Array.isArray(payload.items)) return;
-    remote = window.LauncherDomain.mergeLauncherResults([payload.items,remote]); pendingProviders = payload.pending || []; render();
+    remote = window.LauncherDomain.mergeLauncherResults([payload.items,remote]); resultsVersion++; pendingProviders = payload.pending || []; render();
   });
   api?.onLauncherToggle?.(open); api?.onLauncherClose?.(() => { if (actions.hidden) close('blur'); });
   window.NotchLauncher = { open, close, escape, handleEscape: () => { if (!openState && !transition && performance.now() >= escapeGuardUntil) return false; if (openState) escape(); return true; }, isOpen: () => openState, refresh: search };
