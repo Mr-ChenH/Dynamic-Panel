@@ -55,6 +55,10 @@ test('Windows collapsed notch stays compact and grows only on approach', () => {
   assert.match(closingRule, /width:\s*160px/);
   assert.match(closingRule, /height:\s*8px/);
   assert.match(closingRule, /background:\s*var\(--bg-base\)/);
+  assert.match(preloadJs, /setCollapsedHover:.*window:set-collapsed-hover/);
+  assert.match(appJs, /notch\.addEventListener\('mouseenter'.*setCollapsedHover/s);
+  assert.match(appJs, /notch\.addEventListener\('mouseleave'.*setCollapsedHover/s);
+  assert.match(mainJs, /ipcMain\.on\('window:set-collapsed-hover'/);
   assert.doesNotMatch(appJs, /native-resizing/);
 });
 

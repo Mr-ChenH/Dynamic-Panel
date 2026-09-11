@@ -733,6 +733,14 @@ async function setMode(expanded) {
   }
 }
 
+notch.addEventListener('mouseenter', () => {
+  if (!isExpanded) window.notchAPI?.setCollapsedHover?.(true);
+});
+
+notch.addEventListener('mouseleave', () => {
+  window.notchAPI?.setCollapsedHover?.(false);
+});
+
 notch.addEventListener('click', (e) => {
   e.stopPropagation();
   setMode(!isExpanded);

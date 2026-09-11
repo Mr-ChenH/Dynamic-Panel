@@ -8,19 +8,24 @@ test('Windows strip avoids a top taskbar and expanded panel stays in usable desk
   assert.deepEqual(platform.panelBounds('win32', display, true), { x: -1580, y: -152, width: 1240, height: 616 });
 });
 
-test('Windows mode changes keep the same canvas and restrict collapsed input to the strip', () => {
+test('Windows mode changes keep one canvas while input follows only the visible island', () => {
   for (const display of [
     { bounds: { x: -1920, y: -200, width: 1920, height: 1080 }, workArea: { x: -1920, y: -152, width: 1920, height: 1032 } },
     { bounds: { x: 0, y: 0, width: 800, height: 600 }, workArea: { x: 48, y: 0, width: 752, height: 560 } },
   ]) {
     const collapsed = platform.windowsPanelLayout(display, false);
+    const hovered = platform.windowsPanelLayout(display, false, true);
     const expanded = platform.windowsPanelLayout(display, true);
     assert.deepEqual(collapsed.bounds, expanded.bounds);
+    assert.deepEqual(hovered.bounds, expanded.bounds);
     assert.deepEqual(expanded.shape, []);
-    const strip = platform.panelBounds('win32', display, false);
     assert.deepEqual(collapsed.shape, [{
-      x: strip.x - expanded.bounds.x, y: strip.y - expanded.bounds.y,
-      width: 200, height: 38,
+      x: Math.round((expanded.bounds.width - 160) / 2), y: 0,
+      width: 160, height: 8,
+    }]);
+    assert.deepEqual(hovered.shape, [{
+      x: Math.round((expanded.bounds.width - 184) / 2), y: 0,
+      width: 184, height: 30,
     }]);
   }
 });

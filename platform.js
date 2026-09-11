@@ -29,15 +29,20 @@
     return { x: Math.round(area.x + (area.width - width) / 2), y: area.y, width, height };
   }
   // Windows keeps its compositor surface at workspace size across mode changes.
-  // The native shape clips both drawing and input to the collapsed strip.
-  function windowsPanelLayout(display, expanded) {
+  // The native shape follows the visible island so transparent canvas never blocks
+  // clicks in the window underneath it.
+  function windowsPanelLayout(display, expanded, collapsedHovering = false) {
     const bounds = panelBounds('win32', display, true);
-    const strip = panelBounds('win32', display, false);
+    const island = collapsedHovering
+      ? { width: 184, height: 30 }
+      : { width: 160, height: 8 };
     return {
       bounds,
       shape: expanded ? [] : [{
-        x: strip.x - bounds.x, y: strip.y - bounds.y,
-        width: strip.width, height: strip.height,
+        x: Math.round((bounds.width - island.width) / 2),
+        y: 0,
+        width: island.width,
+        height: island.height,
       }],
     };
   }

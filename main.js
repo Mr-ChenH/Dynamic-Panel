@@ -283,6 +283,7 @@ let lastClipImageProbeAt = 0;
 let clipPollingGeneration = 0;
 let spaceShortcutTimer = null;
 let spaceShortcutRegistered = false;
+let windowsCollapsedHovering = false;
 let displayFollowTimer = null;
 let configuredShortcut = '';
 let previousPasteTarget = null;
@@ -390,6 +391,7 @@ function cancelCollapseWatchdog() {
 function applyMode(mode, display) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   cancelCollapseWatchdog();
+  if (mode !== 'collapsed') windowsCollapsedHovering = false;
   applyWindowGeometry(mode, display);
   mainWindow.setIgnoreMouseEvents(false);
   currentMode = mode;
@@ -414,7 +416,11 @@ function applyWindowGeometry(mode, display) {
     mainWindow.setBounds(getBoundsForMode(mode, display));
     return;
   }
-  const layout = platformPolicy.windowsPanelLayout(display || getWindowDisplay(), mode === 'expanded');
+  const layout = platformPolicy.windowsPanelLayout(
+    display || getWindowDisplay(),
+    mode === 'expanded',
+    mode === 'collapsed' && windowsCollapsedHovering
+  );
   const current = mainWindow.getBounds();
   if (['x', 'y', 'width', 'height'].some((key) => current[key] !== layout.bounds[key])) {
     mainWindow.setBounds(layout.bounds, false);
@@ -1408,6 +1414,20 @@ ipcMain.handle('window:set-mode', async (event, mode) => {
 
 ipcMain.handle('window:begin-collapse', () => {
   beginNativeCollapse();
+});
+
+ipcMain.on('window:set-collapsed-hover', (event, hovering) => {
+  if (
+    process.platform !== 'win32'
+    || !mainWindow
+    || mainWindow.isDestroyed()
+    || event.sender !== mainWindow.webContents
+    || currentMode !== 'collapsed'
+  ) return;
+  const next = hovering === true;
+  if (next === windowsCollapsedHovering) return;
+  windowsCollapsedHovering = next;
+  applyWindowGeometry('collapsed');
 });
 
 ipcMain.handle('settings:get', () => publicAppSettings());
