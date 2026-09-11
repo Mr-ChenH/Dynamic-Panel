@@ -1349,7 +1349,7 @@ function setLauncherShortcut(shortcut = launcherConfig().shortcut) {
   return true;
 }
 function getLauncherService() {
-  if (!launcherService) launcherService = createLauncherService({ dataRoot: app.getPath('userData'), executable: process.execPath, getSettings: launcherConfig });
+  if (!launcherService) launcherService = createLauncherService({ dataRoot: app.getPath('userData'), executable: process.execPath, getSettings: launcherConfig, readShortcut: (file) => shell.readShortcutLink(file) });
   return launcherService;
 }
 function launcherHandler(channel, handler) {

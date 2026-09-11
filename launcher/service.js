@@ -8,7 +8,15 @@ const { resolveLaunchPath } = require('./paths');
 const transfer = require('./data-transfer');
 const storageSchema = require('./storage-schema');
 
-function createLauncherService({ dataRoot, executable, platform = process.platform, getSettings = () => ({ queryTimeoutMs: 800 }), applicationRoots }) {
+function windowsShortcutIdentity(shortcut) {
+  const target = String(shortcut?.target || '').trim();
+  if (!target) return '';
+  const normalizedTarget = path.win32.normalize(target).toLowerCase();
+  const args = String(shortcut?.args || '').trim();
+  return `${normalizedTarget}\0${args}`;
+}
+
+function createLauncherService({ dataRoot, executable, platform = process.platform, getSettings = () => ({ queryTimeoutMs: 800 }), applicationRoots, readShortcut }) {
   const root = path.join(dataRoot, 'launcher');
   const packages = path.join(root, 'extensions');
   let registry = {}, loaded = false, controller, apps = [], appsPromise, lastScan = 0;
@@ -117,6 +125,7 @@ function createLauncherService({ dataRoot, executable, platform = process.platfo
     if (Date.now() - lastScan < 60000) return apps;
     appsPromise = (async () => {
       const found = [];
+      const seenApplications = new Set();
       const roots = applicationRoots || (platform === 'darwin' ? ['/Applications', '/System/Applications', path.join(require('node:os').homedir(), 'Applications')] : [
         path.join(process.env.APPDATA || '', 'Microsoft/Windows/Start Menu/Programs'),
         path.join(process.env.ProgramData || 'C:/ProgramData', 'Microsoft/Windows/Start Menu/Programs'),
@@ -130,6 +139,12 @@ function createLauncherService({ dataRoot, executable, platform = process.platfo
           if (entry.isSymbolicLink()) continue;
           const full = path.join(directory, entry.name);
           if ((platform === 'darwin' && entry.isDirectory() && entry.name.toLowerCase().endsWith('.app')) || (platform === 'win32' && entry.isFile() && entry.name.toLowerCase().endsWith('.lnk'))) {
+            let identity = '';
+            if (platform === 'win32' && typeof readShortcut === 'function') {
+              try { identity = windowsShortcutIdentity(await readShortcut(full)); } catch (error) {}
+            }
+            if (identity && seenApplications.has(identity)) continue;
+            if (identity) seenApplications.add(identity);
             const id = 'app:' + crypto.createHash('sha256').update(full).digest('hex').slice(0, 24);
             found.push({ id, title: entry.name.replace(/\.(app|lnk)$/i, ''), subtitle: '应用', kind: 'app', platform, appModes: platform==='win32'?['admin','new','focus']:['new','focus'], path: full });
           } else if (entry.isDirectory()) await scan(full, depth + 1);
@@ -243,4 +258,4 @@ function createLauncherService({ dataRoot, executable, platform = process.platfo
     });
   }, target: (id) => targets.get(id) };
 }
-module.exports = { createLauncherService };
+module.exports = { createLauncherService, windowsShortcutIdentity };

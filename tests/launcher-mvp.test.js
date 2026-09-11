@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { resolveLaunchPath } = require('../launcher/paths');
 const schema = require('../launcher/extension-schema');
-const { createLauncherService } = require('../launcher/service');
+const { createLauncherService, windowsShortcutIdentity } = require('../launcher/service');
 
 test('local paths accept documents/folders and reject scripts, missing paths and network/device paths', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'launcher-paths-'));
@@ -35,6 +35,32 @@ test('platform application scanning recognizes nested bundles and shortcuts with
       assert.equal(service.target(first[0].id).type, 'open-app');
       await service.cancel();
     }
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test('Windows application scanning deduplicates shortcuts by target and arguments', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'launcher-app-dedupe-'));
+  const userApps = path.join(root, 'User Programs');
+  const globalApps = path.join(root, 'Global Programs');
+  try {
+    await fs.mkdir(userApps, { recursive: true });
+    await fs.mkdir(globalApps, { recursive: true });
+    const userShortcut = path.join(userApps, 'Example.lnk');
+    const globalShortcut = path.join(globalApps, 'Example.lnk');
+    const alternateShortcut = path.join(globalApps, 'Example Safe Mode.lnk');
+    await Promise.all([userShortcut, globalShortcut, alternateShortcut].map((file) => fs.writeFile(file, 'shortcut fixture')));
+    const service = createLauncherService({
+      dataRoot: root,
+      platform: 'win32',
+      applicationRoots: [userApps, globalApps],
+      readShortcut: async (file) => ({ target: file.includes('Global') ? 'C:\\PROGRAM FILES\\Example\\example.exe' : 'c:\\Program Files\\Example\\example.exe', args: file === alternateShortcut ? '--safe' : '' }),
+    });
+    const results = await service.query('Example', { extensions: false });
+    assert.equal(results.length, 2);
+    assert.deepEqual(results.map((item) => item.title), ['Example', 'Example Safe Mode']);
+    assert.equal(service.target(results[0].id).path, userShortcut);
+    assert.equal(windowsShortcutIdentity({ target: 'C:/Apps/Test.exe', args: ' --profile work ' }), 'c:\\apps\\test.exe\0--profile work');
+    await service.cancel();
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
 
