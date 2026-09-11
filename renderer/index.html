@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="launcher.css" />
     <link rel="stylesheet" href="settings.css" />
+    <link rel="stylesheet" href="module-layout.css" />
+    <link rel="stylesheet" href="links.css" />
   </head>
   <body>
     <div id="app" class="collapsed">
@@ -353,6 +355,12 @@
                   <input id="link-add" type="text" placeholder="粘贴网址并回车，自动读取标题与分类…" autocomplete="off" spellcheck="false" />
                 </div>
                 <button class="bulk-delete" id="link-bulk-delete" type="button" hidden>删除</button>
+              </div>
+              <div class="links-browser-toolbar">
+                <input id="links-search" type="search" placeholder="搜索标题、网址或分组…" aria-label="搜索已收藏链接" autocomplete="off" />
+                <select id="links-group-filter" aria-label="筛选链接分组"><option value="">全部分组</option></select>
+                <span id="links-result-count" role="status" aria-live="polite"></span>
+                <button id="links-collapse-all" type="button" class="workspace-button compact">全部折叠</button>
               </div>
               <div class="link-groups" id="link-groups"></div>
             </div>

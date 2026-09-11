@@ -1,0 +1,23 @@
+/* Large collections: compact browsing controls and bounded initial group rendering. */
+.links-browser-toolbar { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: 8px; }
+#links-search, #links-group-filter { min-width: 0; height: 34px; border: 1px solid var(--hairline); border-radius: var(--r-input); padding: 0 10px; background: var(--surface-1); color: var(--text-2); font: 11px var(--font); }
+#links-search { flex: 1 1 220px; }
+#links-group-filter { flex: 0 1 200px; max-width: 100%; }
+#links-result-count { flex-shrink: 0; color: var(--text-3); font-size: 10px; font-variant-numeric: tabular-nums; }
+.link-groups { align-items: start; scrollbar-gutter: stable; }
+.link-group:only-child { grid-column: 1 / -1; }
+.link-groups { --link-group-body-height: 300px; }
+.link-group:not(.collapsed) .link-group-body { max-height: var(--link-group-body-height); overflow: hidden; }
+.link-list { overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+.link-list::-webkit-scrollbar { width: 5px; }
+.link-list::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--r-pill); }
+.link-group-body > .links-load-more, .link-group-body > .group-link-add { flex-shrink: 0; }
+.link-group.collapsed .link-group-body { display: none; }
+.link-groups::-webkit-scrollbar { width: 5px; }
+.link-groups::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--r-pill); }
+.link-group-head { position: sticky; top: 0; z-index: 1; background: var(--surface-1); }
+.link-group .link-item { content-visibility: auto; contain-intrinsic-size: auto 48px; }
+.link-favicon img { width: 100%; height: 100%; object-fit: contain; }
+.links-load-more { width: 100%; min-height: 36px; margin-top: 6px; border: 1px solid var(--hairline); border-radius: var(--r-input); background: var(--surface-2); color: var(--text-3); font: 11px var(--font); cursor: pointer; }
+.links-load-more:hover { color: var(--text-1); }
+.links-browser-toolbar input:focus-visible, .links-browser-toolbar select:focus-visible, .links-load-more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }

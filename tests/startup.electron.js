@@ -9,6 +9,7 @@ app.commandLine.appendSwitch('user-data-dir', profile);
 if (process.platform === 'darwin') app.commandLine.appendSwitch('use-mock-keychain');
 fs.writeFileSync(path.join(profile, 'workspace.json'), JSON.stringify({version:1, localStorage:{
   'notch-home-note':'Recovered workspace note',
+  'notch-link-groups':JSON.stringify([{id:'large-links',name:'Research',collapsed:false,links:Array.from({length:125},(_,i)=>({id:'large-link-'+i,title:'Research document '+i,url:'https://example.com/document/'+i,icon:''}))}]),
   'notch-launcher-favorites-v1': JSON.stringify(['command:migrated']),
   'notch-launcher-aliases-v1': JSON.stringify({ 'command:migrated': 'restored-alias' }),
   'notch-recordings':JSON.stringify([{id:'startup-recording',createdAt:1788709776699,durationMs:1558,transcript:'',audioPath:'recordings/retained.webm',mimeType:'audio/webm',title:'Saved recording',category:'未分类'}]),
@@ -242,7 +243,9 @@ app.on('web-contents-created', (_event, contents) => {
           ipcMain.handle('launcher:run',(_event,payload)=>{applicationModes.push(payload.mode);return {ok:false,error:'cancelled'};});
           try {
             const menus=await contents.executeJavaScript(`(async()=>{
-              const input=document.getElementById('launcher-search');input.value='';input.dispatchEvent(new Event('input'));
+              const apps=await window.notchAPI.queryLauncher('');
+              const app=apps.items.find(row=>row.kind==='app');
+              const input=document.getElementById('launcher-search');input.value=app?.title||'';input.dispatchEvent(new Event('input'));
               await new Promise(resolve=>setTimeout(resolve,350));
               const target=[...document.querySelectorAll('.launcher-result')].find(row=>row.result?.kind==='app');
               if(!target)return false;
@@ -337,6 +340,67 @@ app.on('web-contents-created', (_event, contents) => {
         })()`);
         assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,scrollable:true,apiReachable:true});
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-review.png'),(await contents.capturePage()).toPNG());
+        const largeLinks=await contents.executeJavaScript(`(async()=>{
+          await window.NotchPanel.navigate({tab:'links'});
+          const count=()=>document.querySelectorAll('#link-groups .link-item').length;
+          const original=localStorage.getItem('notch-link-groups');
+          const scroller=document.querySelector('.link-list');
+          const independentScroll=getComputedStyle(scroller).overflowY==='auto'&&getComputedStyle(scroller).overscrollBehaviorY==='contain';
+          const section=document.querySelector('.link-group'),outer=document.getElementById('link-groups');
+          const top=section.getBoundingClientRect().top,outerScroll=outer.scrollTop;
+          scroller.scrollTop=100;
+          const stationary=scroller.scrollTop>0&&section.getBoundingClientRect().top===top&&outer.scrollTop===outerScroll;
+          const initial=count();document.querySelector('.links-load-more').click();const loaded=count();
+          const search=document.getElementById('links-search');search.value='document 124';search.dispatchEvent(new Event('input'));
+          const filtered=count(),targetFound=!!document.querySelector('[data-link-id="large-link-124"]');
+          const unchanged=localStorage.getItem('notch-link-groups')===original;
+          search.value='missing';search.dispatchEvent(new Event('input'));const empty=count()===0;
+          window.NotchWorkspace.selectLink('large-link-124');await new Promise(r=>requestAnimationFrame(r));
+          const located=search.value===''&&!!document.querySelector('[data-link-id="large-link-124"]');
+          document.getElementById('links-collapse-all').click();const folded=count();
+          search.value='document 124';search.dispatchEvent(new Event('input'));const searchesFolded=count()===1;
+          search.value='';search.dispatchEvent(new Event('input'));document.getElementById('links-collapse-all').click();
+          return {initial,loaded,filtered,targetFound,unchanged,empty,located,folded,searchesFolded,independentScroll,stationary};
+        })()`);
+        assert.deepEqual(largeLinks,{initial:40,loaded:80,filtered:1,targetFound:true,unchanged:true,empty:true,located:true,folded:0,searchesFolded:true,independentScroll:true,stationary:true});
+        const moduleLayouts=await contents.executeJavaScript(`(async()=>{
+          const failures=[],visited=[];
+          await window.notchAPI.setFeature('clip',true);
+          await new Promise(resolve=>setTimeout(resolve,50));
+          for(const tab of ['home','todo','notes','links','recordings','credentials','clip']){
+            await window.NotchPanel.navigate({tab});await new Promise(resolve=>requestAnimationFrame(resolve));
+            const panel=document.getElementById('tab-'+tab),surface=panel.firstElementChild;
+            const oldHeight=surface.style.height,oldWidth=surface.style.width;
+            surface.style.height='300px';
+            if(['notes','links','recordings','credentials','clip'].includes(tab))surface.style.width='720px';
+            if(tab==='notes'&&window.NotchNotes)window.NotchNotes.create();
+            await new Promise(resolve=>requestAnimationFrame(resolve));
+            if(surface.scrollWidth>surface.clientWidth+2)failures.push(tab+':horizontal');
+            if(tab==='credentials'){
+              const form=panel.querySelector('.credentials-form-card'),save=document.getElementById('credential-save');
+              save.scrollIntoView({block:'nearest'});const a=save.getBoundingClientRect(),b=form.getBoundingClientRect();
+              if(a.bottom>b.bottom+1||a.top<b.top)failures.push('credentials:save-clipped');
+            }
+            if(tab==='recordings'){
+              const detail=panel.querySelector('.recording-detail');
+              if(detail&&getComputedStyle(detail).overflowY!=='auto')failures.push('recordings:no-scroll');
+            }
+            if(tab==='notes'){
+              const actions=panel.querySelector('.notes-detail-actions');
+              if(actions&&actions.scrollWidth>actions.clientWidth+1)failures.push('notes:actions');
+            }
+            visited.push(tab);surface.style.height=oldHeight;surface.style.width=oldWidth;
+          }
+          await window.notchAPI.setFeature('clip',false);
+          return {failures,visited};
+        })()`);
+        assert.deepEqual(moduleLayouts.failures,[]);
+        assert.equal(moduleLayouts.visited.length,7);
+        for(const tab of ['notes','links','recordings','credentials']){
+          await contents.executeJavaScript(`window.NotchPanel.navigate({tab:${JSON.stringify(tab)}})`);
+          await new Promise(resolve=>setTimeout(resolve,300));
+          fs.writeFileSync(path.join(__dirname,`../dist.noindex/module-${tab}-review.png`),(await contents.capturePage()).toPNG());
+        }
         console.log('Production workspace, note attachment and launcher checks passed');
         app.quit();
       } catch (error) { console.error(error); app.exit(1); }

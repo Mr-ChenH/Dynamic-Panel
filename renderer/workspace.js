@@ -214,6 +214,17 @@
   let linkSelection = new Set();
   let linkSelectionAnchor = null;
   let addingLinkGroupId = '';
+  const linksSearch=document.getElementById('links-search'),groupFilter=document.getElementById('links-group-filter');
+  const linkLimits=new Map();
+  const LINK_PAGE_SIZE=40;
+  const normalizeLinkSearch=value=>String(value||'').normalize('NFKC').toLocaleLowerCase();
+  function resetLinkView(){linkLimits.clear();linkSelection.clear();linkSelectionAnchor=null;renderLinkGroups();linkGroupsEl.scrollTop=0;}
+  linksSearch?.addEventListener('input',resetLinkView);
+  groupFilter?.addEventListener('change',resetLinkView);
+  document.getElementById('links-collapse-all')?.addEventListener('click',()=>{
+    const collapse=linkGroups.some(group=>!group.collapsed);
+    linkGroups.forEach(group=>{group.collapsed=collapse;});persistLinks();renderLinkGroups();
+  });
 
   function persistLinks() {
     saveJson(LINKS_KEY, linkGroups);
@@ -260,8 +271,20 @@
 
   function renderLinkGroups() {
     if (!linkGroupsEl) return;
+    const groupScroll = new Map([...linkGroupsEl.querySelectorAll('.link-group')].map(section=>[section.dataset.groupId,section.querySelector('.link-list')?.scrollTop||0]));
     linkGroupsEl.replaceChildren();
     updateLinkBulkAction();
+    const query=normalizeLinkSearch(linksSearch?.value).trim(),tokens=query.split(/\s+/).filter(Boolean);
+    const selected=groupFilter?.value||'';
+    if(groupFilter){
+      const options=[['','全部分组'],...linkGroups.map(g=>[String(g.id),`${g.name||'未命名分组'} (${(g.links||[]).length})`])];
+      const signature=JSON.stringify(options);
+      if(groupFilter.dataset.signature!==signature){groupFilter.replaceChildren(...options.map(([value,label])=>new Option(label,value)));groupFilter.value=selected;groupFilter.dataset.signature=signature;}
+    }
+    const visibleGroups=linkGroups.filter(g=>!groupFilter?.value||String(g.id)===groupFilter.value).map(group=>({group,links:(group.links||[]).filter(link=>tokens.every(token=>normalizeLinkSearch(`${group.name} ${link.title} ${link.url}`).includes(token)))})).filter(entry=>!query||entry.links.length);
+    const matched=visibleGroups.reduce((sum,entry)=>sum+entry.links.length,0),total=allLinks().length;
+    const counter=document.getElementById('links-result-count');if(counter)counter.textContent=`${matched} / ${total} 个链接`;
+    const collapseButton=document.getElementById('links-collapse-all');if(collapseButton){collapseButton.disabled=!!query||!linkGroups.length;collapseButton.textContent=linkGroups.some(g=>!g.collapsed)?'全部折叠':'全部展开';}
     if (!linkGroups.length) {
       const empty = document.createElement('div');
       empty.className = 'links-empty';
@@ -270,9 +293,11 @@
       return;
     }
 
-    linkGroups.forEach((group) => {
+    if(!visibleGroups.length){const empty=document.createElement('div');empty.className='links-empty';empty.textContent='没有匹配链接，试试其他关键词或分组';linkGroupsEl.append(empty);return;}
+    visibleGroups.forEach(({group,links}) => {
+      const collapsed=group.collapsed&&!query;
       const section = document.createElement('section');
-      section.className = `link-group${group.collapsed ? ' collapsed' : ''}`;
+      section.className = `link-group${collapsed ? ' collapsed' : ''}`;
       section.dataset.groupId = group.id;
 
       const header = document.createElement('header');
@@ -281,7 +306,8 @@
       toggle.className = 'group-toggle';
       toggle.type = 'button';
       toggle.dataset.action = 'toggle-group';
-      toggle.setAttribute('aria-label', group.collapsed ? '展开分组' : '折叠分组');
+      toggle.setAttribute('aria-label', collapsed ? '展开分组' : '折叠分组');
+      toggle.setAttribute('aria-expanded',String(!collapsed));toggle.disabled=!!query;
       toggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>';
       const name = document.createElement('input');
       name.className = 'group-name-input';
@@ -290,7 +316,7 @@
       name.setAttribute('aria-label', '分组名称');
       const count = document.createElement('span');
       count.className = 'group-count';
-      count.textContent = `${Array.isArray(group.links) ? group.links.length : 0}`;
+      count.textContent = query ? `${links.length} / ${(group.links||[]).length}` : `${links.length}`;
       header.append(toggle, name, count);
       header.appendChild(createIconButton('add-link-to-group', `在“${group.name || '当前分组'}”中新增链接`, ADD_ICON));
       header.appendChild(createIconButton('delete-group', '删除分组及其中所有链接', DELETE_ICON, true));
@@ -305,7 +331,8 @@
       }
       const list = document.createElement('div');
       list.className = 'link-list';
-      (group.links || []).forEach((link) => {
+      const limit=linkLimits.get(group.id)||LINK_PAGE_SIZE;
+      (collapsed?[]:links.slice(0,limit)).forEach((link) => {
         const row = document.createElement('article');
         row.className = `link-item${linkSelection.has(link.id) ? ' multi-selected' : ''}`;
         row.dataset.linkId = link.id;
@@ -315,7 +342,7 @@
         if (link.icon && String(link.icon).startsWith('data:image/')) {
           const image = document.createElement('img');
           image.src = link.icon;
-          image.alt = '';
+          image.alt = ''; image.loading='lazy';image.decoding='async';
           mark.appendChild(image);
         } else {
           mark.textContent = (linkHostname(link.url).charAt(0) || '·').toUpperCase();
@@ -341,8 +368,13 @@
       });
 
       body.append(list);
+      if(!collapsed&&links.length>limit){
+        const more=document.createElement('button');more.type='button';more.className='links-load-more';more.textContent=`再显示 ${Math.min(LINK_PAGE_SIZE,links.length-limit)} 条 · 还有 ${links.length-limit} 条`;
+        more.addEventListener('click',()=>{linkLimits.set(group.id,limit+LINK_PAGE_SIZE);const top=linkGroupsEl.scrollTop;renderLinkGroups();linkGroupsEl.scrollTop=top;const section=[...linkGroupsEl.children].find(el=>el.dataset.groupId===String(group.id));const firstNew=section?.querySelectorAll('.link-open')[limit];firstNew?.focus({preventScroll:true});const scroller=section?.querySelector('.link-list');if(scroller&&firstNew)scroller.scrollTop+=firstNew.getBoundingClientRect().top-scroller.getBoundingClientRect().top;});body.append(more);
+      }
       section.append(header, body);
       linkGroupsEl.appendChild(section);
+      list.scrollTop=groupScroll.get(String(group.id))||0;
     });
   }
 
@@ -366,8 +398,13 @@
     } else {
       linkGroups = Domain.addLinkToGroups(linkGroups, link, Domain.classifyLink(normalized, ''));
     }
+    const destination=linkGroups.find(group=>(group.links||[]).some(item=>item.id===link.id));
+    if(destination)linkLimits.set(destination.id,Math.max(LINK_PAGE_SIZE,destination.links.length));
+    if(linksSearch)linksSearch.value='';if(groupFilter)groupFilter.value='';
+    linkSelection.clear();linkSelectionAnchor=null;
     persistLinks();
     renderLinkGroups();
+    requestAnimationFrame(()=>linkGroupsEl.querySelector(`[data-link-id="${CSS.escape(String(link.id))}"]`)?.scrollIntoView({block:'nearest'}));
     setLinksStatus('链接已保存');
 
     // 保存动作不等待网络或大模型。标题、图标和分组在后台静默补全。
@@ -482,7 +519,7 @@
       if (event.shiftKey && link) {
         event.preventDefault();
         const result = Domain.updateRangeSelection(
-          allLinks().map((item) => item.id),
+          [...linkGroupsEl.querySelectorAll('.link-item[data-link-id]')].map(item=>item.dataset.linkId),
           [...linkSelection],
           link.id,
           linkSelectionAnchor,
@@ -602,6 +639,7 @@
     }
 
     linkGroupsEl.addEventListener('pointerdown', (event) => {
+      if(linksSearch?.value.trim()||groupFilter?.value)return;
       if (event.button !== 0) return;
       const row = event.target.closest('.link-item[data-link-id]');
       // 编辑 / 删除按钮和标题输入框保持原有点击语义，不参与拖拽。
@@ -2644,6 +2682,9 @@
     selectLink(id) {
       const group = linkGroups.find((g) => (g.links || []).some((l) => String(l.id) === String(id)));
       if (!group) return false;
+      if(linksSearch)linksSearch.value='';if(groupFilter)groupFilter.value='';
+      const index=(group.links||[]).findIndex(link=>String(link.id)===String(id));
+      linkLimits.set(group.id,Math.max(LINK_PAGE_SIZE,Math.ceil((index+1)/LINK_PAGE_SIZE)*LINK_PAGE_SIZE));
       group.collapsed = false; renderLinkGroups();
       requestAnimationFrame(() => {
         const row = document.querySelector(`[data-link-id="${CSS.escape(String(id))}"]`);
