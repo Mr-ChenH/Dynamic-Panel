@@ -241,7 +241,7 @@ body {
    只有可见岛体在接近时增大，离开后自动回到紧凑尺寸。 */
 #app[data-platform='win32'].collapsed .notch {
   width: 160px;
-  height: 16px;
+  height: 8px;
   padding-bottom: 1px;
   border-radius: 0 0 5px 5px;
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22);
@@ -374,10 +374,10 @@ body {
   transition: opacity var(--d-fast) var(--ease-out);
 }
 
-/* Windows 收起时直接过渡到最终紧凑尺寸，避免先回到 200 × 38 再跳成 160 × 16。 */
+/* Windows 收起时直接过渡到最终紧凑尺寸，避免先回到 200 × 38 再跳成 160 × 8。 */
 #app[data-platform='win32'].closing .notch {
   width: 160px;
-  height: 16px;
+  height: 8px;
   align-items: flex-end;
   padding-bottom: 1px;
   border-radius: 0 0 5px 5px;

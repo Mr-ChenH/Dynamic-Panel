@@ -48,12 +48,12 @@ test('Windows collapsed notch stays compact and grows only on approach', () => {
   const hoverRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch:hover \{([\s\S]*?)\n\}/)?.[1] || '';
   const closingRule = stylesCss.match(/#app\[data-platform='win32'\]\.closing \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
   assert.match(compactRule, /width:\s*160px/);
-  assert.match(compactRule, /height:\s*16px/);
+  assert.match(compactRule, /height:\s*8px/);
   assert.match(compactRule, /width var\(--d-base\)/);
   assert.match(hoverRule, /width:\s*184px/);
   assert.match(hoverRule, /height:\s*30px/);
   assert.match(closingRule, /width:\s*160px/);
-  assert.match(closingRule, /height:\s*16px/);
+  assert.match(closingRule, /height:\s*8px/);
   assert.match(closingRule, /background:\s*var\(--bg-base\)/);
   assert.doesNotMatch(appJs, /native-resizing/);
 });
