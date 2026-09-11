@@ -33,6 +33,7 @@
       "main-services.js",
       "platform.js",
       "launcher/**/*.js",
+      "ai/**/*.js",
       "build/to-do-panel-icon.png",
       "preload.js",
       "renderer/**/*",

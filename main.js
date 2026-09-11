@@ -1,6 +1,7 @@
 const {
   app,
   BrowserWindow,
+  webContents,
   screen,
   ipcMain,
   Tray,
@@ -19,12 +20,15 @@ const WebSocket = require('ws');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
 const dns = require('dns');
+const { Readable } = require('stream');
 const zlib = require('zlib');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const platformPolicy = require('./platform');
 const { createLauncherService } = require('./launcher/service');
+const { createAIService } = require('./ai/service');
 const { resolveLaunchPath } = require('./launcher/paths');
 const launcherFocus = require('./launcher/focus').createFocusService();
 const launcherApplications = require('./launcher/application-actions').createApplicationActions({readShortcut:file=>shell.readShortcutLink(file),owner:()=>mainWindow&&!mainWindow.isDestroyed()?mainWindow.getNativeWindowHandle().readBigUInt64LE(0):null});
@@ -40,9 +44,7 @@ const {
   todoReminderTimerDelay,
   taskNotificationIdentity,
   normalizeCredentialInput,
-  parseSmartLinkMetadata,
   extractFaviconHref,
-  parseSmartMaterialMetadata,
   clipboardServicePolicy,
   createClipboardImageFingerprint,
   prepareClipboardImagePayload,
@@ -220,6 +222,7 @@ const NOTE_IMAGE_MAX_EDGE = 2400;
 
 const RECORDINGS_DIR_NAME = 'recordings';
 const TRANSCRIPTION_SETTINGS_FILE = 'transcription-settings.json';
+const AI_DIAGNOSTICS_FILE = 'ai-diagnostics.json';
 const CREDENTIALS_VAULT_FILE = 'credentials.vault.json';
 const APP_SETTINGS_FILE = 'app-settings.json';
 const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
@@ -297,6 +300,8 @@ let previousPasteTarget = null;
 let windowScanCache = new Map();
 const windowIconCache = new Map();
 const transcriptionSessions = new Map();
+let aiModelService = null;
+let aiContextGeneration = 0;
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -1057,6 +1062,8 @@ function createWindow() {
   });
 
   installLocalWebContentsGuards(mainWindow.webContents);
+  const rendererOwnerId = mainWindow.webContents.id;
+  mainWindow.webContents.on('render-process-gone', () => aiModelService?.cancelOwner(rendererOwnerId));
 
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   if (process.platform === 'darwin') mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -1253,6 +1260,8 @@ async function chooseWorkspaceFolder() {
   const previousRoot = workspaceRoot();
   copyWorkspaceAssets(previousRoot, selected);
   if (!writeJsonFile(getJsonSettingsPath(WORKSPACE_SETTINGS_FILE), { path: selected })) return false;
+  aiContextGeneration += 1;
+  aiModelService?.cancelAll();
   for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME, NOTE_IMAGES_DIR_NAME]) {
     try { fs.mkdirSync(path.join(selected, directory), { recursive: true }); } catch (error) {}
   }
@@ -1861,6 +1870,52 @@ async function validatePublicHttpUrl(value) {
   return url;
 }
 
+async function resolvePinnedAIEndpoint(value) {
+  let url;
+  try { url = new URL(value); } catch (error) { return null; }
+  if (url.protocol !== 'https:' || url.username || url.password) return null;
+  const hostname = url.hostname.toLowerCase();
+  if (!hostname || hostname === 'localhost' || hostname.endsWith('.local')) return null;
+  let addresses;
+  try { addresses = await dns.promises.lookup(hostname, { all: true, verbatim: true }); }
+  catch (error) { return null; }
+  const publicAddresses = addresses.filter((item) => !isPrivateAddress(item.address));
+  if (!publicAddresses.length || publicAddresses.length !== addresses.length) return null;
+  return { url: url.toString(), address: publicAddresses[0].address, family: publicAddresses[0].family };
+}
+
+function fetchPinnedAIEndpoint(endpoint, options = {}) {
+  if (!endpoint || typeof endpoint !== 'object' || !endpoint.url || !endpoint.address) return fetch(String(endpoint || ''), options);
+  const url = new URL(endpoint.url);
+  return new Promise((resolve, reject) => {
+    const request = https.request({
+      protocol: 'https:',
+      hostname: url.hostname,
+      port: url.port || 443,
+      path: `${url.pathname}${url.search}`,
+      method: options.method || 'GET',
+      headers: options.headers,
+      servername: url.hostname,
+      lookup: (_hostname, lookupOptions, callback) => {
+        if (lookupOptions?.all) callback(null, [{ address: endpoint.address, family: endpoint.family }]);
+        else callback(null, endpoint.address, endpoint.family);
+      },
+    }, (response) => {
+      const headers = { get: (name) => response.headers[String(name || '').toLowerCase()] || null };
+      resolve({ ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode || 0, headers, body: Readable.toWeb(response) });
+    });
+    request.once('error', reject);
+    const onAbort = () => request.destroy(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+    if (options.signal) {
+      if (options.signal.aborted) { onAbort(); return; }
+      options.signal.addEventListener('abort', onAbort, { once: true });
+      request.once('close', () => options.signal.removeEventListener('abort', onAbort));
+    }
+    if (options.body) request.write(options.body);
+    request.end();
+  });
+}
+
 async function readResponseText(response) {
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -1904,53 +1959,23 @@ async function fetchFaviconDataUrl(pageUrl, html) {
   }
 }
 
-async function enrichLinkMetadata(url, title) {
+async function enrichLinkMetadata(url, title, ownerId = 'link-metadata') {
+  const settings = readStoredTranscriptionSettings();
   const config = resolveLlmConfig();
-  if (!config.apiKey || !config.model) return { title, category: '' };
-  const endpoint = config.baseUrl.endsWith('/chat/completions')
-    ? config.baseUrl
-    : `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
-  const safeEndpoint = await validatePublicHttpUrl(endpoint);
-  if (!safeEndpoint) return { title, category: '' };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LINK_FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(safeEndpoint, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'DynamicPanel/0.3 (+local bookmark organizer)',
-      },
-      body: JSON.stringify({
-        model: config.model,
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        ...(config.baseUrl.includes('deepseek.com') ? { thinking: { type: 'disabled' } } : {}),
-        messages: [
-          {
-            role: 'system',
-            content: '你是网址收藏夹整理器。只返回 JSON：{"title":"简洁中文名称","category":"短分类"}。分类应稳定、可复用，不超过 14 个字。',
-          },
-          { role: 'user', content: `URL: ${url}\n网页标题: ${title}` },
-        ],
-      }),
-    });
-    if (!response.ok) return { title, category: '' };
-    const payload = await response.json();
-    const content = payload && payload.choices && payload.choices[0] && payload.choices[0].message && payload.choices[0].message.content;
-    const parsed = parseSmartLinkMetadata(content);
-    if (!parsed) return { title, category: '' };
-    return { title: parsed.title || title, category: parsed.category };
-  } catch (error) {
-    return { title, category: '' };
-  } finally {
-    clearTimeout(timeout);
-  }
+  if (settings.autoOrganizeLinks !== true || !config.apiKey || !config.model || !aiModelService) return { title, category: '' };
+  const sourceText = `URL: ${url}\n网页标题: ${title}`;
+  const result = await aiModelService.run(ownerId, {
+    requestId: `link-${crypto.randomUUID()}`,
+    action: 'nameLink',
+    context: { sourceType: 'link', sourceId: url, sourceRevision: crypto.createHash('sha256').update(`link\0${url}\0${sourceText}`).digest('hex'), sourceTitle: title, text: sourceText },
+    referenceTime: new Date().toISOString(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    categories: {},
+  });
+  return result?.ok ? { title: result.title || title, category: result.category || '' } : { title, category: '' };
 }
 
-async function inspectLink(rawUrl) {
+async function inspectLink(rawUrl, ownerId) {
   let current = await validatePublicHttpUrl(rawUrl);
   if (!current) return { ok: false, error: 'invalid_or_private_url' };
   for (let redirectCount = 0; redirectCount <= LINK_FETCH_MAX_REDIRECTS; redirectCount++) {
@@ -1995,7 +2020,7 @@ async function inspectLink(rawUrl) {
     const fallback = current.hostname.replace(/^www\./, '');
     if (!response.ok || (!contentType.includes('text/html') && !contentType.includes('xhtml'))) {
       const [smart, icon] = await Promise.all([
-        enrichLinkMetadata(current.toString(), fallback),
+        enrichLinkMetadata(current.toString(), fallback, ownerId),
         fetchFaviconDataUrl(current.toString(), ''),
       ]);
       return { ok: true, url: current.toString(), title: smart.title || '未命名', category: smart.category, icon };
@@ -2003,7 +2028,7 @@ async function inspectLink(rawUrl) {
     const html = await readResponseText(response);
     const pageTitle = extractPageTitle(html, fallback);
     const [smart, icon] = await Promise.all([
-      enrichLinkMetadata(current.toString(), pageTitle),
+      enrichLinkMetadata(current.toString(), pageTitle, ownerId),
       fetchFaviconDataUrl(current.toString(), html),
     ]);
     return { ok: true, url: current.toString(), title: smart.title, category: smart.category, icon };
@@ -2011,52 +2036,24 @@ async function inspectLink(rawUrl) {
   return { ok: false, error: 'too_many_redirects' };
 }
 
-ipcMain.handle('links:inspect', (event, url) => inspectLink(url));
+ipcMain.handle('links:inspect', (event, url) => inspectLink(url, event.sender.id));
 
 ipcMain.handle('smart:organize-material', async (event, payload) => {
-  const config = resolveLlmConfig();
-  const kind = payload && payload.kind === 'note' ? 'note' : 'material';
-  const transcript = String(payload && payload.text || '').trim().slice(0, 8000);
-  if (!transcript) return { ok: false, error: 'empty_text' };
-  if (!config.apiKey || !config.model) return { ok: false, error: 'not_configured' };
-  const endpoint = config.baseUrl.endsWith('/chat/completions')
-    ? config.baseUrl
-    : `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
-  const safeEndpoint = await validatePublicHttpUrl(endpoint);
-  if (!safeEndpoint) return { ok: false, error: 'invalid_endpoint' };
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 9000);
-  try {
-    const response = await fetch(safeEndpoint, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: config.model,
-        temperature: 0.1,
-        response_format: { type: 'json_object' },
-        ...(config.baseUrl.includes('deepseek.com') ? { thinking: { type: 'disabled' } } : {}),
-        messages: [
-          {
-            role: 'system',
-            content: kind === 'note'
-              ? '你是中文笔记命名助手。理解整篇笔记后概括主题，禁止把正文首句直接当标题。只返回 JSON：{"title":"8到18字的具体标题","category":"2到8字的稳定分类"}。'
-              : '你是中文个人资料库整理器。根据内容概括，不要照抄首句。只返回 JSON：{"title":"8到18字的具体名称","category":"2到8字的稳定分类"}。',
-          },
-          { role: 'user', content: kind === 'note' ? `请为以下笔记命名：\n\n${transcript}` : transcript },
-        ],
-      }),
-    });
-    if (!response.ok) return { ok: false, error: `http_${response.status}` };
-    const result = await response.json();
-    const content = result && result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content;
-    const metadata = parseSmartMaterialMetadata(content);
-    return metadata && metadata.title ? { ok: true, ...metadata } : { ok: false, error: 'invalid_response' };
-  } catch (error) {
-    return { ok: false, error: error && error.name === 'AbortError' ? 'timeout' : 'request_failed' };
-  } finally {
-    clearTimeout(timeout);
-  }
+  const text = String(payload && payload.text || '').trim();
+  const kind = payload && payload.kind === 'note' ? 'note' : 'recording';
+  const sourceId = String(payload && payload.sourceId || '').trim().slice(0, 100);
+  const sourceRevision = crypto.createHash('sha256').update(`${kind}\0${sourceId}\0${text}`).digest('hex');
+  if (!text) return { ok: false, error: 'empty_text' };
+  if (text.length > 12000) return { ok: false, error: 'input_too_long', limit: 12000 };
+  if (!aiModelService) return { ok: false, error: 'not_configured' };
+  return aiModelService.run(event.sender.id, {
+    requestId: `legacy-${crypto.randomUUID()}`,
+    action: kind === 'note' ? 'nameNote' : 'nameRecording',
+    context: { sourceType: kind, sourceId: sourceId || sourceRevision, sourceRevision, text },
+    referenceTime: new Date().toISOString(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    categories: {},
+  });
 });
 
 const WINDOWS_LIST_JXA = `
@@ -2665,6 +2662,44 @@ function readStoredTranscriptionSettings() {
   return selected;
 }
 
+function writeTranscriptionSettings(settings) {
+  fs.mkdirSync(path.dirname(getTranscriptionSettingsPath()), { recursive: true });
+  fs.writeFileSync(getTranscriptionSettingsPath(), JSON.stringify(settings), { mode: 0o600 });
+}
+
+function getAIDiagnosticsPath() {
+  return path.join(app.getPath('userData'), AI_DIAGNOSTICS_FILE);
+}
+
+function readAIDiagnostics() {
+  try {
+    const value = JSON.parse(fs.readFileSync(getAIDiagnosticsPath(), 'utf8'));
+    return Array.isArray(value) ? value.slice(-50) : [];
+  } catch (error) { return []; }
+}
+
+function appendAIDiagnostic(entry) {
+  const result = entry && entry.result || {};
+  const config = entry && entry.config || {};
+  let provider = 'unknown';
+  try { provider = new URL(config.baseUrl).hostname; } catch (error) {}
+  const diagnostic = {
+    id: crypto.randomUUID(),
+    at: new Date().toISOString(),
+    action: String(entry?.request?.action || 'unknown').slice(0, 40),
+    provider: String(provider).slice(0, 120),
+    model: String(config.model || '').slice(0, 120),
+    durationMs: Math.max(0, Math.round(Number(entry?.durationMs) || 0)),
+    queueWaitMs: Math.max(0, Math.round(Number(entry?.queueWaitMs) || 0)),
+    status: result.ok ? 'completed' : result.error === 'cancelled' ? 'cancelled' : 'failed',
+    error: result.ok ? '' : String(result.error || 'unknown').slice(0, 80),
+    usage: result.usage && typeof result.usage === 'object' ? result.usage : null,
+    promptVersion: String(result.promptVersion || entry?.promptVersion || '').slice(0, 40),
+  };
+  try { fs.writeFileSync(getAIDiagnosticsPath(), JSON.stringify([...readAIDiagnostics(), diagnostic].slice(-50)), { mode: 0o600 }); }
+  catch (error) {}
+}
+
 function decryptStoredApiKey(settings) {
   const environmentKey = String(process.env.DASHSCOPE_API_KEY || '').trim();
   if (environmentKey) return environmentKey;
@@ -2686,6 +2721,11 @@ function resolveLlmConfig() {
     apiKey: String(process.env.NOTCH_LLM_API_KEY || decryptStoredSecret(settings.encryptedLlmApiKey)).trim(),
     baseUrl: String(settings.llmBaseUrl || 'https://api.deepseek.com').trim(),
     model: String(settings.llmModel || 'deepseek-v4-flash').trim(),
+    timeoutMs: Math.max(10000, Math.min(60000, Number(settings.llmTimeoutMs) || 30000)),
+    kind: (() => {
+      try { return new URL(String(settings.llmBaseUrl || 'https://api.deepseek.com')).hostname === 'api.deepseek.com' ? 'deepseek' : 'compatible'; }
+      catch (error) { return 'compatible'; }
+    })(),
   };
 }
 
@@ -2719,6 +2759,11 @@ function publicTranscriptionConfig() {
     llmNeedsReentry: Boolean(settings.encryptedLlmApiKey && !llmConfig.apiKey),
     llmBaseUrl: String(settings.llmBaseUrl || 'https://api.deepseek.com'),
     llmModel: String(settings.llmModel || 'deepseek-v4-flash'),
+    llmTimeoutMs: Math.max(10000, Math.min(60000, Number(settings.llmTimeoutMs) || 30000)),
+    autoNameNotes: settings.autoNameNotes === true,
+    autoNameRecordings: settings.autoNameRecordings === true,
+    autoOrganizeLinks: settings.autoOrganizeLinks === true,
+    aiMigrationNoticePending: Object.keys(settings).length > 0 && settings.aiSettingsVersion !== 1,
   };
 }
 
@@ -2804,6 +2849,54 @@ function handleTranscriptionMessage(session, raw) {
   }
 }
 
+aiModelService = createAIService({
+  fetchImpl: fetchPinnedAIEndpoint,
+  getConfig: resolveLlmConfig,
+  getBinding: () => String(aiContextGeneration),
+  validateEndpoint: resolvePinnedAIEndpoint,
+  onDiagnostic: appendAIDiagnostic,
+  onEvent: (ownerId, event) => {
+    const target = webContents.fromId(Number(ownerId));
+    if (target && !target.isDestroyed()) target.send('ai:event', event);
+  },
+});
+
+ipcMain.handle('ai:run', (event, payload) => aiModelService.run(event.sender.id, payload));
+ipcMain.handle('ai:cancel', (event, requestId) => aiModelService.cancel(event.sender.id, requestId));
+ipcMain.handle('ai:test-provider', async (event) => {
+  const referenceTime = new Date().toISOString();
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const textResult = await aiModelService.run(event.sender.id, {
+    requestId: `connection-text-${crypto.randomUUID()}`,
+    action: 'summarize',
+    context: { sourceType: 'manual', sourceId: '', sourceRevision: '', text: '连接测试：请只回复“已连接”。' },
+    referenceTime,
+    timeZone,
+    categories: {},
+  });
+  if (!textResult.ok) return textResult;
+  const structuredResult = await aiModelService.run(event.sender.id, {
+    requestId: `connection-json-${crypto.randomUUID()}`,
+    action: 'nameLink',
+    context: { sourceType: 'link', sourceId: 'connection-test', sourceRevision: '', text: 'URL: https://example.com\n网页标题: Example' },
+    referenceTime,
+    timeZone,
+    categories: {},
+  });
+  if (!structuredResult.ok) return { ...structuredResult, error: 'structured_output_unsupported', providerError: structuredResult.error };
+  return { ok: true, capabilities: { text: true, structuredJson: true }, promptVersion: structuredResult.promptVersion };
+});
+
+ipcMain.handle('ai:get-diagnostics', () => ({ ok: true, items: readAIDiagnostics() }));
+ipcMain.handle('ai:clear-diagnostics', () => {
+  try { fs.rmSync(getAIDiagnosticsPath(), { force: true }); return { ok: true }; }
+  catch (error) { return { ok: false, error: 'clear_failed' }; }
+});
+ipcMain.handle('ai:ack-migration', () => {
+  try { writeTranscriptionSettings({ ...readStoredTranscriptionSettings(), aiSettingsVersion: 1 }); return { ok: true, ...publicTranscriptionConfig() }; }
+  catch (error) { return { ok: false, error: 'save_failed' }; }
+});
+
 ipcMain.handle('transcription:get-config', () => publicTranscriptionConfig());
 
 ipcMain.handle('transcription:set-config', (event, payload) => {
@@ -2814,6 +2907,7 @@ ipcMain.handle('transcription:set-config', (event, payload) => {
   const llmApiKey = String(payload && payload.llmApiKey || '').trim();
   const llmBaseUrl = String(payload && payload.llmBaseUrl || previous.llmBaseUrl || 'https://api.deepseek.com').trim();
   const llmModel = String(payload && payload.llmModel || previous.llmModel || 'deepseek-v4-flash').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const llmTimeoutMs = Math.max(10000, Math.min(60000, Number(payload && payload.llmTimeoutMs) || Number(previous.llmTimeoutMs) || 30000));
   if (workspaceId && !/^[A-Za-z0-9_-]{1,128}$/.test(workspaceId)) {
     return { ok: false, error: 'invalid_workspace' };
   }
@@ -2826,6 +2920,7 @@ ipcMain.handle('transcription:set-config', (event, payload) => {
     return { ok: false, error: 'secure_storage_unavailable' };
   }
   const next = {
+    ...previous,
     region,
     workspaceId,
     encryptedApiKey: apiKey
@@ -2833,12 +2928,19 @@ ipcMain.handle('transcription:set-config', (event, payload) => {
       : String(previous.encryptedApiKey || ''),
     llmBaseUrl: parsedLlmUrl.toString().replace(/\/$/, ''),
     llmModel,
+    llmTimeoutMs,
+    autoNameNotes: payload && payload.autoNameNotes === true,
+    autoNameRecordings: payload && payload.autoNameRecordings === true,
+    autoOrganizeLinks: payload && payload.autoOrganizeLinks === true,
+    aiSettingsVersion: 1,
     encryptedLlmApiKey: llmApiKey
       ? safeStorage.encryptString(llmApiKey).toString('base64')
       : String(previous.encryptedLlmApiKey || ''),
   };
   try {
-    fs.writeFileSync(getTranscriptionSettingsPath(), JSON.stringify(next), { mode: 0o600 });
+    writeTranscriptionSettings(next);
+    aiContextGeneration += 1;
+    aiModelService?.cancelAll();
     return { ok: true, ...publicTranscriptionConfig() };
   } catch (error) {
     return { ok: false, error: 'save_failed' };

@@ -32,6 +32,12 @@ function collectLocalStorageSnapshot() {
   return result;
 }
 
+async function syncWorkspaceSnapshot() {
+  if (!window.notchAPI?.saveWorkspaceData) return true;
+  try { return await window.notchAPI.saveWorkspaceData(collectLocalStorageSnapshot()) !== false; }
+  catch (error) { return false; }
+}
+
 let workspaceReloadPending = false;
 async function hydratePortableWorkspace() {
   if (!window.notchAPI?.loadWorkspaceData) return;
@@ -63,8 +69,9 @@ if (document.readyState === 'loading') {
 } else {
   hydratePortableWorkspace();
 }
-window.notchAPI?.onWorkspaceChanged?.(() => {
+window.notchAPI?.onWorkspaceChanged?.(async () => {
   sessionStorage.removeItem('notch-workspace-hydrated');
+  if (window.NotchAI?.isOpen()) await window.NotchAI.close();
   window.notchAPI.saveWorkspaceData(collectLocalStorageSnapshot()).finally(() => location.reload());
 });
 
@@ -175,13 +182,14 @@ function saveData(data) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
-    // ignore quota errors
+    return false;
   }
   if (window.notchAPI && typeof window.notchAPI.scheduleTodoReminders === 'function') {
     const reminders = PRIORITIES.flatMap((priority) => data[priority] || []);
     window.notchAPI.scheduleTodoReminders(reminders).catch(() => {});
   }
   if (typeof renderTodoPlanner === 'function') renderTodoPlanner();
+  return true;
 }
 
 let data = loadData();
@@ -786,6 +794,7 @@ panel.addEventListener('click', (e) => {
 // Escape 不会原生到达页面（被浏览器层吞掉），由主进程 before-input-event 转发
 if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
   window.notchAPI.onEscape(() => {
+    if (window.NotchAI?.isOpen()) { window.NotchAI.close(); return; }
     if (window.NotchLauncher?.handleEscape()) return;
     const el = document.activeElement;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
@@ -807,6 +816,7 @@ if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
 
 if (window.notchAPI && typeof window.notchAPI.onToggleShortcut === 'function') {
   window.notchAPI.onToggleShortcut(async () => {
+    if (window.NotchAI?.isOpen()) await window.NotchAI.close();
     if (window.NotchLauncher?.isOpen()) await window.NotchLauncher.close();
     setMode(!isExpanded);
   });
@@ -814,7 +824,8 @@ if (window.notchAPI && typeof window.notchAPI.onToggleShortcut === 'function') {
 
 // 失焦与点击收起共用同一个状态机，保证退场节奏一致。
 if (window.notchAPI && typeof window.notchAPI.onCollapseRequest === 'function') {
-  window.notchAPI.onCollapseRequest(() => {
+  window.notchAPI.onCollapseRequest(async () => {
+    if (window.NotchAI?.isOpen()) await window.NotchAI.close();
     if (window.NotchLauncher?.isOpen()) { window.NotchLauncher.close(); return; }
     if (isExpanded) setMode(false);
   });
@@ -1175,11 +1186,33 @@ todoScopeButtons.forEach((button, index) => {
 });
 
 todoOverdueJump?.addEventListener('click', () => setTodoTimeScope('today', { focusOverdue: true }));
+document.getElementById('todo-ai-add')?.addEventListener('click', () => window.NotchAI?.openText?.('extractTodos'));
 
 window.NotchTodo = {
   getTimeScope: () => todoTimeScope,
   setTimeScope: (scope) => setTodoTimeScope(scope),
   getScopeCounts: () => ({ ...window.NotchDomain.todoTimeScopeCounts(allTodoItems()) }),
+  snapshot: () => Object.fromEntries(PRIORITIES.map((priority) => [priority, (data[priority] || []).map((todo) => ({ ...todo }))])),
+  async applyAIBatch(candidates) {
+    const applied = window.NotchAIDomain?.createTodoBatch(data, candidates, () => generateId(), Date.now());
+    if (!applied?.ok) return applied || { ok: false, error: 'invalid_candidates' };
+    const previous = data;
+    data = applied.next;
+    if (!saveData(data)) { data = previous; return { ok: false, error: 'save_failed' }; }
+    renderAll();
+    const workspaceSynced = await syncWorkspaceSnapshot();
+    return { ok: true, count: applied.added.length, undo: applied.added, workspaceSynced };
+  },
+  async undoAIBatch(added) {
+    const result = window.NotchAIDomain?.undoTodoBatch(data, added);
+    if (!result) return { ok: false, error: 'invalid_undo' };
+    const previous = data;
+    data = result.next;
+    if (!saveData(data)) { data = previous; return { ok: false, error: 'save_failed' }; }
+    renderAll();
+    const workspaceSynced = await syncWorkspaceSnapshot();
+    return { ok: true, removed: result.removed.length, conflicts: result.conflicts.length, workspaceSynced };
+  },
 };
 
 const todoEditorBackdrop = document.getElementById('todo-date-popover');
@@ -2447,6 +2480,20 @@ function renderNotesDetail(notes = loadNoteArchive()) {
     button.setAttribute('aria-pressed', String(notesEditorMode === mode));
     modes.append(button);
   }
+  const nameWithAI = noteActionButton(
+    'name-note-ai',
+    '生成标题',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/></svg>',
+    'notes-icon-button ai-note-organize'
+  );
+  const organize = noteActionButton(
+    'organize-note',
+    '整理笔记',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/></svg>',
+    'notes-icon-button ai-note-organize'
+  );
+  nameWithAI.disabled = !String(note.content || '').trim();
+  organize.disabled = !String(note.content || '').trim();
   const attach = noteActionButton(
     'attach-note-image',
     '添加图片',
@@ -2458,7 +2505,7 @@ function renderNotesDetail(notes = loadNoteArchive()) {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12"/></svg>',
     'notes-icon-button danger'
   );
-  actions.append(modes, attach, remove);
+  actions.append(modes, nameWithAI, organize, attach, remove);
   header.append(heading, actions);
 
   const toolbar = document.createElement('div');
@@ -2513,11 +2560,12 @@ async function requestNoteTitle(note) {
     || note.titleSource === 'user'
     || !String(note.content || '').trim()
     || noteTitleAttempts.has(note.id)
+    || window.NotchAISettings?.autoNameNotes !== true
     || !window.notchAPI?.organizeMaterial
   ) return;
   noteTitleAttempts.add(note.id);
   const expectedContent = note.content;
-  const result = await window.notchAPI.organizeMaterial({ kind: 'note', text: expectedContent }).catch(() => null);
+  const result = await window.notchAPI.organizeMaterial({ kind: 'note', sourceId: note.id, text: expectedContent }).catch(() => null);
   if (!result?.ok || !result.title) {
     noteTitleAttempts.delete(note.id);
     return;
@@ -2795,6 +2843,85 @@ document.addEventListener('keydown', (event) => {
 
 window.NotchNotes = {
   create: createNote,
+  context(noteId = selectedNoteId, includeSelection = true) {
+    const editor = notesDetail?.querySelector('#notes-editor');
+    const selection = includeSelection && editor && editor.dataset.noteId === noteId && editor.selectionEnd > editor.selectionStart
+      ? { start: editor.selectionStart, end: editor.selectionEnd, text: editor.value.slice(editor.selectionStart, editor.selectionEnd) }
+      : null;
+    flushNotesEditorSave();
+    const note = loadNoteArchive().find((item) => item.id === noteId);
+    return note ? { sourceType: 'note', sourceId: note.id, sourceTitle: noteArchiveTitle(note), text: selection?.text || note.content, selection, createdAt: note.createdAt } : null;
+  },
+  async applyAIName(noteId, expectedText, expectedTitle, nextTitle) {
+    flushNotesEditorSave();
+    const notes = loadNoteArchive();
+    const note = notes.find((item) => item.id === noteId);
+    const title = String(nextTitle || '').trim().slice(0, 80);
+    if (!note || note.content.trim() !== String(expectedText || '').trim() || noteArchiveTitle(note) !== expectedTitle) return { ok: false, error: 'source_changed' };
+    if (!title) return { ok: false, error: 'missing_title' };
+    const updated = window.NotchDomain.updateNoteTitle(notes, noteId, title, Date.now());
+    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(updated)); } catch (error) { return { ok: false, error: 'save_failed' }; }
+    renderNotesLibrary();
+    return { ok: true, workspaceSynced: await syncWorkspaceSnapshot(), undo: { noteId, before: note.title, after: title, expectedText: note.content.trim() } };
+  },
+  async undoAIName(token) {
+    flushNotesEditorSave();
+    const notes = loadNoteArchive();
+    const note = notes.find((item) => item.id === token?.noteId);
+    if (!note || noteArchiveTitle(note) !== token.after || note.content.trim() !== token.expectedText) return { ok: false, error: 'conflict' };
+    const updated = window.NotchDomain.updateNoteTitle(notes, note.id, token.before, Date.now());
+    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(updated)); } catch (error) { return { ok: false, error: 'save_failed' }; }
+    renderNotesLibrary();
+    return { ok: true, workspaceSynced: await syncWorkspaceSnapshot() };
+  },
+  async replaceAISelection(noteId, selection, expected, replacement) {
+    flushNotesEditorSave();
+    const notes = loadNoteArchive();
+    const note = notes.find((item) => item.id === noteId);
+    const start = Number(selection && selection.start), end = Number(selection && selection.end);
+    if (!note || !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start
+      || note.content.slice(start, end) !== String(expected || '')) return { ok: false, error: 'source_changed' };
+    const nextContent = note.content.slice(0, start) + String(replacement || '') + note.content.slice(end);
+    const next = window.NotchDomain.updateNoteInArchive(notes, noteId, nextContent, Date.now());
+    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next)); }
+    catch (error) { return { ok: false, error: 'save_failed' }; }
+    renderNotesLibrary();
+    const workspaceSynced = await syncWorkspaceSnapshot();
+    return { ok: true, workspaceSynced, undo: { noteId, start, before: expected, after: String(replacement || ''), contentAfter: nextContent } };
+  },
+  async undoAISelection(token) {
+    const notes = loadNoteArchive();
+    const note = notes.find((item) => item.id === token?.noteId);
+    if (!note || note.content !== token.contentAfter || note.content.slice(token.start, token.start + token.after.length) !== token.after) return { ok: false, error: 'conflict' };
+    const content = note.content.slice(0, token.start) + token.before + note.content.slice(token.start + token.after.length);
+    const next = window.NotchDomain.updateNoteInArchive(notes, token.noteId, content, Date.now());
+    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next)); }
+    catch (error) { return { ok: false, error: 'save_failed' }; }
+    renderNotesLibrary();
+    return { ok: true, workspaceSynced: await syncWorkspaceSnapshot() };
+  },
+  async undoGenerated(snapshot) {
+    const notes = loadNoteArchive();
+    const note = notes.find((item) => item.id === snapshot?.id);
+    if (!note || note.title !== snapshot.title || note.content !== snapshot.content || note.createdAt !== snapshot.createdAt) return { ok: false, error: 'conflict' };
+    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.filter((item) => item.id !== note.id))); }
+    catch (error) { return { ok: false, error: 'save_failed' }; }
+    if (selectedNoteId === note.id) selectedNoteId = null;
+    renderNotesLibrary();
+    return { ok: true, workspaceSynced: await syncWorkspaceSnapshot() };
+  },
+  async saveGenerated(title, content) {
+    flushNotesEditorSave();
+    const notes = loadNoteArchive();
+    if (notes.length >= 200) return { ok: false, error: 'capacity' };
+    const now = Date.now();
+    const note = { id: generateId(), title: String(title || '').slice(0, 80), titleSource: 'model', content: String(content || ''), createdAt: now, updatedAt: now };
+    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify([note, ...notes])); }
+    catch (error) { return { ok: false, error: 'save_failed' }; }
+    renderNotesLibrary();
+    const workspaceSynced = await syncWorkspaceSnapshot();
+    return { ok: true, noteId: note.id, note: { ...note }, workspaceSynced };
+  },
   select: (noteId) => {
     if (!loadNoteArchive().some((note) => note.id === noteId)) return false;
     selectedNoteId = noteId;
@@ -2855,7 +2982,10 @@ notesDetail?.addEventListener('input', (event) => {
     return;
   }
   const editor = event.target.closest('#notes-editor');
-  if (editor) scheduleNotesEditorSave(editor);
+  if (editor) {
+    notesDetail.querySelectorAll('[data-action="organize-note"], [data-action="name-note-ai"]').forEach((button) => button.toggleAttribute('disabled', !editor.value.trim()));
+    scheduleNotesEditorSave(editor);
+  }
 });
 
 notesDetail?.addEventListener('focusout', (event) => {
@@ -2891,6 +3021,14 @@ notesDetail?.addEventListener('click', async (event) => {
   const notes = loadNoteArchive();
   const note = notes.find((item) => item.id === selectedNoteId);
   if (!note) return;
+  if (action === 'organize-note') {
+    window.NotchAI?.openNote?.('summarize');
+    return;
+  }
+  if (action === 'name-note-ai') {
+    window.NotchAI?.openNote?.('nameNote');
+    return;
+  }
   if (action === 'attach-note-image') {
     const editor = notesDetail.querySelector('#notes-editor');
     if (notesEditorMode !== 'edit') {
@@ -4169,6 +4307,7 @@ window.NotchPanel = {
     window.NotchPanel.validateTarget(target);
     await setMode(true);
     await setActiveTab(target.tab || 'home');
+    if (target.aiAction) { window.NotchAI?.openText?.(target.aiAction); return; }
     if (target.tab === 'notes' && target.id && !window.NotchNotes.select(target.id)) throw Error('笔记已不存在');
     if (target.tab === 'links' && target.id && !window.NotchWorkspace.selectLink(target.id)) throw Error('链接已不存在');
     if (target.create === 'note') window.NotchNotes.create();

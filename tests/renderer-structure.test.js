@@ -156,6 +156,11 @@ test('settings exposes every panel tab as a possible default opening page', () =
   assert.match(workspaceJs, /setDefaultTab/);
 });
 
+test('automatic AI naming sends stable source identities', () => {
+  assert.match(appJs, /organizeMaterial\(\{ kind: 'note', sourceId: note\.id, text: expectedContent \}\)/);
+  assert.match(workspaceJs, /organizeMaterial\(\{ kind: 'recording', sourceId: recording\.id, text: expectedTranscript \}\)/);
+});
+
 test('hidden visual widgets stop presentation-only background work', () => {
   assert.match(effectsJs, /setEnabled/);
   assert.match(effectsJs, /notch:home-modules-changed/);

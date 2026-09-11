@@ -8,6 +8,7 @@ dist.noindex/
 .vscode/settings.json
 .idea/
 .cache/
+.pi/
 coverage/
 .worktrees/
 *.swp

@@ -11,6 +11,7 @@
   const DELETE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12"/></svg>';
   const ADD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
   const EDIT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10zM13.8 6.7l3.5 3.5"/></svg>';
+  const AI_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/></svg>';
   const OPEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8"/><path d="M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>';
 
   function uid(prefix) {
@@ -36,6 +37,16 @@
     } catch (error) {
       return false;
     }
+  }
+
+  async function syncWorkspaceData() {
+    if (!window.notchAPI?.saveWorkspaceData) return true;
+    const storage = {};
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key) storage[key] = localStorage.getItem(key);
+    }
+    try { return await window.notchAPI.saveWorkspaceData(storage) !== false; } catch (error) { return false; }
   }
 
   function formatClock(ms) {
@@ -227,7 +238,7 @@
   });
 
   function persistLinks() {
-    saveJson(LINKS_KEY, linkGroups);
+    return saveJson(LINKS_KEY, linkGroups);
   }
 
   function setLinksStatus(message, tone = '') {
@@ -360,6 +371,7 @@
         actions.className = 'link-actions';
         actions.append(
           createIconButton('open-link', '打开链接', OPEN_ICON),
+          createIconButton('name-link-ai', '智能生成名称与分类', AI_ICON),
           createIconButton('edit-link', '修改名称', EDIT_ICON),
           createIconButton('delete-link', '删除链接', DELETE_ICON, true)
         );
@@ -565,6 +577,9 @@
         persistLinks();
         renderLinkGroups();
       }
+      if (action.dataset.action === 'name-link-ai' && link) {
+        window.NotchAI?.openLinkName?.(link.id);
+      }
       if (action.dataset.action === 'edit-link' && link && row) {
         const openButton = row.querySelector('.link-open');
         const input = document.createElement('input');
@@ -759,6 +774,16 @@
   const llmApiHelp = document.getElementById('llm-api-help');
   const llmBaseUrl = document.getElementById('llm-base-url');
   const llmModel = document.getElementById('llm-model');
+  const llmTimeout = document.getElementById('llm-timeout');
+  const aiAutoNameNotes = document.getElementById('ai-auto-name-notes');
+  const aiAutoNameRecordings = document.getElementById('ai-auto-name-recordings');
+  const aiAutoOrganizeLinks = document.getElementById('ai-auto-organize-links');
+  const aiProviderTest = document.getElementById('ai-provider-test');
+  const aiDiagnostics = document.getElementById('ai-diagnostics');
+  const aiDiagnosticsCopy = document.getElementById('ai-diagnostics-copy');
+  const aiDiagnosticsClear = document.getElementById('ai-diagnostics-clear');
+  const settingsAiMigration = document.getElementById('settings-ai-migration');
+  const settingsAiMigrationAck = document.getElementById('settings-ai-migration-ack');
   const transcriptionSettingsNote = document.getElementById('transcription-settings-note');
   const settingsApiConfigure = document.getElementById('settings-api-configure');
   const settingsTranscriptionStatus = document.getElementById('settings-transcription-status');
@@ -805,6 +830,11 @@
     llmNeedsReentry: false,
     llmBaseUrl: 'https://api.deepseek.com',
     llmModel: 'deepseek-v4-flash',
+    llmTimeoutMs: 30000,
+    autoNameNotes: false,
+    autoNameRecordings: false,
+    autoOrganizeLinks: false,
+    aiMigrationNoticePending: false,
   };
   let settingsAppSettings = null;
   let settingsWorkspace = null;
@@ -954,6 +984,32 @@
     if (transcriptionWorkspace) transcriptionWorkspace.value = transcriptionConfig.workspaceId || '';
     if (llmBaseUrl) llmBaseUrl.value = transcriptionConfig.llmBaseUrl || 'https://api.deepseek.com';
     if (llmModel) llmModel.value = transcriptionConfig.llmModel || 'deepseek-v4-flash';
+    if (llmTimeout) llmTimeout.value = String(transcriptionConfig.llmTimeoutMs || 30000);
+    if (aiAutoNameNotes) aiAutoNameNotes.checked = transcriptionConfig.autoNameNotes === true;
+    if (aiAutoNameRecordings) aiAutoNameRecordings.checked = transcriptionConfig.autoNameRecordings === true;
+    if (aiAutoOrganizeLinks) aiAutoOrganizeLinks.checked = transcriptionConfig.autoOrganizeLinks === true;
+    if (settingsAiMigration) settingsAiMigration.hidden = transcriptionConfig.aiMigrationNoticePending !== true;
+  }
+
+  function diagnosticText(items) {
+    return items.map((item) => `${item.at} | ${item.action} | ${item.provider} | ${item.model || '-'} | ${item.status}${item.error ? `:${item.error}` : ''} | wait:${item.queueWaitMs || 0}ms run:${item.durationMs}ms | in:${item.usage?.inputTokens || 0} out:${item.usage?.outputTokens || 0} | ${item.promptVersion || '-'}`).join('\n');
+  }
+
+  async function renderAIDiagnostics() {
+    if (!aiDiagnostics) return;
+    const result = await window.notchAPI?.getAIDiagnostics?.().catch(() => ({ ok: false }));
+    const items = result?.ok && Array.isArray(result.items) ? result.items.slice().reverse() : [];
+    aiDiagnostics.replaceChildren();
+    aiDiagnostics.dataset.copyText = '';
+    if (!items.length) { const empty = document.createElement('p'); empty.textContent = result?.ok ? '暂无请求记录' : '无法读取请求诊断'; aiDiagnostics.append(empty); return; }
+    items.forEach((item) => {
+      const row = document.createElement('section'); row.className = 'ai-diagnostic-row';
+      const name = document.createElement('strong'); name.textContent = `${item.action} · ${item.status}`;
+      const time = document.createElement('time'); time.textContent = new Date(item.at).toLocaleString();
+      const detail = document.createElement('span'); detail.textContent = `${item.provider} · ${item.model || '未记录模型'} · 等待 ${item.queueWaitMs || 0}ms · 请求 ${item.durationMs}ms${item.error ? ` · ${item.error}` : ''}`;
+      row.append(name, time, detail); aiDiagnostics.append(row);
+    });
+    aiDiagnostics.dataset.copyText = diagnosticText(items.slice().reverse());
   }
 
   function setSettingsNote(message, error = false) {
@@ -1049,6 +1105,7 @@
       const config = await window.notchAPI.getTranscriptionConfig();
       if (config) transcriptionConfig = config;
     } catch (error) {}
+    window.NotchAISettings = { ...transcriptionConfig };
     updateTranscriptionConfigUi();
     updateRecordingUi();
     renderSettingsPanel();
@@ -1066,6 +1123,7 @@
     if (transcriptionApiKey) transcriptionApiKey.value = '';
     if (llmApiKey) llmApiKey.value = '';
     updateTranscriptionConfigUi();
+    void renderAIDiagnostics();
     setTimeout(() => transcriptionApiKey?.focus(), 0);
   }
 
@@ -1097,6 +1155,10 @@
         llmApiKey: llmApiKey.value,
         llmBaseUrl: llmBaseUrl.value,
         llmModel: llmModel.value,
+        llmTimeoutMs: Number(llmTimeout?.value) || 30000,
+        autoNameNotes: aiAutoNameNotes?.checked === true,
+        autoNameRecordings: aiAutoNameRecordings?.checked === true,
+        autoOrganizeLinks: aiAutoOrganizeLinks?.checked === true,
       });
     } catch (error) {
       result = { ok: false, error: 'save_failed' };
@@ -1114,6 +1176,7 @@
       return;
     }
     transcriptionConfig = result;
+    window.NotchAISettings = { ...transcriptionConfig };
     if (transcriptionApiKey) transcriptionApiKey.value = '';
     if (llmApiKey) llmApiKey.value = '';
     updateTranscriptionConfigUi();
@@ -1138,7 +1201,7 @@
   }
 
   function persistRecordings() {
-    saveJson(RECORDINGS_KEY, recordings.filter((recording) => !recording.isDraft));
+    return saveJson(RECORDINGS_KEY, recordings.filter((recording) => !recording.isDraft));
   }
 
   function currentDuration() {
@@ -1507,10 +1570,13 @@
       selectedRecordingId = recording.id;
       persistRecordings();
       renderRecordings();
-      if (recording.transcript && window.notchAPI?.organizeMaterial) {
-        window.notchAPI.organizeMaterial({ kind: 'recording', text: recording.transcript }).then((metadata) => {
+      if (recording.transcript && transcriptionConfig.autoNameRecordings === true && window.notchAPI?.organizeMaterial) {
+        const expectedTitle = recording.title;
+        const expectedCategory = recording.category;
+        const expectedTranscript = recording.transcript;
+        window.notchAPI.organizeMaterial({ kind: 'recording', sourceId: recording.id, text: expectedTranscript }).then((metadata) => {
           const target = recordings.find((item) => item.id === recording.id);
-          if (!target || !metadata || !metadata.ok) return;
+          if (!target || target.title !== expectedTitle || target.category !== expectedCategory || target.transcript !== expectedTranscript || !metadata || !metadata.ok) return;
           target.title = metadata.title || target.title;
           target.category = metadata.category || target.category;
           persistRecordings();
@@ -1673,6 +1739,42 @@
   if (transcriptionSettingsClose) transcriptionSettingsClose.addEventListener('click', closeTranscriptionSettings);
   if (transcriptionSettingsCancel) transcriptionSettingsCancel.addEventListener('click', closeTranscriptionSettings);
   if (transcriptionSettingsSave) transcriptionSettingsSave.addEventListener('click', saveTranscriptionSettings);
+  settingsAiMigrationAck?.addEventListener('click', async () => {
+    const result = await window.notchAPI?.acknowledgeAIMigration?.().catch(() => ({ ok: false }));
+    if (!result?.ok) { setSettingsNote('无法保存迁移确认，请重试。', true); return; }
+    transcriptionConfig = result; window.NotchAISettings = { ...transcriptionConfig }; updateTranscriptionConfigUi(); renderSettingsPanel();
+  });
+  aiDiagnosticsCopy?.addEventListener('click', async () => {
+    const text = aiDiagnostics?.dataset.copyText || '';
+    if (!text) { transcriptionSettingsNote.textContent = '暂无可复制的请求诊断。'; return; }
+    const result = await window.notchAPI?.writeClipboard?.({ type: 'text', text }).catch(() => false);
+    transcriptionSettingsNote.textContent = result === false || result?.ok === false ? '复制诊断失败。' : '已复制脱敏请求诊断。';
+  });
+  aiDiagnosticsClear?.addEventListener('click', async () => {
+    const result = await window.notchAPI?.clearAIDiagnostics?.().catch(() => ({ ok: false }));
+    transcriptionSettingsNote.textContent = result?.ok ? '已清空请求诊断。' : '清空请求诊断失败。';
+    if (result?.ok) await renderAIDiagnostics();
+  });
+  aiProviderTest?.addEventListener('click', async () => {
+    if (!transcriptionConfig.llmConfigured) {
+      transcriptionSettingsNote.classList.add('error');
+      transcriptionSettingsNote.textContent = '请先保存内容整理 API Key，再测试连接。';
+      return;
+    }
+    aiProviderTest.disabled = true;
+    transcriptionSettingsNote.classList.remove('error', 'success');
+    transcriptionSettingsNote.textContent = '正在测试内容整理服务，可能产生少量 API 费用…';
+    const result = await window.notchAPI?.testAIProvider?.().catch(() => ({ ok: false, error: 'network_error' }));
+    aiProviderTest.disabled = false;
+    transcriptionSettingsNote.classList.toggle('success', result?.ok === true);
+    transcriptionSettingsNote.classList.toggle('error', result?.ok !== true);
+    transcriptionSettingsNote.textContent = result?.ok
+      ? '内容整理服务连接正常，文本与结构化输出均可用。'
+      : result?.error === 'structured_output_unsupported'
+        ? `基础连接正常，但结构化输出不可用（${result.providerError || '格式不兼容'}）。`
+        : `连接测试失败：${result?.error || '请检查配置'}`;
+    await renderAIDiagnostics();
+  });
   if (transcriptionApiHelp) {
     transcriptionApiHelp.addEventListener('click', () => {
       window.notchAPI?.openExternal('https://bailian.console.aliyun.com/cn-beijing/?tab=app#/api-key');
@@ -1899,7 +2001,16 @@
     label.className = 'tile-label';
     label.textContent = '转写文本';
     const actions = document.createElement('div');
+    const organize = document.createElement('button');
+    organize.type = 'button'; organize.className = 'workspace-button compact recording-organize';
+    organize.dataset.action = 'organize-recording'; organize.textContent = '整理录音';
+    organize.disabled = !recording.transcript.trim();
+    const nameWithAI = document.createElement('button');
+    nameWithAI.type = 'button'; nameWithAI.className = 'workspace-button compact';
+    nameWithAI.dataset.action = 'name-recording-ai'; nameWithAI.textContent = '生成名称';
+    nameWithAI.disabled = !recording.transcript.trim();
     actions.append(
+      nameWithAI, organize,
       createIconButton('copy-recording', '复制转写文本', COPY_ICON),
       createIconButton('reveal-recording', '在文件夹中显示', OPEN_ICON),
       createIconButton('delete-recording', '删除录音', DELETE_ICON, true)
@@ -1921,11 +2032,19 @@
     });
     transcript.addEventListener('input', () => {
       recording.transcript = transcript.value;
+      organize.disabled = !recording.transcript.trim();
+      nameWithAI.disabled = !recording.transcript.trim();
       persistRecordings();
     });
     actions.addEventListener('click', async (event) => {
       const action = event.target.closest('[data-action]');
       if (!action) return;
+      if (action.dataset.action === 'organize-recording') {
+        window.NotchAI?.openRecording?.(recording.id);
+      }
+      if (action.dataset.action === 'name-recording-ai') {
+        window.NotchAI?.openRecordingName?.(recording.id);
+      }
       if (action.dataset.action === 'copy-recording' && window.notchAPI && recording.transcript) {
         await window.notchAPI.writeClipboard({ type: 'text', text: recording.transcript });
       }
@@ -2691,6 +2810,67 @@
         row?.scrollIntoView({ block: 'center' }); row?.querySelector('button')?.focus();
       });
       return true;
+    },
+    linkContext(id) {
+      for (const group of linkGroups) {
+        const link = (group.links || []).find((item) => String(item.id) === String(id));
+        if (link) return { sourceType: 'link', sourceId: link.id, sourceTitle: link.title, text: `URL: ${link.url}\n网页标题: ${link.title}`, createdAt: link.createdAt || Date.now() };
+      }
+      return null;
+    },
+    recordingContext(id = selectedRecordingId) {
+      const recording = recordings.find((item) => item.id === id && !item.isDraft);
+      return recording ? { sourceType: 'recording', sourceId: recording.id, sourceTitle: recording.title, text: recording.transcript, createdAt: recording.createdAt } : null;
+    },
+    async applyAIName(source, titleValue, categoryValue) {
+      const title = String(titleValue || '').trim().slice(0, 80);
+      const category = String(categoryValue || '').trim().slice(0, source.sourceType === 'link' ? 14 : 24);
+      if (!title) return { ok: false, error: 'missing_title' };
+      if (source.sourceType === 'recording') {
+        const recording = recordings.find((item) => item.id === source.sourceId && !item.isDraft);
+        if (!recording || recording.transcript.trim() !== source.text.trim() || recording.title !== source.sourceTitle) return { ok: false, error: 'source_changed' };
+        const undo = { sourceType: 'recording', id: recording.id, beforeTitle: recording.title, beforeCategory: recording.category, afterTitle: title, afterCategory: category || recording.category, expectedText: recording.transcript.trim() };
+        recording.title = undo.afterTitle; recording.category = undo.afterCategory;
+        if (!persistRecordings()) { recording.title = undo.beforeTitle; recording.category = undo.beforeCategory; return { ok: false, error: 'save_failed' }; }
+        renderRecordings();
+        return { ok: true, undo, workspaceSynced: await syncWorkspaceData() };
+      }
+      if (source.sourceType !== 'link') return { ok: false, error: 'invalid_source' };
+      const beforeGroup = linkGroups.find((group) => (group.links || []).some((item) => item.id === source.sourceId));
+      const link = beforeGroup && (beforeGroup.links || []).find((item) => item.id === source.sourceId);
+      if (!link || `URL: ${link.url}\n网页标题: ${link.title}`.trim() !== source.text.trim() || link.title !== source.sourceTitle) return { ok: false, error: 'source_changed' };
+      const previousLinkGroups = structuredClone(linkGroups);
+      let targetGroup = category ? linkGroups.find((group) => group.name === category) : beforeGroup;
+      let createdGroupId = '';
+      if (!targetGroup) { targetGroup = { id: uid('group'), name: category, collapsed: false, links: [] }; createdGroupId = targetGroup.id; linkGroups.push(targetGroup); }
+      const undo = { sourceType: 'link', id: link.id, url: link.url, beforeTitle: link.title, beforeGroupId: beforeGroup.id, afterTitle: title, afterGroupId: targetGroup.id, createdGroupId };
+      link.title = title;
+      if (targetGroup !== beforeGroup) { beforeGroup.links = beforeGroup.links.filter((item) => item.id !== link.id); targetGroup.links.push(link); }
+      if (!persistLinks()) { linkGroups = previousLinkGroups; return { ok: false, error: 'save_failed' }; }
+      renderLinkGroups();
+      return { ok: true, undo, workspaceSynced: await syncWorkspaceData() };
+    },
+    async undoAIName(token) {
+      if (token?.sourceType === 'recording') {
+        const recording = recordings.find((item) => item.id === token.id && !item.isDraft);
+        if (!recording || recording.title !== token.afterTitle || recording.category !== token.afterCategory || recording.transcript.trim() !== token.expectedText) return { ok: false, error: 'conflict' };
+        recording.title = token.beforeTitle; recording.category = token.beforeCategory;
+        if (!persistRecordings()) { recording.title = token.afterTitle; recording.category = token.afterCategory; return { ok: false, error: 'save_failed' }; }
+        renderRecordings();
+        return { ok: true, workspaceSynced: await syncWorkspaceData() };
+      }
+      if (token?.sourceType !== 'link') return { ok: false, error: 'invalid_source' };
+      const previousLinkGroups = structuredClone(linkGroups);
+      const afterGroup = linkGroups.find((group) => group.id === token.afterGroupId);
+      const link = afterGroup && (afterGroup.links || []).find((item) => item.id === token.id);
+      const beforeGroup = linkGroups.find((group) => group.id === token.beforeGroupId);
+      if (!link || !beforeGroup || link.title !== token.afterTitle || link.url !== token.url) return { ok: false, error: 'conflict' };
+      link.title = token.beforeTitle;
+      if (afterGroup !== beforeGroup) { afterGroup.links = afterGroup.links.filter((item) => item.id !== link.id); beforeGroup.links.push(link); }
+      if (token.createdGroupId && afterGroup.links.length === 0) linkGroups = linkGroups.filter((group) => group.id !== token.createdGroupId);
+      if (!persistLinks()) { linkGroups = previousLinkGroups; return { ok: false, error: 'save_failed' }; }
+      renderLinkGroups();
+      return { ok: true, workspaceSynced: await syncWorkspaceData() };
     },
     refreshWindows,
     startRecording,

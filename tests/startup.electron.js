@@ -7,6 +7,7 @@ app.commandLine.appendSwitch('user-data-dir', profile);
 // The production bootstrap may inspect encrypted legacy settings on this Mac.
 // Use Chromium's test keychain so a regression test never prompts for user keys.
 if (process.platform === 'darwin') app.commandLine.appendSwitch('use-mock-keychain');
+fs.writeFileSync(path.join(profile, 'transcription-settings.json'), JSON.stringify({ llmBaseUrl:'https://api.deepseek.com', llmModel:'deepseek-v4-flash' }));
 fs.writeFileSync(path.join(profile, 'workspace.json'), JSON.stringify({version:1, localStorage:{
   'notch-home-note':'Recovered workspace note',
   'notch-link-groups':JSON.stringify([{id:'large-links',name:'Research',collapsed:false,links:Array.from({length:125},(_,i)=>({id:'large-link-'+i,title:'Research document '+i,url:'https://example.com/document/'+i,icon:''}))}]),
@@ -338,16 +339,94 @@ app.on('web-contents-created', (_event, contents) => {
           document.getElementById('transcription-settings-save').scrollIntoView({block:'nearest'});
           const save=document.getElementById('transcription-settings-save').getBoundingClientRect(),bounds=dialog.getBoundingClientRect();
           const apiReachable=save.top>=bounds.top&&save.bottom<=bounds.bottom+1;
+          const diagnosticsReady=!!document.getElementById('ai-diagnostics')&&!!document.getElementById('ai-diagnostics-copy')&&!!document.getElementById('ai-diagnostics-clear');
           document.getElementById('transcription-settings-close').click();
           await new Promise(resolve=>setTimeout(resolve,250));
           page.querySelector('[data-settings-category="general"]').click();content.scrollTop=0;
-          return {accessible,onePane,noOverflow,scrollable,apiReachable};
+          return {accessible,onePane,noOverflow,scrollable,apiReachable,diagnosticsReady};
         })()`);
-        assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,scrollable:true,apiReachable:true});
+        assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,scrollable:true,apiReachable:true,diagnosticsReady:true});
         await contents.executeJavaScript(`window.NotchSettings.select('launcher')`);await new Promise(resolve=>setTimeout(resolve,350));
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-launcher-review.png'),(await contents.capturePage()).toPNG());
         await contents.executeJavaScript(`window.NotchSettings.select('general')`);await new Promise(resolve=>setTimeout(resolve,250));
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-review.png'),(await contents.capturePage()).toPNG());
+        await contents.executeJavaScript("window.__startupTestStage='ai-no-config'");
+        const aiWorkspace=await contents.executeJavaScript(`(async()=>{
+          const migration=document.getElementById('settings-ai-migration'),migrationVisible=!migration.hidden;document.getElementById('settings-ai-migration-ack').click();const migrationDeadline=performance.now()+1000;while(!migration.hidden&&performance.now()<migrationDeadline)await new Promise(resolve=>setTimeout(resolve,20));
+          await window.NotchPanel.navigate({tab:'todo'});window.NotchAI.openText('extractTodos');
+          const root=document.getElementById('ai-workspace'),source=document.getElementById('ai-source-text');
+          source.value='明晚九点前提交测试报告';source.dispatchEvent(new Event('input',{bubbles:true}));
+          document.getElementById('ai-generate').click();
+          const deadline=performance.now()+1500;while(document.getElementById('ai-generate').disabled&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
+          const bounds=root.getBoundingClientRect(),actions=root.querySelector('.ai-workspace-actions').getBoundingClientRect();
+          const result={migrationVisible,migrationAcknowledged:migration.hidden,visible:!root.hidden,title:document.getElementById('ai-workspace-title').textContent,status:document.getElementById('ai-workspace-status').textContent,characterCount:document.getElementById('ai-character-count').textContent,actionsReachable:actions.bottom<=bounds.bottom+1,panelInert:document.querySelector('.panels').inert};
+          return result;
+        })()`);
+        assert.equal(aiWorkspace.migrationVisible,true);assert.equal(aiWorkspace.migrationAcknowledged,true);assert.equal(aiWorkspace.visible,true);assert.equal(aiWorkspace.title,'从文字提取待办');assert.match(aiWorkspace.status,/配置/);assert.match(aiWorkspace.characterCount,/11 \/ 12000/);assert.equal(aiWorkspace.actionsReachable,true);assert.equal(aiWorkspace.panelInert,true);
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/ai-workspace-review.png'),(await contents.capturePage()).toPNG());
+        assert.equal(await contents.executeJavaScript(`window.NotchAI.close().then(()=>document.getElementById('ai-workspace').hidden&&!document.querySelector('.panels').inert)`),true);
+        await contents.executeJavaScript("window.__startupTestStage='ai-diagnostics'");
+        const transcriptionPath=path.join(profile,'transcription-settings.json');const diagnosticSettings=JSON.parse(fs.readFileSync(transcriptionPath,'utf8'));fs.writeFileSync(transcriptionPath,JSON.stringify({...diagnosticSettings,llmBaseUrl:'https://127.0.0.1'}));process.env.NOTCH_LLM_API_KEY='diagnostic-secret-key';
+        for(let index=0;index<52;index+=1)await contents.executeJavaScript(`window.notchAPI.runAI({requestId:'diagnostic-${index}',action:'summarize',interactive:true,context:{sourceType:'manual',sourceId:'',sourceTitle:'',text:'diagnostic private body ${index}'},referenceTime:new Date().toISOString(),timeZone:'UTC'})`);
+        const diagnosticCheck=await contents.executeJavaScript(`(async()=>{await window.NotchPanel.navigate({tab:'settings',id:'api'});document.getElementById('settings-api-configure').click();let deadline=performance.now()+1200;while(document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length<50&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const response=await window.notchAPI.getAIDiagnostics();document.getElementById('ai-diagnostics-copy').click();await new Promise(resolve=>setTimeout(resolve,40));return {count:response.items.length,rows:document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length,serialized:JSON.stringify(response.items)};})()`);
+        const diagnosticClipboard=await require('electron').clipboard.readText();assert.equal(diagnosticCheck.count,50);assert.equal(diagnosticCheck.rows,50);assert.equal(diagnosticCheck.serialized.includes('diagnostic private body'),false);assert.equal(diagnosticCheck.serialized.includes('diagnostic-secret-key'),false);assert.equal(diagnosticCheck.serialized.includes('https://'),false);assert.equal(diagnosticClipboard.includes('diagnostic private body'),false);assert.equal(diagnosticClipboard.includes('diagnostic-secret-key'),false);
+        const diagnosticsCleared=await contents.executeJavaScript(`(async()=>{document.getElementById('ai-diagnostics-clear').click();let deadline=performance.now()+1000;while(document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const cleared=(await window.notchAPI.getAIDiagnostics()).items.length===0&&document.getElementById('ai-diagnostics').textContent.includes('暂无');document.getElementById('transcription-settings-close').click();return cleared;})()`);assert.equal(diagnosticsCleared,true);delete process.env.NOTCH_LLM_API_KEY;
+        require('electron').ipcMain.removeHandler('ai:run');
+        require('electron').ipcMain.handle('ai:run',async(event,payload)=>{if(payload.context?.text==='旧文字'||payload.context?.text==='重开测试'||payload.context?.text==='动作锁定')await new Promise(resolve=>setTimeout(resolve,80));if(payload.context?.text==='流式测试'){event.sender.send('ai:event',{requestId:payload.requestId,type:'textDelta',text:'部分结果'});await new Promise(resolve=>setTimeout(resolve,80));}return payload.action==='extractTodos'?{ok:true,kind:'todos',requestId:payload.requestId,todos:[{text:'提交测试报告',categoryId:'P2',deadline:'2030-09-12T13:00:00.000Z',deadlineText:'明晚九点前',evidence:{quote:'明晚九点前提交测试报告',offset:0}}]}:payload.action==='organizeRecording'?{ok:true,kind:'recording',requestId:payload.requestId,summary:'录音摘要',decisions:[{text:'决定发布',evidence:{quote:'决定发布'}}],todos:[]}:payload.action?.startsWith('name')?{ok:true,kind:'metadata',requestId:payload.requestId,title:'AI 生成名称',category:'AI 分类'}:{ok:true,kind:'text',requestId:payload.requestId,text:'整理后的内容'};});
+        await contents.executeJavaScript("window.__startupTestStage='ai-streaming-readonly'");
+        const aiStreaming=await contents.executeJavaScript(`(async()=>{window.NotchAI.openText('summarize');const source=document.getElementById('ai-source-text'),result=document.getElementById('ai-text-result');source.value='流式测试';source.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('ai-generate').click();let deadline=performance.now()+500;while(result.hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));const partial=result.value==='部分结果'&&result.readOnly;deadline=performance.now()+1000;while(document.getElementById('ai-generate').disabled&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));const completed=result.value==='整理后的内容'&&!result.readOnly;await window.NotchAI.close();return {partial,completed};})()`);assert.deepEqual(aiStreaming,{partial:true,completed:true});
+        await contents.executeJavaScript("window.__startupTestStage='ai-ui-races'");
+        require('electron').ipcMain.removeHandler('workspace:save-data');require('electron').ipcMain.handle('workspace:save-data',async()=>{await new Promise(resolve=>setTimeout(resolve,80));return true;});
+        const aiUiRaces=await contents.executeJavaScript(`(async()=>{
+          const generate=async(text)=>{window.NotchAI.openText('summarize');const source=document.getElementById('ai-source-text');source.value=text;source.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('ai-generate').click();let deadline=performance.now()+1000;while(document.getElementById('ai-text-result').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,10));};
+          await generate('重复保存测试');const before=window.NotchNotes.list().length,save=document.getElementById('ai-save-note');save.dispatchEvent(new MouseEvent('click',{bubbles:true}));save.dispatchEvent(new MouseEvent('click',{bubbles:true}));const saveLocked=save.disabled;await new Promise(resolve=>setTimeout(resolve,130));const added=window.NotchNotes.list().length-before;save.click();await new Promise(resolve=>setTimeout(resolve,130));const undone=window.NotchNotes.list().length===before;await window.NotchAI.close();
+          let unhandled=false;const onUnhandled=()=>{unhandled=true;};window.addEventListener('unhandledrejection',onUnhandled);await generate('关闭保存测试');const beforeCloseSave=window.NotchNotes.list().length;document.getElementById('ai-save-note').click();await window.NotchAI.close();await new Promise(resolve=>setTimeout(resolve,130));const closeDuringSave=window.NotchNotes.list().length===beforeCloseSave+1&&!unhandled;window.removeEventListener('unhandledrejection',onUnhandled);
+          window.NotchAI.openText('summarize');let source=document.getElementById('ai-source-text');source.value='重开测试';source.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('ai-generate').click();await window.NotchAI.close();window.NotchAI.openText('summarize');const reopened=!document.getElementById('ai-generate').disabled&&!document.getElementById('ai-generate').hidden&&document.getElementById('ai-stop').hidden;await new Promise(resolve=>setTimeout(resolve,120));const stayedReady=!document.getElementById('ai-generate').disabled;await window.NotchAI.close();
+          window.NotchAI.openText('summarize');source=document.getElementById('ai-source-text');source.value='动作锁定';source.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('ai-generate').click();const action=document.getElementById('ai-action-select'),locked=action.disabled;action.value='translate';action.dispatchEvent(new Event('change'));const reverted=action.value==='summarize';await new Promise(resolve=>setTimeout(resolve,120));const matched=document.getElementById('ai-workspace-title').textContent==='摘要文字'&&document.getElementById('ai-text-result').value==='整理后的内容';await window.NotchAI.close();return {saveLocked,added,undone,closeDuringSave,reopened,stayedReady,locked,reverted,matched};})()`);
+        assert.deepEqual(aiUiRaces,{saveLocked:true,added:1,undone:true,closeDuringSave:true,reopened:true,stayedReady:true,locked:true,reverted:true,matched:true});
+        require('electron').ipcMain.removeHandler('workspace:save-data');require('electron').ipcMain.handle('workspace:save-data',()=>true);
+        await contents.executeJavaScript("window.__startupTestStage='ai-stale-source'");
+        const aiStaleSource=await contents.executeJavaScript(`(async()=>{
+          window.NotchAI.openText('summarize');const source=document.getElementById('ai-source-text');source.value='旧文字';source.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('ai-generate').click();const locked=source.readOnly;source.value='新文字';await new Promise(resolve=>setTimeout(resolve,100));const rejected=document.getElementById('ai-workspace-status').textContent.includes('来源内容已发生变化');await window.NotchAI.close();return {locked,rejected};
+        })()`);
+        assert.deepEqual(aiStaleSource,{locked:true,rejected:true});
+        await contents.executeJavaScript("window.__startupTestStage='ai-todo-flow'");
+        const aiTodoFlow=await contents.executeJavaScript(`(async()=>{
+          const before=JSON.parse(localStorage.getItem('notch-todo-data')||'{"P0":[],"P1":[],"P2":[],"P3":[]}');
+          window.NotchAI.openText('extractTodos');const source=document.getElementById('ai-source-text');source.value='明晚九点前提交测试报告';source.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('ai-generate').click();
+          const deadline=performance.now()+1500;while(document.getElementById('ai-todo-results').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
+          const candidate=document.querySelector('.ai-todo-candidate'),apply=document.getElementById('ai-apply-todos');const ready=!!candidate&&candidate.querySelector('input[type="checkbox"]').checked&&!apply.disabled;const reviewMeta=document.getElementById('ai-workspace-meta').textContent.includes('参考')&&candidate.querySelectorAll('.ai-todo-date-shortcuts button').length===3;
+          apply.click();await new Promise(resolve=>setTimeout(resolve,30));
+          const afterApply=JSON.parse(localStorage.getItem('notch-todo-data'));const added=afterApply.P2.filter(item=>item.text==='提交测试报告').length;
+          apply.click();await new Promise(resolve=>setTimeout(resolve,30));
+          const afterUndo=JSON.parse(localStorage.getItem('notch-todo-data'));const remaining=afterUndo.P2.filter(item=>item.text==='提交测试报告').length;
+          await window.NotchAI.close();return {ready,reviewMeta,added,remaining,beforeCount:before.P2.length,afterCount:afterUndo.P2.length};
+        })()`);
+        assert.deepEqual(aiTodoFlow,{ready:true,reviewMeta:true,added:1,remaining:0,beforeCount:0,afterCount:0});
+        await contents.executeJavaScript("window.__startupTestStage='ai-module-flows'");
+        const aiModuleFlows=await contents.executeJavaScript(`(async()=>{try{
+          await window.NotchPanel.navigate({tab:'notes'});const note=window.NotchNotes.create();const editor=document.getElementById('notes-editor');editor.value='\\n保留这段文字\\n';editor.dispatchEvent(new Event('input',{bubbles:true}));editor.setSelectionRange(0,editor.value.length);document.querySelector('[data-action="organize-note"]').click();
+          const action=document.getElementById('ai-action-select');action.value='shorten';action.dispatchEvent(new Event('change'));document.getElementById('ai-generate').click();
+          let deadline=performance.now()+1500;while(document.getElementById('ai-text-result').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
+          const replace=document.getElementById('ai-replace-selection'),replaceReady=!replace.hidden;document.getElementById('ai-text-result').value='编辑后的内容';replace.click();await new Promise(resolve=>setTimeout(resolve,20));
+          const replaced=window.NotchNotes.list().find(item=>item.id===note.id)?.content==='编辑后的内容';replace.click();await new Promise(resolve=>setTimeout(resolve,20));
+          const restored=window.NotchNotes.list().find(item=>item.id===note.id)?.content==='\\n保留这段文字\\n';await window.NotchAI.close();
+          const fullEditor=document.getElementById('notes-editor');fullEditor.value='\\n保留这段文字\\n';fullEditor.dispatchEvent(new Event('input',{bubbles:true}));fullEditor.setSelectionRange(0,0);document.querySelector('[data-action="organize-note"]').click();document.getElementById('ai-generate').click();deadline=performance.now()+1500;while(document.getElementById('ai-text-result').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const trimmedSourceAccepted=!document.getElementById('ai-text-result').hidden;await window.NotchAI.close();
+          const beforeTitle=window.NotchNotes.list().find(item=>item.id===note.id).title;window.NotchAI.openNote('nameNote');document.getElementById('ai-generate').click();deadline=performance.now()+1500;while(document.getElementById('ai-metadata-result').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const metadataApply=document.getElementById('ai-apply-metadata');metadataApply.click();await new Promise(resolve=>setTimeout(resolve,30));const noteNamed=window.NotchNotes.list().find(item=>item.id===note.id).title==='AI 生成名称';metadataApply.click();await new Promise(resolve=>setTimeout(resolve,30));const noteNameUndone=window.NotchNotes.list().find(item=>item.id===note.id).title===beforeTitle;await window.NotchAI.close();
+          await window.NotchPanel.navigate({tab:'recordings'});const transcript=document.querySelector('.recording-transcript-editor');transcript.value='决定发布产品';transcript.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-action="organize-recording"]').click();document.getElementById('ai-generate').click();
+          deadline=performance.now()+1500;while(document.getElementById('ai-text-result').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
+          const save=document.getElementById('ai-save-note'),recordingReady=document.getElementById('ai-workspace-title').textContent==='整理录音'&&document.getElementById('ai-text-result').value==='录音摘要'&&document.querySelectorAll('.ai-recording-section li').length===1&&!save.hidden;
+          const noteCount=window.NotchNotes.list().length;save.click();await new Promise(resolve=>setTimeout(resolve,20));const noteSaved=window.NotchNotes.list().length===noteCount+1&&save.textContent==='撤销保存';save.click();await new Promise(resolve=>setTimeout(resolve,20));const noteUndone=window.NotchNotes.list().length===noteCount;await window.NotchAI.close();
+          const beforeRecording=window.NotchWorkspace.recordingContext('startup-recording').sourceTitle;window.NotchAI.openRecordingName('startup-recording');document.getElementById('ai-generate').click();deadline=performance.now()+1500;while(document.getElementById('ai-metadata-result').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const recordingNameApply=document.getElementById('ai-apply-metadata');recordingNameApply.click();await new Promise(resolve=>setTimeout(resolve,30));const recordingNamed=window.NotchWorkspace.recordingContext('startup-recording').sourceTitle==='AI 生成名称';recordingNameApply.click();await new Promise(resolve=>setTimeout(resolve,30));const recordingNameUndone=window.NotchWorkspace.recordingContext('startup-recording').sourceTitle===beforeRecording;await window.NotchAI.close();
+          return {replaceReady,replaced,restored,trimmedSourceAccepted,noteNamed,noteNameUndone,recordingReady,noteSaved,noteUndone,recordingNamed,recordingNameUndone};
+        }catch(error){return {scriptError:error.stack||String(error)}}})()`);
+        assert.deepEqual(aiModuleFlows,{replaceReady:true,replaced:true,restored:true,trimmedSourceAccepted:true,noteNamed:true,noteNameUndone:true,recordingReady:true,noteSaved:true,noteUndone:true,recordingNamed:true,recordingNameUndone:true});
+        await contents.executeJavaScript("window.__startupTestStage='ai-sync-failure'");
+        require('electron').ipcMain.removeHandler('workspace:save-data');require('electron').ipcMain.handle('workspace:save-data',()=>false);
+        const aiSyncFailure=await contents.executeJavaScript(`(async()=>{
+          window.NotchAI.openText('extractTodos');const source=document.getElementById('ai-source-text');source.value='明晚九点前提交测试报告';source.dispatchEvent(new Event('input',{bubbles:true}));document.getElementById('ai-generate').click();let deadline=performance.now()+1500;while(document.getElementById('ai-todo-results').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const apply=document.getElementById('ai-apply-todos');apply.click();deadline=performance.now()+1500;while(!document.getElementById('ai-workspace-status').textContent.includes('同步失败')&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const warned=document.getElementById('ai-workspace-status').textContent.includes('已在本机加入 1 项')&&document.getElementById('ai-workspace-status').textContent.includes('同步失败');const persisted=JSON.parse(localStorage.getItem('notch-todo-data')).P2.some(item=>item.text==='提交测试报告');apply.click();await new Promise(resolve=>setTimeout(resolve,30));await window.NotchAI.close();return {warned,persisted};
+        })()`);
+        assert.deepEqual(aiSyncFailure,{warned:true,persisted:true});
         const largeLinks=await contents.executeJavaScript(`(async()=>{
           await window.NotchPanel.navigate({tab:'links'});
           const count=()=>document.querySelectorAll('#link-groups .link-item').length;
@@ -371,6 +450,8 @@ app.on('web-contents-created', (_event, contents) => {
           return {initial,loaded,filtered,targetFound,unchanged,empty,located,folded,searchesFolded,independentScroll,stationary};
         })()`);
         assert.deepEqual(largeLinks,{initial:40,loaded:80,filtered:1,targetFound:true,unchanged:true,empty:true,located:true,folded:0,searchesFolded:true,independentScroll:true,stationary:true});
+        const linkNaming=await contents.executeJavaScript(`(async()=>{const before=window.NotchWorkspace.linkContext('large-link-124');window.NotchAI.openLinkName('large-link-124');document.getElementById('ai-generate').click();let deadline=performance.now()+1500;while(document.getElementById('ai-metadata-result').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const apply=document.getElementById('ai-apply-metadata');apply.click();await new Promise(resolve=>setTimeout(resolve,30));const actualTitle=window.NotchWorkspace.linkContext('large-link-124')?.sourceTitle,status=document.getElementById('ai-workspace-status').textContent;const named=actualTitle==='AI 生成名称';apply.click();await new Promise(resolve=>setTimeout(resolve,30));const restored=window.NotchWorkspace.linkContext('large-link-124')?.sourceTitle===before.sourceTitle;await window.NotchAI.close();return {named,restored,actualTitle,status};})()`);
+        assert.equal(linkNaming.named,true,JSON.stringify(linkNaming));assert.equal(linkNaming.restored,true,JSON.stringify(linkNaming));
         const moduleLayouts=await contents.executeJavaScript(`(async()=>{
           const failures=[],visited=[];
           await window.notchAPI.setFeature('clip',true);
@@ -411,7 +492,11 @@ app.on('web-contents-created', (_event, contents) => {
         }
         console.log('Production workspace, note attachment and launcher checks passed');
         app.quit();
-      } catch (error) { console.error(error); app.exit(1); }
+      } catch (error) {
+        const stage = await contents.executeJavaScript('window.__startupTestStage || "unknown"').catch(() => 'renderer-unavailable');
+        console.error(`Startup test failed during ${stage}`, error);
+        app.exit(1);
+      }
     }, 2000);
   });
 });

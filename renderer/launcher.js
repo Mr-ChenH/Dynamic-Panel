@@ -102,7 +102,12 @@
     const signature = ['notch-note-archive-v1', 'notch-todo-category-names-v1', 'notch-todo-data', 'notch-link-groups', 'notch-home-commands', 'notch-clip-history'].map(key => localStorage.getItem(key));
     signature.push(settings.sources.workspace, settings.sources.clipboard, features.notes, features.todo, features.links, features.clip);
     if (signature.length === localSignature.length && signature.every((value, i) => value === localSignature[i])) return withDirectUrl(localIndex);
-    const result = [];
+    const result = [
+      { id: 'builtin:ai-extract-todos', kind: 'navigate', title: '从文字提取待办', subtitle: 'AI 整理 · 生成草稿后确认保存', keywords: ['AI', '行动项', '任务'], target: { tab: 'todo', aiAction: 'extractTodos' } },
+      { id: 'builtin:ai-summarize', kind: 'navigate', title: '摘要文字', subtitle: 'AI 整理 · 输入或粘贴文字', keywords: ['AI', '总结'], target: { tab: 'notes', aiAction: 'summarize' } },
+      { id: 'builtin:ai-shorten', kind: 'navigate', title: '精简文字', subtitle: 'AI 整理 · 保留原意', keywords: ['AI', '改写'], target: { tab: 'notes', aiAction: 'shorten' } },
+      { id: 'builtin:ai-translate', kind: 'navigate', title: '翻译文字', subtitle: 'AI 整理 · 翻译为中文', keywords: ['AI', '译文'], target: { tab: 'notes', aiAction: 'translate' } },
+    ];
     if (settings.sources.workspace) {
       if (features.notes !== false) {
         result.push({ id: 'builtin:new-note', kind: 'navigate', title: '新建笔记', subtitle: '笔记', target: { tab: 'notes', create: 'note' } });
