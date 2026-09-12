@@ -308,6 +308,7 @@ app.on('web-contents-created', (_event, contents) => {
         const shot = path.join(__dirname, '../dist.noindex/launcher-review.png');
         fs.mkdirSync(path.dirname(shot), { recursive: true }); fs.writeFileSync(shot, capture.toPNG());
         await contents.executeJavaScript('window.NotchLauncher.close()');
+        await contents.executeJavaScript("window.__startupTestStage='settings-layout'");
         await contents.executeJavaScript(`window.NotchPanel.navigate({tab:'settings'})`);
         const settingsLayout=await contents.executeJavaScript(`(async()=>{
           const page=document.getElementById('settings-page'),content=page.querySelector('.settings-content');
@@ -332,20 +333,38 @@ app.on('web-contents-created', (_event, contents) => {
             }
           }
           page.style.width=previous.width;page.style.height=previous.height;
-          page.querySelector('[data-settings-category="api"]').click();
-          document.getElementById('settings-api-configure').click();await new Promise(resolve=>setTimeout(resolve,80));
-          const dialog=document.querySelector('.transcription-settings-card');
-          const scrollable=getComputedStyle(dialog).overflowY==='auto';
-          document.getElementById('transcription-settings-save').scrollIntoView({block:'nearest'});
-          const save=document.getElementById('transcription-settings-save').getBoundingClientRect(),bounds=dialog.getBoundingClientRect();
+          page.querySelector('[data-settings-category="api"]').click();await new Promise(resolve=>setTimeout(resolve,80));
+          const root=document.querySelector('.settings-api-card');
+          if(!root)throw new Error('missing settings-api-card');
+          const sidebar=root.querySelector('.ai-provider-sidebar'),config=root.querySelector('.ai-provider-config-scroll');
+          if(!sidebar||!config)throw new Error('missing inline AI settings panes');
+          const directLayout=getComputedStyle(root).display!=='none'&&!document.getElementById('transcription-settings-backdrop')&&!root.querySelector('[role="dialog"]');
+          const inlineLayout=root.querySelector('.ai-settings-layout');if(!inlineLayout)throw new Error('missing ai-settings-layout');
+          const splitLayout=getComputedStyle(inlineLayout).gridTemplateColumns.split(' ').length===2;
+          const scrollable=getComputedStyle(sidebar).overflowY==='auto'&&getComputedStyle(config).overflowY==='auto';
+          const save=document.getElementById('transcription-settings-save').getBoundingClientRect(),bounds=root.querySelector('.ai-provider-config').getBoundingClientRect();
           const apiReachable=save.top>=bounds.top&&save.bottom<=bounds.bottom+1;
           const diagnosticsReady=!!document.getElementById('ai-diagnostics')&&!!document.getElementById('ai-diagnostics-copy')&&!!document.getElementById('ai-diagnostics-clear');
-          document.getElementById('transcription-settings-close').click();
-          await new Promise(resolve=>setTimeout(resolve,250));
+          const provider=document.getElementById('llm-provider');
+          const providerOptions=provider.options.length,providerButtons=document.querySelectorAll('[data-ai-provider]').length;
+          document.getElementById('llm-model-add').click();
+          const modelInputs=[...document.querySelectorAll('[data-ai-model-name]')];modelInputs[1].value='deepseek-reasoner';modelInputs[1].dispatchEvent(new Event('input',{bubbles:true}));
+          document.querySelector('[data-ai-model-active="1"]').click();
+          const modelEditorReady=modelInputs.length===2&&document.getElementById('llm-model').value==='deepseek-reasoner'&&!document.getElementById('ai-settings-reset').disabled;
+          document.getElementById('ai-settings-reset').click();
+          document.querySelector('[data-ai-provider="custom-openai"]').click();
+          const customEndpointVisible=!document.getElementById('llm-base-url-field').hidden;
+          const customSelected=document.querySelector('[data-ai-provider="custom-openai"]').getAttribute('aria-selected')==='true';
+          document.getElementById('ai-provider-transcription').click();
+          const serviceSelectionReady=!document.getElementById('ai-service-panel-transcription').hidden&&document.getElementById('ai-service-panel-content').hidden&&document.getElementById('ai-content-settings-secondary').hidden&&!!document.getElementById('transcription-provider-test')&&!!document.getElementById('transcription-provider-remove');
           page.querySelector('[data-settings-category="general"]').click();content.scrollTop=0;
-          return {accessible,onePane,noOverflow,scrollable,apiReachable,diagnosticsReady};
+          return {accessible,onePane,noOverflow,directLayout,splitLayout,scrollable,apiReachable,diagnosticsReady,providerOptions,providerButtons,modelEditorReady,customEndpointVisible,customSelected,serviceSelectionReady};
         })()`);
-        assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,scrollable:true,apiReachable:true,diagnosticsReady:true});
+        assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,directLayout:true,splitLayout:true,scrollable:true,apiReachable:true,diagnosticsReady:true,providerOptions:11,providerButtons:11,modelEditorReady:true,customEndpointVisible:true,customSelected:true,serviceSelectionReady:true});
+        const recordingSettingsJump=await contents.executeJavaScript(`(async()=>{await window.NotchPanel.navigate({tab:'recordings'});document.getElementById('recording-configure').click();await new Promise(resolve=>setTimeout(resolve,100));return {settingsVisible:document.querySelector('[data-tab="settings"]').getAttribute('aria-selected')==='true',apiSelected:document.querySelector('[data-settings-category="api"]').getAttribute('aria-selected')==='true',transcriptionSelected:document.getElementById('ai-provider-transcription').getAttribute('aria-selected')==='true',modalAbsent:!document.getElementById('transcription-settings-backdrop')};})()`);
+        assert.deepEqual(recordingSettingsJump,{settingsVisible:true,apiSelected:true,transcriptionSelected:true,modalAbsent:true});
+        await contents.executeJavaScript(`window.NotchSettings.select('api');document.querySelector('[data-ai-provider="kimi"]').click();document.getElementById('llm-model-add').click();const models=[...document.querySelectorAll('[data-ai-model-name]')];models[1].value='moonshot-v1-8k';models[1].dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-ai-model-active="1"]').click();document.querySelector('.ai-model-settings').scrollIntoView({block:'start'});`);await new Promise(resolve=>setTimeout(resolve,150));
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/ai-settings-review.png'),(await contents.capturePage()).toPNG());
         await contents.executeJavaScript(`window.NotchSettings.select('launcher')`);await new Promise(resolve=>setTimeout(resolve,350));
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-launcher-review.png'),(await contents.capturePage()).toPNG());
         await contents.executeJavaScript(`window.NotchSettings.select('general')`);await new Promise(resolve=>setTimeout(resolve,250));
@@ -365,12 +384,15 @@ app.on('web-contents-created', (_event, contents) => {
         assert.equal(aiWorkspace.migrationVisible,true);assert.equal(aiWorkspace.migrationAcknowledged,true);assert.equal(aiWorkspace.visible,true);assert.equal(aiWorkspace.title,'从文字提取待办');assert.match(aiWorkspace.status,/配置/);assert.match(aiWorkspace.characterCount,/11 \/ 12000/);assert.equal(aiWorkspace.actionsReachable,true);assert.equal(aiWorkspace.panelInert,true);
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/ai-workspace-review.png'),(await contents.capturePage()).toPNG());
         assert.equal(await contents.executeJavaScript(`window.NotchAI.close().then(()=>document.getElementById('ai-workspace').hidden&&!document.querySelector('.panels').inert)`),true);
+        await contents.executeJavaScript("window.__startupTestStage='ai-multi-model-config'");
+        const multiModelConfig=await contents.executeJavaScript(`(async()=>{const base={region:'beijing',workspaceId:'',apiKey:'',llmApiKey:'',removeAsr:false,removeContent:false,llmTimeoutMs:30000,autoNameNotes:false,autoNameRecordings:false,autoOrganizeLinks:false};await window.notchAPI.setTranscriptionConfig({...base,llmProviderId:'kimi',llmBaseUrl:'https://api.moonshot.cn/v1',llmModels:['kimi-k3','moonshot-v1-8k'],llmModel:'moonshot-v1-8k'});const result=await window.notchAPI.setTranscriptionConfig({...base,llmProviderId:'deepseek',llmBaseUrl:'https://api.deepseek.com',llmModels:['deepseek-v4-flash','deepseek-reasoner'],llmModel:'deepseek-reasoner'});return {schemaVersion:result.schemaVersion,provider:result.llmProviderId,model:result.llmModel,profiles:result.contentProviderConfigs.map(profile=>({providerId:profile.providerId,models:profile.models.map(model=>model.name),activeModel:profile.activeModel}))};})()`);
+        assert.equal(multiModelConfig.schemaVersion,3);assert.equal(multiModelConfig.provider,'deepseek');assert.equal(multiModelConfig.model,'deepseek-reasoner');assert.deepEqual(multiModelConfig.profiles.find(profile=>profile.providerId==='kimi'),{providerId:'kimi',models:['kimi-k3','moonshot-v1-8k'],activeModel:'moonshot-v1-8k'});assert.deepEqual(multiModelConfig.profiles.find(profile=>profile.providerId==='deepseek'),{providerId:'deepseek',models:['deepseek-v4-flash','deepseek-reasoner'],activeModel:'deepseek-reasoner'});
         await contents.executeJavaScript("window.__startupTestStage='ai-diagnostics'");
-        const transcriptionPath=path.join(profile,'transcription-settings.json');const diagnosticSettings=JSON.parse(fs.readFileSync(transcriptionPath,'utf8'));fs.writeFileSync(transcriptionPath,JSON.stringify({...diagnosticSettings,llmBaseUrl:'https://127.0.0.1'}));process.env.NOTCH_LLM_API_KEY='diagnostic-secret-key';
+        const transcriptionPath=path.join(profile,'transcription-settings.json');const diagnosticSettings=JSON.parse(fs.readFileSync(transcriptionPath,'utf8'));const activeProvider=diagnosticSettings.services.content.activeProviderId;diagnosticSettings.services.content.profiles[activeProvider].baseUrl='https://127.0.0.1';diagnosticSettings.services.content.baseUrl='https://127.0.0.1';diagnosticSettings.llmBaseUrl='https://127.0.0.1';fs.writeFileSync(transcriptionPath,JSON.stringify(diagnosticSettings));process.env.NOTCH_LLM_API_KEY='diagnostic-secret-key';
         for(let index=0;index<52;index+=1)await contents.executeJavaScript(`window.notchAPI.runAI({requestId:'diagnostic-${index}',action:'summarize',interactive:true,context:{sourceType:'manual',sourceId:'',sourceTitle:'',text:'diagnostic private body ${index}'},referenceTime:new Date().toISOString(),timeZone:'UTC'})`);
-        const diagnosticCheck=await contents.executeJavaScript(`(async()=>{await window.NotchPanel.navigate({tab:'settings',id:'api'});document.getElementById('settings-api-configure').click();let deadline=performance.now()+1200;while(document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length<50&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const response=await window.notchAPI.getAIDiagnostics();document.getElementById('ai-diagnostics-copy').click();await new Promise(resolve=>setTimeout(resolve,40));return {count:response.items.length,rows:document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length,serialized:JSON.stringify(response.items)};})()`);
+        const diagnosticCheck=await contents.executeJavaScript(`(async()=>{await window.NotchPanel.navigate({tab:'settings'});window.NotchSettings.select('api');let deadline=performance.now()+1200;while(document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length<50&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const response=await window.notchAPI.getAIDiagnostics();document.getElementById('ai-diagnostics-copy').click();await new Promise(resolve=>setTimeout(resolve,40));return {count:response.items.length,rows:document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length,serialized:JSON.stringify(response.items)};})()`);
         const diagnosticClipboard=await require('electron').clipboard.readText();assert.equal(diagnosticCheck.count,50);assert.equal(diagnosticCheck.rows,50);assert.equal(diagnosticCheck.serialized.includes('diagnostic private body'),false);assert.equal(diagnosticCheck.serialized.includes('diagnostic-secret-key'),false);assert.equal(diagnosticCheck.serialized.includes('https://'),false);assert.equal(diagnosticClipboard.includes('diagnostic private body'),false);assert.equal(diagnosticClipboard.includes('diagnostic-secret-key'),false);
-        const diagnosticsCleared=await contents.executeJavaScript(`(async()=>{document.getElementById('ai-diagnostics-clear').click();let deadline=performance.now()+1000;while(document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const cleared=(await window.notchAPI.getAIDiagnostics()).items.length===0&&document.getElementById('ai-diagnostics').textContent.includes('暂无');document.getElementById('transcription-settings-close').click();return cleared;})()`);assert.equal(diagnosticsCleared,true);delete process.env.NOTCH_LLM_API_KEY;
+        const diagnosticsCleared=await contents.executeJavaScript(`(async()=>{document.getElementById('ai-diagnostics-clear').click();let deadline=performance.now()+1000;while(document.querySelectorAll('#ai-diagnostics .ai-diagnostic-row').length&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));return (await window.notchAPI.getAIDiagnostics()).items.length===0&&document.getElementById('ai-diagnostics').textContent.includes('暂无');})()`);assert.equal(diagnosticsCleared,true);delete process.env.NOTCH_LLM_API_KEY;
         require('electron').ipcMain.removeHandler('ai:run');
         require('electron').ipcMain.handle('ai:run',async(event,payload)=>{if(payload.context?.text==='旧文字'||payload.context?.text==='重开测试'||payload.context?.text==='动作锁定')await new Promise(resolve=>setTimeout(resolve,80));if(payload.context?.text==='流式测试'){event.sender.send('ai:event',{requestId:payload.requestId,type:'textDelta',text:'部分结果'});await new Promise(resolve=>setTimeout(resolve,80));}return payload.action==='extractTodos'?{ok:true,kind:'todos',requestId:payload.requestId,todos:[{text:'提交测试报告',categoryId:'P2',deadline:'2030-09-12T13:00:00.000Z',deadlineText:'明晚九点前',evidence:{quote:'明晚九点前提交测试报告',offset:0}}]}:payload.action==='organizeRecording'?{ok:true,kind:'recording',requestId:payload.requestId,summary:'录音摘要',decisions:[{text:'决定发布',evidence:{quote:'决定发布'}}],todos:[]}:payload.action?.startsWith('name')?{ok:true,kind:'metadata',requestId:payload.requestId,title:'AI 生成名称',category:'AI 分类'}:{ok:true,kind:'text',requestId:payload.requestId,text:'整理后的内容'};});
         await contents.executeJavaScript("window.__startupTestStage='ai-streaming-readonly'");
@@ -462,7 +484,7 @@ app.on('web-contents-created', (_event, contents) => {
             const oldHeight=surface.style.height,oldWidth=surface.style.width;
             surface.style.height='300px';
             if(['notes','links','recordings','credentials','clip'].includes(tab))surface.style.width='720px';
-            if(tab==='notes'&&window.NotchNotes)window.NotchNotes.create();
+            if(tab==='notes'&&window.NotchNotes){localStorage.setItem('notch-note-categories-v1',JSON.stringify([{id:'startup-projects',name:'项目资料',tags:[{id:'startup-planning',name:'产品规划'}]},{id:'startup-meetings',name:'会议记录',tags:[{id:'startup-weekly',name:'周会'}]}]));window.NotchNotes.create();const category=document.querySelector('.notes-detail-category');category.value='startup-projects';category.dispatchEvent(new Event('change',{bubbles:true}));const tag=document.querySelector('.notes-detail-tag');tag.value='startup-planning';tag.dispatchEvent(new Event('change',{bubbles:true}));const categoryFilter=document.getElementById('notes-category-filter');categoryFilter.value='startup-projects';categoryFilter.dispatchEvent(new Event('change',{bubbles:true}));}
             await new Promise(resolve=>requestAnimationFrame(resolve));
             if(surface.scrollWidth>surface.clientWidth+2)failures.push(tab+':horizontal');
             if(tab==='credentials'){
@@ -477,6 +499,11 @@ app.on('web-contents-created', (_event, contents) => {
             if(tab==='notes'){
               const actions=panel.querySelector('.notes-detail-actions');
               if(actions&&actions.scrollWidth>actions.clientWidth+1)failures.push('notes:actions');
+              const taxonomy=panel.querySelector('.notes-taxonomy'),library=panel.querySelector('.notes-library'),detail=panel.querySelector('.notes-detail'),tree=panel.querySelector('.notes-taxonomy-tree');
+              const taxonomyBounds=taxonomy.getBoundingClientRect(),libraryBounds=library.getBoundingClientRect(),detailBounds=detail.getBoundingClientRect();
+              if(getComputedStyle(tree).overflowY!=='auto')failures.push('notes:taxonomy-scroll');
+              if(taxonomyBounds.right>libraryBounds.left+1||libraryBounds.right>detailBounds.left+1)failures.push('notes:pane-overlap');
+              if(!tree.querySelector('[data-notes-taxonomy-scope="category"].active')||!tree.querySelector('[data-notes-taxonomy-scope="tag"]'))failures.push('notes:taxonomy-state');
             }
             visited.push(tab);surface.style.height=oldHeight;surface.style.width=oldWidth;
           }

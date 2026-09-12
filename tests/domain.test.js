@@ -51,8 +51,15 @@ const {
   resolveDefaultPanelTab,
   settingsSummary,
   normalizeNoteArchive,
+  normalizeNoteCategoryName,
+  normalizeNoteTags,
+  normalizeNoteCategories,
   filterNotes,
   updateNoteInArchive,
+  updateNoteCategory,
+  updateNoteTag,
+  removeNoteCategory,
+  removeNoteTag,
   updateNoteTitle,
   applyGeneratedNoteTitle,
   apiCredentialStatuses,
@@ -581,6 +588,8 @@ test('editing a saved note updates content and timestamp without losing its iden
     id: 'selected',
     title: '',
     titleSource: '',
+    categoryId: '',
+    tagId: '',
     content: '新内容\n第二行',
     createdAt: 100,
     updatedAt: 400,
@@ -591,14 +600,50 @@ test('editing a saved note updates content and timestamp without losing its iden
   assert.equal(normalizeNoteArchive(JSON.parse(JSON.stringify(cleared)))[0].id, 'selected');
 });
 
-test('note search matches titles and full content without changing archive order', () => {
+test('note search and category filters compose without changing archive order', () => {
   const notes = normalizeNoteArchive([
-    { id: 'one', title: 'TO-DO Panel 设计', titleSource: 'model', content: '正文没有产品英文名', createdAt: 100, updatedAt: 300 },
+    { id: 'one', title: 'TO-DO Panel 设计', titleSource: 'model', categoryId: 'product', tagId: 'research', content: '正文没有产品英文名', createdAt: 100, updatedAt: 300 },
     { id: 'two', content: '会议备忘\n下周交付录制功能', createdAt: 200, updatedAt: 200 },
   ]);
   assert.deepEqual(filterNotes(notes, 'to-do').map((note) => note.id), ['one']);
   assert.deepEqual(filterNotes(notes, '录制').map((note) => note.id), ['two']);
+  assert.deepEqual(filterNotes(notes, '', 'product').map((note) => note.id), ['one']);
+  assert.deepEqual(filterNotes(notes, '', 'product', 'research').map((note) => note.id), ['one']);
+  assert.deepEqual(filterNotes(notes, '', 'product', '__untagged__').map((note) => note.id), []);
+  assert.deepEqual(filterNotes(notes, '', '__uncategorized__').map((note) => note.id), ['two']);
   assert.deepEqual(filterNotes(notes, '').map((note) => note.id), ['one', 'two']);
+});
+
+test('note categories normalize, assign and remove without deleting notes', () => {
+  assert.equal(normalizeNoteCategoryName('  产品   研究  '), '产品 研究');
+  assert.deepEqual(normalizeNoteTags([{ id: 'idea', name: '想法' }, { id: 'idea-2', name: '想法' }]), [{ id: 'idea', name: '想法' }]);
+  const categories = normalizeNoteCategories([
+    { id: 'product', name: '产品研究', tags: [{ id: 'research', name: '调研' }, { id: 'plan', name: '规划' }] },
+    { id: 'duplicate-name', name: '产品研究' },
+    { id: 'course', name: '课程' },
+  ]);
+  assert.deepEqual(categories, [
+    { id: 'product', name: '产品研究', tags: [{ id: 'research', name: '调研' }, { id: 'plan', name: '规划' }] },
+    { id: 'course', name: '课程', tags: [] },
+  ]);
+  const assigned = updateNoteCategory([
+    { id: 'one', content: '正文', createdAt: 100, updatedAt: 200 },
+    { id: 'two', content: '保留', createdAt: 100, updatedAt: 150 },
+  ], 'one', 'product', 300);
+  assert.equal(assigned.find((note) => note.id === 'one').categoryId, 'product');
+  const tagged = updateNoteTag(assigned, 'one', 'research', 350);
+  assert.equal(tagged.find((note) => note.id === 'one').tagId, 'research');
+  const removedTag = removeNoteTag(categories, tagged, 'product', 'research', 375);
+  assert.deepEqual(removedTag.categories[0].tags, [{ id: 'plan', name: '规划' }]);
+  assert.equal(removedTag.notes.find((note) => note.id === 'one').tagId, '');
+  const retagged = updateNoteTag(removedTag.notes, 'one', 'plan', 390);
+  const moved = updateNoteCategory(retagged, 'one', 'course', 395);
+  assert.equal(moved.find((note) => note.id === 'one').tagId, '');
+  const removed = removeNoteCategory(categories, tagged, 'product', 400);
+  assert.deepEqual(removed.categories, [{ id: 'course', name: '课程', tags: [] }]);
+  assert.equal(removed.notes.length, 2);
+  assert.equal(removed.notes.find((note) => note.id === 'one').categoryId, '');
+  assert.equal(removed.notes.find((note) => note.id === 'one').content, '正文');
 });
 
 test('users can rename a note without changing its content', () => {
@@ -610,6 +655,8 @@ test('users can rename a note without changing its content', () => {
     id: 'note-1',
     title: '用户自己的标题',
     titleSource: 'user',
+    categoryId: '',
+    tagId: '',
     content: '正文',
     createdAt: 100,
     updatedAt: 300,

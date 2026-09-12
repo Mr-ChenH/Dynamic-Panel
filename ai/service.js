@@ -2,10 +2,12 @@
 
 const { validateRequest, normalizeResponse, TEXT_ACTIONS } = require('./schema');
 const { PROMPT_VERSION, actionPrompt } = require('./prompts');
+const { providerFor } = require('./providers');
 
-function endpointFor(baseUrl) {
-  const value = String(baseUrl || '').replace(/\/$/, '');
-  return value.endsWith('/chat/completions') ? value : `${value}/chat/completions`;
+function endpointFor(baseUrl, adapterId = 'openai-chat') {
+  const value = String(baseUrl || '').replace(/\/+$/, '');
+  const suffix = adapterId === 'anthropic-messages' ? '/v1/messages' : '/chat/completions';
+  return value.endsWith(suffix) ? value : `${value}${suffix}`;
 }
 
 function providerError(status) {
@@ -25,14 +27,14 @@ function completionError(payload) {
 
 const MAX_PROVIDER_BYTES = 256 * 1024;
 
-async function readProviderStream(response, onDelta) {
+async function readProviderStream(response, onDelta, options = {}) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '', content = '', total = 0, usage = null, completed = false, malformed = false, finishReason = '', terminalError = '';
+  let buffer = '', content = '', total = 0, usage = null, completed = false, doneMarker = false, malformed = false, finishReason = '', terminalError = '';
   const consume = (block) => {
     const data = block.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
     if (!data) return;
-    if (data === '[DONE]') { completed = true; return; }
+    if (data === '[DONE]') { completed = true; doneMarker = true; return; }
     let chunk;
     try { chunk = JSON.parse(data); } catch (error) { malformed = true; return; }
     const choice = chunk?.choices?.[0];
@@ -58,17 +60,17 @@ async function readProviderStream(response, onDelta) {
   buffer += decoder.decode();
   if (buffer.trim()) buffer.split(/\r?\n\r?\n/).forEach(consume);
   if (malformed) throw Error('invalid_stream');
-  if (!completed) throw Error('stream_incomplete');
+  if (!completed || (options.requireDoneMarker && !doneMarker)) throw Error('stream_incomplete');
   if (terminalError) throw Error(terminalError);
   return { choices: [{ message: { content }, finish_reason: finishReason || null }], usage };
 }
 
-async function readProviderPayload(response, onDelta) {
+async function readProviderPayload(response, onDelta, options = {}) {
   const declared = Number(response && response.headers && response.headers.get && response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > MAX_PROVIDER_BYTES) throw Error('response_too_large');
   if (!response || !response.body || typeof response.body.getReader !== 'function') return response.json();
   const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
-  if (contentType.includes('text/event-stream')) return readProviderStream(response, onDelta);
+  if (contentType.includes('text/event-stream')) return readProviderStream(response, onDelta, options);
   const reader = response.body.getReader();
   const chunks = [];
   let total = 0;
@@ -80,6 +82,113 @@ async function readProviderPayload(response, onDelta) {
     chunks.push(Buffer.from(value));
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function anthropicFinishReason(reason) {
+  if (reason === 'end_turn' || reason === 'stop_sequence') return 'stop';
+  if (reason === 'max_tokens' || reason === 'model_context_window_exceeded') return 'length';
+  if (reason === 'refusal') return 'content_filter';
+  return reason || null;
+}
+
+function normalizeAnthropicPayload(payload) {
+  const content = Array.isArray(payload?.content)
+    ? payload.content.filter((block) => block?.type === 'text').map((block) => String(block.text || '')).join('')
+    : '';
+  return {
+    choices: [{ message: { content }, finish_reason: anthropicFinishReason(payload?.stop_reason) }],
+    usage: payload?.usage ? {
+      prompt_tokens: Number(payload.usage.input_tokens) || 0,
+      completion_tokens: Number(payload.usage.output_tokens) || 0,
+    } : null,
+  };
+}
+
+async function readAnthropicStream(response, onDelta) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '', content = '', total = 0, completed = false, malformed = false, stopReason = '', inputTokens = 0, outputTokens = 0;
+  const consume = (block) => {
+    const data = block.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trim()).join('\n');
+    if (!data) return;
+    let event;
+    try { event = JSON.parse(data); } catch (error) { malformed = true; return; }
+    if (event.type === 'message_start') inputTokens = Number(event.message?.usage?.input_tokens) || inputTokens;
+    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+      const delta = String(event.delta.text || '');
+      content += delta;
+      if (delta && onDelta) onDelta(delta);
+    }
+    if (event.type === 'message_delta') {
+      stopReason = String(event.delta?.stop_reason || stopReason);
+      outputTokens = Number(event.usage?.output_tokens) || outputTokens;
+    }
+    if (event.type === 'message_stop') completed = true;
+    if (event.type === 'error') throw Error('provider_stream_error');
+  };
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_PROVIDER_BYTES) { await reader.cancel().catch(() => {}); throw Error('response_too_large'); }
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split(/\r?\n\r?\n/); buffer = blocks.pop() || '';
+    blocks.forEach(consume);
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) buffer.split(/\r?\n\r?\n/).forEach(consume);
+  if (malformed) throw Error('invalid_stream');
+  if (!completed) throw Error('stream_incomplete');
+  return {
+    choices: [{ message: { content }, finish_reason: anthropicFinishReason(stopReason) }],
+    usage: { prompt_tokens: inputTokens, completion_tokens: outputTokens },
+  };
+}
+
+async function readAnthropicPayload(response, onDelta) {
+  const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
+  if (response.body && typeof response.body.getReader === 'function' && contentType.includes('text/event-stream')) {
+    return readAnthropicStream(response, onDelta);
+  }
+  return normalizeAnthropicPayload(await readProviderPayload(response));
+}
+
+function buildProviderRequest(config, request, prompt) {
+  const provider = providerFor(config.providerId);
+  const adapterId = config.adapterId || provider.adapterId;
+  const maxTokens = request.action === 'organizeRecording' || request.action === 'extractTodos' ? 4096 : 2048;
+  if (adapterId === 'anthropic-messages') {
+    return {
+      endpoint: endpointFor(config.baseUrl, adapterId),
+      headers: {
+        'x-api-key': config.apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: {
+        model: config.model,
+        temperature: 0.1,
+        max_tokens: maxTokens,
+        stream: TEXT_ACTIONS.has(request.action),
+        system: prompt.system,
+        messages: [{ role: 'user', content: prompt.user }],
+      },
+      read: readAnthropicPayload,
+    };
+  }
+  return {
+    endpoint: endpointFor(config.baseUrl, adapterId),
+    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+    body: {
+      model: config.model,
+      temperature: 0.1,
+      max_tokens: maxTokens,
+      ...(TEXT_ACTIONS.has(request.action) ? { stream: true, stream_options: { include_usage: true } } : { response_format: { type: 'json_object' } }),
+      ...(config.providerId === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
+      messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
+    },
+    read: (response, onDelta) => readProviderPayload(response, onDelta, { requireDoneMarker: provider.requireDoneMarker === true }),
+  };
 }
 
 function abortable(promise, signal) {
@@ -186,7 +295,8 @@ function createAIService(options = {}) {
     const finish = (result) => { diagnosticResult = result; return result; };
     try {
       emit(ownerId, { requestId: request.requestId, type: 'started' });
-      const endpoint = await abortable(validateEndpoint(endpointFor(config.baseUrl), controller.signal), controller.signal);
+      const providerRequest = buildProviderRequest(config, request, prompt);
+      const endpoint = await abortable(validateEndpoint(providerRequest.endpoint), controller.signal);
       if (controller.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
       if (binding !== currentBinding()) throw Error('stale_context');
       if (!endpoint) { emit(ownerId, { requestId: request.requestId, type: 'failed', error: 'invalid_endpoint' }); return finish({ ok: false, error: 'invalid_endpoint' }); }
@@ -194,15 +304,8 @@ function createAIService(options = {}) {
         method: 'POST',
         signal: controller.signal,
         redirect: 'error',
-        headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: config.model,
-          temperature: 0.1,
-          max_tokens: request.action === 'organizeRecording' || request.action === 'extractTodos' ? 4096 : 2048,
-          ...(TEXT_ACTIONS.has(request.action) ? { stream: true, stream_options: { include_usage: true } } : { response_format: { type: 'json_object' } }),
-          ...(config.kind === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
-          messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
-        }),
+        headers: providerRequest.headers,
+        body: JSON.stringify(providerRequest.body),
       });
       if (!response.ok) {
         if (response.body?.cancel) await response.body.cancel().catch(() => {});
@@ -210,7 +313,7 @@ function createAIService(options = {}) {
         emit(ownerId, { requestId: request.requestId, type: 'failed', error });
         return finish({ ok: false, error });
       }
-      const payloadBody = await readProviderPayload(response, (delta) => {
+      const payloadBody = await providerRequest.read(response, (delta) => {
         if (binding === currentBinding()) emit(ownerId, { requestId: request.requestId, type: 'textDelta', text: delta });
       });
       if (binding !== currentBinding()) throw Error('stale_context');
@@ -285,4 +388,15 @@ function createAIService(options = {}) {
   return { run, cancel, cancelOwner, cancelAll, endpointFor };
 }
 
-module.exports = { createAIService, endpointFor, providerError, completionError, readProviderPayload, readProviderStream, MAX_PROVIDER_BYTES };
+module.exports = {
+  createAIService,
+  endpointFor,
+  providerError,
+  completionError,
+  readProviderPayload,
+  readProviderStream,
+  readAnthropicPayload,
+  readAnthropicStream,
+  buildProviderRequest,
+  MAX_PROVIDER_BYTES,
+};

@@ -10,6 +10,7 @@ const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
+const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
@@ -81,9 +82,26 @@ test('notes provide local-first creation, rich editing, and guarded image attach
   assert.match(html, /id="tab-notes"/);
   assert.match(html, /id="notes-new"/);
   assert.match(html, /id="notes-search"/);
+  assert.match(html, /class="notes-taxonomy tile"/);
+  assert.match(html, /id="notes-taxonomy-tree"/);
+  assert.match(html, /id="notes-category-filter"/);
+  assert.match(html, /id="notes-category-add"/);
+  assert.match(html, /id="notes-category-editor"/);
+  assert.match(html, /id="notes-category-confirm"/);
+  assert.match(html, /id="notes-tag-toolbar"/);
+  assert.match(html, /id="notes-tag-filter"/);
+  assert.match(html, /id="notes-tag-editor"/);
+  assert.match(html, /id="notes-tag-confirm"/);
   assert.match(html, /id="notes-list"/);
   assert.match(html, /id="notes-detail"/);
   assert.match(appJs, /function createNote\(\)/);
+  assert.match(appJs, /NOTE_CATEGORIES_KEY = 'notch-note-categories-v1'/);
+  assert.match(appJs, /updateNoteCategory/);
+  assert.match(appJs, /removeNoteCategory/);
+  assert.match(appJs, /updateNoteTag/);
+  assert.match(appJs, /removeNoteTag/);
+  assert.match(appJs, /function renderNotesTaxonomy/);
+  assert.match(appJs, /notesTaxonomyTree\?\.addEventListener/);
   assert.match(appJs, /addEventListener\('paste'/);
   assert.match(appJs, /addEventListener\('drop'/);
   assert.match(appJs, /safeNoteImageReference/);
@@ -154,6 +172,20 @@ test('settings exposes every panel tab as a possible default opening page', () =
     'home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings',
   ]);
   assert.match(workspaceJs, /setDefaultTab/);
+});
+
+test('AI providers configure directly inside the settings page', () => {
+  assert.match(html, /class="tile settings-card settings-api-card"/);
+  assert.match(html, /class="ai-provider-sidebar"/);
+  assert.match(html, /id="ai-content-provider-list"/);
+  assert.match(html, /class="ai-provider-config"/);
+  assert.match(html, /id="llm-model-list"/);
+  assert.match(html, /id="llm-model-add"/);
+  assert.match(workspaceJs, /llmModels:\s*normalizedModels/);
+  assert.doesNotMatch(html, /id="transcription-settings-backdrop"|id="settings-api-configure"|id="ai-service-tab-content"/);
+  assert.match(workspaceJs, /data-ai-provider/);
+  assert.match(workspaceJs, /NotchSettings\?\.select\('api'\)/);
+  assert.match(aiCss, /\.ai-settings-layout[^}]*grid-template-columns:\s*196px minmax\(0,1fr\)/);
 });
 
 test('automatic AI naming sends stable source identities', () => {

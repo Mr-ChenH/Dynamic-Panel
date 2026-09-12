@@ -1,6 +1,4 @@
 /* One navigation rail and one content scroller; cards size to their contents. */
-#transcription-settings-backdrop .transcription-settings-card { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; }
-#transcription-settings-backdrop .transcription-settings-actions { flex-shrink: 0; }
 #settings-page.settings-organized {
   --settings-rail: 164px;
   --settings-gap: 20px;

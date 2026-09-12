@@ -506,9 +506,11 @@
         if (!id) return null;
         const title = Array.from(String(item.title || '').replace(/\s+/g, ' ').trim()).slice(0, 80).join('');
         const titleSource = ['model', 'user'].includes(item.titleSource) ? item.titleSource : '';
+        const categoryId = Array.from(String(item.categoryId || '').trim()).slice(0, 80).join('');
+        const tagId = Array.from(String(item.tagId || '').trim()).slice(0, 80).join('');
         const createdAt = Math.max(0, Number(item.createdAt) || Date.now());
         const updatedAt = Math.max(createdAt, Number(item.updatedAt) || createdAt);
-        return { id, title, titleSource, content, createdAt, updatedAt };
+        return { id, title, titleSource, categoryId, tagId, content, createdAt, updatedAt };
       })
       .filter(Boolean)
       .sort((left, right) => right.updatedAt - left.updatedAt);
@@ -530,15 +532,130 @@
     return found ? normalizeNoteArchive(next) : next;
   }
 
-  function filterNotes(notes, query) {
+  function normalizeNoteCategoryName(value) {
+    return Array.from(String(value || '').replace(/\s+/g, ' ').trim()).slice(0, 24).join('');
+  }
+
+  function normalizeNoteTags(value) {
+    if (!Array.isArray(value)) return [];
+    const ids = new Set();
+    const names = new Set();
+    const tags = [];
+    for (const item of value) {
+      if (!item || typeof item !== 'object') continue;
+      const id = Array.from(String(item.id || '').trim()).slice(0, 80).join('');
+      const name = normalizeNoteCategoryName(item.name);
+      const nameKey = name.toLocaleLowerCase();
+      if (!id || !name || ids.has(id) || names.has(nameKey)) continue;
+      ids.add(id);
+      names.add(nameKey);
+      tags.push({ id, name });
+      if (tags.length >= 30) break;
+    }
+    return tags;
+  }
+
+  function normalizeNoteCategories(value) {
+    if (!Array.isArray(value)) return [];
+    const ids = new Set();
+    const names = new Set();
+    const categories = [];
+    for (const item of value) {
+      if (!item || typeof item !== 'object') continue;
+      const id = Array.from(String(item.id || '').trim()).slice(0, 80).join('');
+      const name = normalizeNoteCategoryName(item.name);
+      const nameKey = name.toLocaleLowerCase();
+      if (!id || !name || ids.has(id) || names.has(nameKey)) continue;
+      ids.add(id);
+      names.add(nameKey);
+      categories.push({ id, name, tags: normalizeNoteTags(item.tags) });
+      if (categories.length >= 40) break;
+    }
+    return categories;
+  }
+
+  function filterNotes(notes, query, categoryId = '', tagId = '') {
     const rows = Array.isArray(notes) ? notes : [];
+    const category = String(categoryId || '').trim();
+    const categoryScoped = category === '__uncategorized__'
+      ? rows.filter((note) => !String(note && note.categoryId || ''))
+      : category ? rows.filter((note) => String(note && note.categoryId || '') === category) : rows;
+    const tag = String(tagId || '').trim();
+    const scoped = tag === '__untagged__'
+      ? categoryScoped.filter((note) => !String(note && note.tagId || ''))
+      : tag ? categoryScoped.filter((note) => String(note && note.tagId || '') === tag) : categoryScoped;
     const keyword = String(query || '').trim().toLocaleLowerCase();
-    if (!keyword) return rows.slice();
-    return rows.filter((note) => (
+    if (!keyword) return scoped.slice();
+    return scoped.filter((note) => (
       `${String(note && note.title || '')}\n${String(note && note.content || '')}`
         .toLocaleLowerCase()
         .includes(keyword)
     ));
+  }
+
+  function updateNoteCategory(notes, noteId, categoryId, updatedAt = Date.now()) {
+    const id = String(noteId || '').trim();
+    const nextCategoryId = Array.from(String(categoryId || '').trim()).slice(0, 80).join('');
+    const timestamp = Math.max(0, Number(updatedAt) || Date.now());
+    let found = false;
+    const next = normalizeNoteArchive(notes).map((note) => {
+      if (note.id !== id) return note;
+      found = true;
+      return {
+        ...note,
+        categoryId: nextCategoryId,
+        tagId: note.categoryId === nextCategoryId ? note.tagId : '',
+        updatedAt: Math.max(note.createdAt, timestamp),
+      };
+    });
+    return found ? normalizeNoteArchive(next) : next;
+  }
+
+  function updateNoteTag(notes, noteId, tagId, updatedAt = Date.now()) {
+    const id = String(noteId || '').trim();
+    const nextTagId = Array.from(String(tagId || '').trim()).slice(0, 80).join('');
+    const timestamp = Math.max(0, Number(updatedAt) || Date.now());
+    let found = false;
+    const next = normalizeNoteArchive(notes).map((note) => {
+      if (note.id !== id) return note;
+      found = true;
+      return { ...note, tagId: nextTagId, updatedAt: Math.max(note.createdAt, timestamp) };
+    });
+    return found ? normalizeNoteArchive(next) : next;
+  }
+
+  function removeNoteCategory(categories, notes, categoryId, updatedAt = Date.now()) {
+    const id = String(categoryId || '').trim();
+    const normalizedCategories = normalizeNoteCategories(categories);
+    if (!id || !normalizedCategories.some((category) => category.id === id)) {
+      return { categories: normalizedCategories, notes: normalizeNoteArchive(notes) };
+    }
+    const timestamp = Math.max(0, Number(updatedAt) || Date.now());
+    return {
+      categories: normalizedCategories.filter((category) => category.id !== id),
+      notes: normalizeNoteArchive(normalizeNoteArchive(notes).map((note) => note.categoryId === id
+        ? { ...note, categoryId: '', tagId: '', updatedAt: Math.max(note.createdAt, timestamp) }
+        : note)),
+    };
+  }
+
+  function removeNoteTag(categories, notes, categoryId, tagId, updatedAt = Date.now()) {
+    const normalizedCategories = normalizeNoteCategories(categories);
+    const parentId = String(categoryId || '').trim();
+    const id = String(tagId || '').trim();
+    const parent = normalizedCategories.find((category) => category.id === parentId);
+    if (!parent || !parent.tags.some((tag) => tag.id === id)) {
+      return { categories: normalizedCategories, notes: normalizeNoteArchive(notes) };
+    }
+    const timestamp = Math.max(0, Number(updatedAt) || Date.now());
+    return {
+      categories: normalizedCategories.map((category) => category.id === parentId
+        ? { ...category, tags: category.tags.filter((tag) => tag.id !== id) }
+        : category),
+      notes: normalizeNoteArchive(normalizeNoteArchive(notes).map((note) => note.categoryId === parentId && note.tagId === id
+        ? { ...note, tagId: '', updatedAt: Math.max(note.createdAt, timestamp) }
+        : note)),
+    };
   }
 
   function updateNoteTitle(notes, noteId, title, updatedAt = Date.now()) {
@@ -576,14 +693,17 @@
 
   function apiCredentialStatuses(config) {
     const value = config && typeof config === 'object' ? config : {};
-    const status = (configured, needsReentry) => {
-      if (configured) return { label: '已安全保存', state: 'saved' };
+    const status = (configured, needsReentry, verification) => {
       if (needsReentry) return { label: '需重新输入', state: 'warning' };
-      return { label: '未配置', state: 'empty' };
+      if (!configured) return { label: '未配置', state: 'empty' };
+      if (verification?.state === 'verified') return { label: '已验证', state: 'saved' };
+      if (verification?.state === 'failed') return { label: '验证失败', state: 'error' };
+      if (verification?.state === 'unverified') return { label: '待验证', state: 'warning' };
+      return { label: '已安全保存', state: 'saved' };
     };
     return {
-      transcription: status(Boolean(value.configured), Boolean(value.asrNeedsReentry)),
-      llm: status(Boolean(value.llmConfigured), Boolean(value.llmNeedsReentry)),
+      transcription: status(Boolean(value.configured), Boolean(value.asrNeedsReentry), value.transcriptionVerification),
+      llm: status(Boolean(value.llmConfigured), Boolean(value.llmNeedsReentry), value.contentVerification),
     };
   }
 
@@ -1020,8 +1140,15 @@
     visiblePanelTabs,
     resolveDefaultPanelTab,
     normalizeNoteArchive,
+    normalizeNoteCategoryName,
+    normalizeNoteTags,
+    normalizeNoteCategories,
     filterNotes,
     updateNoteInArchive,
+    updateNoteCategory,
+    updateNoteTag,
+    removeNoteCategory,
+    removeNoteTag,
     updateNoteTitle,
     applyGeneratedNoteTitle,
     apiCredentialStatuses,

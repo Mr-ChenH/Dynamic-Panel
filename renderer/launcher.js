@@ -99,7 +99,7 @@
     try { const url = new URL(query).href; return [...result, { id: `url:${url}`, persistable: false, title: query, subtitle: '在浏览器中打开公开网址', kind: 'url', target: { url } }]; } catch { return result; }
   }
   function localResults() {
-    const signature = ['notch-note-archive-v1', 'notch-todo-category-names-v1', 'notch-todo-data', 'notch-link-groups', 'notch-home-commands', 'notch-clip-history'].map(key => localStorage.getItem(key));
+    const signature = ['notch-note-archive-v1', 'notch-note-categories-v1', 'notch-todo-category-names-v1', 'notch-todo-data', 'notch-link-groups', 'notch-home-commands', 'notch-clip-history'].map(key => localStorage.getItem(key));
     signature.push(settings.sources.workspace, settings.sources.clipboard, features.notes, features.todo, features.links, features.clip);
     if (signature.length === localSignature.length && signature.every((value, i) => value === localSignature[i])) return withDirectUrl(localIndex);
     const result = [
@@ -111,7 +111,15 @@
     if (settings.sources.workspace) {
       if (features.notes !== false) {
         result.push({ id: 'builtin:new-note', kind: 'navigate', title: '新建笔记', subtitle: '笔记', target: { tab: 'notes', create: 'note' } });
-        data('notch-note-archive-v1', []).filter(Boolean).forEach((n) => result.push({ id: `note:${n.id}`, kind: 'navigate', title: n.title || '未命名笔记', subtitle: '笔记', keywords: [String(n.content || '').slice(0, 16000)], target: { tab: 'notes', id: n.id } }));
+        const noteCategories = new Map(data('notch-note-categories-v1', []).filter(Boolean).map((category) => [String(category.id || ''), category]));
+        data('notch-note-archive-v1', []).filter(Boolean).forEach((n) => {
+          const category = noteCategories.get(String(n.categoryId || ''));
+          const categoryName = String(category?.name || '').trim() || '未分类';
+          const tagName = Array.isArray(category?.tags)
+            ? String(category.tags.find((tag) => String(tag?.id || '') === String(n.tagId || ''))?.name || '').trim() : '';
+          const classification = tagName ? `${categoryName} · ${tagName}` : categoryName;
+          result.push({ id: `note:${n.id}`, kind: 'navigate', title: n.title || '未命名笔记', subtitle: `笔记 · ${classification}`, keywords: [categoryName, tagName, String(n.content || '').slice(0, 16000)], target: { tab: 'notes', id: n.id } });
+        });
       }
       if (features.todo !== false) {
         result.push({ id: 'builtin:new-todo', kind: 'navigate', title: '新建待办', subtitle: '选择责任领域和截止时间', target: { tab: 'todo' } });

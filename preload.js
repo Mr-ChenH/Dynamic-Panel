@@ -29,7 +29,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   organizeMaterial: (payload) => ipcRenderer.invoke('smart:organize-material', payload),
   runAI: (payload) => ipcRenderer.invoke('ai:run', payload),
   cancelAI: (requestId) => ipcRenderer.invoke('ai:cancel', requestId),
-  testAIProvider: () => ipcRenderer.invoke('ai:test-provider'),
+  testAIProvider: (slot = 'content') => ipcRenderer.invoke('ai:test-provider', { slot }),
   getAIDiagnostics: () => ipcRenderer.invoke('ai:get-diagnostics'),
   clearAIDiagnostics: () => ipcRenderer.invoke('ai:clear-diagnostics'),
   acknowledgeAIMigration: () => ipcRenderer.invoke('ai:ack-migration'),

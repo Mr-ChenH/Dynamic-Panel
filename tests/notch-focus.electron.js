@@ -84,6 +84,7 @@ async function main() {
     const notesWorkspaceAudit = await window.webContents.executeJavaScript(`
       (async () => {
         localStorage.removeItem('notch-note-archive-v1');
+        localStorage.removeItem('notch-note-categories-v1');
         let savedImages = 0;
         let deletedNoteId = '';
         window.notchAPI = {
@@ -117,6 +118,51 @@ async function main() {
         });
         editor.dispatchEvent(paste);
         await new Promise((resolve) => setTimeout(resolve, 50));
+        document.getElementById('notes-category-add').click();
+        const categoryName = document.getElementById('notes-category-name');
+        categoryName.value = '项目资料';
+        categoryName.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const categoryId = JSON.parse(localStorage.getItem('notch-note-categories-v1'))[0].id;
+        const detailCategory = document.querySelector('.notes-detail-category');
+        detailCategory.value = categoryId;
+        detailCategory.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        document.querySelector('[data-notes-taxonomy-scope="category"][data-category-id="' + categoryId + '"]').click();
+        const categoryFiltered = document.querySelectorAll('.notes-list-item').length;
+        document.querySelector('[data-notes-taxonomy-action="rename-category"][data-category-id="' + categoryId + '"]').click();
+        document.getElementById('notes-category-name').value = '产品研究';
+        document.getElementById('notes-category-save').click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const categoryRenamed = document.querySelector('.notes-list-category')?.textContent;
+        document.querySelector('[data-notes-taxonomy-action="add-tag"][data-category-id="' + categoryId + '"]').click();
+        const tagName = document.getElementById('notes-tag-name');
+        tagName.value = '方案';
+        tagName.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const tagId = JSON.parse(localStorage.getItem('notch-note-categories-v1'))[0].tags[0].id;
+        const detailTag = document.querySelector('.notes-detail-tag');
+        detailTag.value = tagId;
+        detailTag.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        document.querySelector('[data-notes-taxonomy-scope="tag"][data-tag-id="' + tagId + '"]').click();
+        const tagFiltered = document.querySelectorAll('.notes-list-item').length;
+        document.querySelector('[data-notes-taxonomy-action="rename-tag"][data-tag-id="' + tagId + '"]').click();
+        document.getElementById('notes-tag-name').value = '产品规划';
+        document.getElementById('notes-tag-save').click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const tagRenamed = document.querySelector('.notes-list-category')?.textContent;
+        document.getElementById('notes-category-add').click();
+        document.getElementById('notes-category-name').value = '空分类';
+        document.getElementById('notes-category-save').click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const emptyCategoryId = JSON.parse(localStorage.getItem('notch-note-categories-v1')).find((category) => category.name === '空分类').id;
+        document.querySelector('[data-notes-taxonomy-scope="category"][data-category-id="' + emptyCategoryId + '"]').click();
+        const emptyCategoryCount = document.getElementById('notes-count').textContent;
+        document.querySelector('[data-notes-taxonomy-action="delete-category"][data-category-id="' + emptyCategoryId + '"]').click();
+        document.getElementById('notes-category-delete-confirm').click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        document.querySelector('[data-notes-taxonomy-scope="tag"][data-tag-id="' + tagId + '"]').click();
         const storedBeforePreview = JSON.parse(localStorage.getItem('notch-note-archive-v1'));
         document.querySelector('[data-action="note-mode-preview"]').click();
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -132,7 +178,28 @@ async function main() {
           previewImagePath: preview?.querySelector('[data-note-image]')?.dataset.noteImage,
           toolbarHidden: document.querySelector('.notes-format-toolbar')?.hidden,
           noteId: storedBeforePreview[0]?.id,
+          categoryId: storedBeforePreview[0]?.categoryId,
+          tagId: storedBeforePreview[0]?.tagId,
+          categoryFiltered,
+          categoryRenamed,
+          tagFiltered,
+          tagRenamed,
+          emptyCategoryCount,
         };
+        document.querySelector('[data-notes-taxonomy-action="delete-tag"][data-tag-id="' + tagId + '"]').click();
+        result.tagConfirmVisible = !document.getElementById('notes-tag-confirm').hidden;
+        document.getElementById('notes-tag-delete-confirm').click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        result.tagsAfterDelete = JSON.parse(localStorage.getItem('notch-note-categories-v1'))[0].tags.length;
+        result.tagAfterDelete = JSON.parse(localStorage.getItem('notch-note-archive-v1'))[0]?.tagId;
+        result.noteVisibleAfterTagDelete = document.querySelectorAll('.notes-list-item').length;
+        document.querySelector('[data-notes-taxonomy-action="delete-category"][data-category-id="' + categoryId + '"]').click();
+        result.categoryConfirmVisible = !document.getElementById('notes-category-confirm').hidden;
+        document.getElementById('notes-category-delete-confirm').click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        result.categoriesAfterDelete = JSON.parse(localStorage.getItem('notch-note-categories-v1')).length;
+        result.categoryAfterDelete = JSON.parse(localStorage.getItem('notch-note-archive-v1'))[0]?.categoryId;
+        result.noteStillVisible = document.querySelectorAll('.notes-list-item').length;
         document.querySelector('[data-action="delete-note"]').click();
         await new Promise((resolve) => setTimeout(resolve, 20));
         result.deletedNoteId = deletedNoteId;
@@ -150,6 +217,21 @@ async function main() {
     assert.equal(notesWorkspaceAudit.previewStrong, '核心');
     assert.match(notesWorkspaceAudit.previewImagePath, /^note-images\//);
     assert.equal(notesWorkspaceAudit.toolbarHidden, true);
+    assert.match(notesWorkspaceAudit.categoryId, /^note-category-/);
+    assert.match(notesWorkspaceAudit.tagId, /^note-tag-/);
+    assert.equal(notesWorkspaceAudit.categoryFiltered, 1);
+    assert.equal(notesWorkspaceAudit.categoryRenamed, '产品研究');
+    assert.equal(notesWorkspaceAudit.tagFiltered, 1);
+    assert.equal(notesWorkspaceAudit.tagRenamed, '产品研究 · 产品规划');
+    assert.equal(notesWorkspaceAudit.emptyCategoryCount, '0 篇');
+    assert.equal(notesWorkspaceAudit.tagConfirmVisible, true);
+    assert.equal(notesWorkspaceAudit.tagsAfterDelete, 0);
+    assert.equal(notesWorkspaceAudit.tagAfterDelete, '');
+    assert.equal(notesWorkspaceAudit.noteVisibleAfterTagDelete, 1);
+    assert.equal(notesWorkspaceAudit.categoryConfirmVisible, true);
+    assert.equal(notesWorkspaceAudit.categoriesAfterDelete, 0);
+    assert.equal(notesWorkspaceAudit.categoryAfterDelete, '');
+    assert.equal(notesWorkspaceAudit.noteStillVisible, 1);
     assert.equal(notesWorkspaceAudit.deletedNoteId, notesWorkspaceAudit.noteId);
     assert.equal(notesWorkspaceAudit.remaining, 0);
 
@@ -320,7 +402,7 @@ async function main() {
             activePanel: document.getElementById('tab-settings')?.classList.contains('active'),
             display: getComputedStyle(page).display,
             columns: getComputedStyle(page).gridTemplateColumns.split(' ').filter(Boolean).length,
-            api: Boolean(document.getElementById('settings-api-configure')),
+            api: Boolean(document.querySelector('.settings-api-card .ai-settings-layout')),
             mirror: Boolean(document.getElementById('settings-mirror-choose')),
             features: document.querySelectorAll('[data-settings-feature]').length,
             homeModules: document.querySelectorAll('[data-settings-home-module]').length,

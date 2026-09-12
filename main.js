@@ -29,6 +29,18 @@ const { execFile } = require('child_process');
 const platformPolicy = require('./platform');
 const { createLauncherService } = require('./launcher/service');
 const { createAIService } = require('./ai/service');
+const {
+  PROVIDERS,
+  providerFor,
+  normalizeContentProfile,
+  normalizeContentProfiles,
+  normalizeContentService,
+  normalizeModelList,
+  normalizeModelName,
+  normalizeTranscriptionService,
+  publicContentProviders,
+  contentConfigRevision,
+} = require('./ai/providers');
 const { resolveLaunchPath } = require('./launcher/paths');
 const launcherFocus = require('./launcher/focus').createFocusService();
 const launcherApplications = require('./launcher/application-actions').createApplicationActions({readShortcut:file=>shell.readShortcutLink(file),owner:()=>mainWindow&&!mainWindow.isDestroyed()?mainWindow.getNativeWindowHandle().readBigUInt64LE(0):null});
@@ -2663,8 +2675,11 @@ function readStoredTranscriptionSettings() {
 }
 
 function writeTranscriptionSettings(settings) {
-  fs.mkdirSync(path.dirname(getTranscriptionSettingsPath()), { recursive: true });
-  fs.writeFileSync(getTranscriptionSettingsPath(), JSON.stringify(settings), { mode: 0o600 });
+  const settingsPath = getTranscriptionSettingsPath();
+  const temporaryPath = `${settingsPath}.tmp`;
+  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+  fs.writeFileSync(temporaryPath, JSON.stringify(settings), { mode: 0o600 });
+  fs.renameSync(temporaryPath, settingsPath);
 }
 
 function getAIDiagnosticsPath() {
@@ -2681,8 +2696,10 @@ function readAIDiagnostics() {
 function appendAIDiagnostic(entry) {
   const result = entry && entry.result || {};
   const config = entry && entry.config || {};
-  let provider = 'unknown';
-  try { provider = new URL(config.baseUrl).hostname; } catch (error) {}
+  let provider = String(config.providerId || 'unknown');
+  if (provider === 'unknown') {
+    try { provider = new URL(config.baseUrl).hostname; } catch (error) {}
+  }
   const diagnostic = {
     id: crypto.randomUUID(),
     at: new Date().toISOString(),
@@ -2715,32 +2732,72 @@ function decryptStoredSecret(value) {
   }
 }
 
+function storedContentCredential(settings, providerId) {
+  const profiles = settings?.services?.content?.profiles;
+  const profile = profiles && typeof profiles === 'object' && !Array.isArray(profiles) ? profiles[providerId] : null;
+  if (profile && Object.prototype.hasOwnProperty.call(profile, 'encryptedApiKey')) return String(profile.encryptedApiKey || '');
+  const legacy = normalizeContentService(settings);
+  return legacy.providerId === providerId ? String(settings.encryptedLlmApiKey || '') : '';
+}
+
+function resolveContentProfile(settings, providerId, useEnvironment = false) {
+  const normalized = normalizeContentProfiles(settings);
+  const profile = normalized.profiles[providerId] || normalizeContentProfile(providerId);
+  const encryptedApiKey = storedContentCredential(settings, providerId);
+  const environmentKey = useEnvironment ? String(process.env.NOTCH_LLM_API_KEY || '').trim() : '';
+  return {
+    ...profile,
+    model: profile.activeModel,
+    encryptedApiKey,
+    apiKey: environmentKey || decryptStoredSecret(encryptedApiKey).trim(),
+    credentialSource: environmentKey ? 'environment' : encryptedApiKey ? 'stored' : 'none',
+  };
+}
+
 function resolveLlmConfig() {
   const settings = readStoredTranscriptionSettings();
-  return {
-    apiKey: String(process.env.NOTCH_LLM_API_KEY || decryptStoredSecret(settings.encryptedLlmApiKey)).trim(),
-    baseUrl: String(settings.llmBaseUrl || 'https://api.deepseek.com').trim(),
-    model: String(settings.llmModel || 'deepseek-v4-flash').trim(),
-    timeoutMs: Math.max(10000, Math.min(60000, Number(settings.llmTimeoutMs) || 30000)),
-    kind: (() => {
-      try { return new URL(String(settings.llmBaseUrl || 'https://api.deepseek.com')).hostname === 'api.deepseek.com' ? 'deepseek' : 'compatible'; }
-      catch (error) { return 'compatible'; }
-    })(),
-  };
+  const content = normalizeContentProfiles(settings);
+  return resolveContentProfile(settings, content.activeProviderId, true);
 }
 
 function resolveTranscriptionConfig() {
   const settings = readStoredTranscriptionSettings();
+  const stored = normalizeTranscriptionService(settings, TRANSCRIPTION_MODEL);
   const environmentWorkspace = String(process.env.DASHSCOPE_WORKSPACE_ID || process.env.DASHSCOPE_WORKSPACE || '').trim();
   const environmentRegion = String(process.env.DASHSCOPE_REGION || '').trim().toLowerCase();
-  const region = ['beijing', 'singapore'].includes(environmentRegion)
-    ? environmentRegion
-    : ['beijing', 'singapore'].includes(settings.region) ? settings.region : 'beijing';
-  const workspaceId = (environmentWorkspace || String(settings.workspaceId || '').trim()).slice(0, 128);
+  const region = ['beijing', 'singapore'].includes(environmentRegion) ? environmentRegion : stored.region;
+  const workspaceId = (environmentWorkspace || stored.workspaceId).slice(0, 128);
   return {
+    ...stored,
     apiKey: decryptStoredApiKey(settings),
     workspaceId: /^[A-Za-z0-9_-]{0,128}$/.test(workspaceId) ? workspaceId : '',
     region,
+  };
+}
+
+function transcriptionConfigRevision(config) {
+  return [config.providerId, config.model, config.region, config.workspaceId].join('|');
+}
+
+function providerVerificationRevision(slot, config) {
+  const configuration = slot === 'transcription' ? transcriptionConfigRevision(config) : contentConfigRevision(config);
+  const credentialDigest = crypto.createHash('sha256').update(String(config.apiKey || '')).digest('hex');
+  return crypto.createHash('sha256').update(`${configuration}\0${credentialDigest}`).digest('hex');
+}
+
+function contentVerificationKey(config) {
+  return crypto.createHash('sha256').update(contentConfigRevision(config)).digest('hex');
+}
+
+function verificationStatus(settings, slot, revision, configured, storedValue = null) {
+  if (!configured) return { state: 'missing', verifiedAt: '', error: '', capabilities: null };
+  const value = storedValue || settings?.verification?.[slot];
+  if (!value || value.revision !== revision) return { state: 'unverified', verifiedAt: '', error: '', capabilities: null };
+  return {
+    state: value.state === 'verified' ? 'verified' : 'failed',
+    verifiedAt: String(value.verifiedAt || ''),
+    error: String(value.error || ''),
+    capabilities: value.capabilities && typeof value.capabilities === 'object' ? value.capabilities : null,
   };
 }
 
@@ -2748,22 +2805,64 @@ function publicTranscriptionConfig() {
   const config = resolveTranscriptionConfig();
   const llmConfig = resolveLlmConfig();
   const settings = readStoredTranscriptionSettings();
+  const content = normalizeContentProfiles(settings);
+  const transcriptionVerification = verificationStatus(settings, 'transcription', providerVerificationRevision('transcription', config), Boolean(config.apiKey));
+  const activeVerificationValue = settings?.verification?.contentProfiles?.[contentVerificationKey(llmConfig)] || settings?.verification?.content;
+  const contentVerification = verificationStatus(settings, 'content', providerVerificationRevision('content', llmConfig), Boolean(llmConfig.apiKey), activeVerificationValue);
+  const rawContentProfiles = settings?.services?.content?.profiles;
+  const hasLegacyContent = Boolean(settings?.services?.content?.providerId || settings.llmProviderId || settings.llmModel || settings.encryptedLlmApiKey);
+  const contentProviderConfigs = Object.values(content.profiles).map((profile) => {
+    const resolved = resolveContentProfile(settings, profile.providerId, true);
+    const storedProfile = rawContentProfiles && typeof rawContentProfiles === 'object'
+      && Object.prototype.hasOwnProperty.call(rawContentProfiles, profile.providerId);
+    return {
+      providerId: profile.providerId,
+      saved: storedProfile || (hasLegacyContent && profile.providerId === content.activeProviderId),
+      baseUrl: profile.baseUrl,
+      models: profile.models.map((model) => {
+        const modelConfig = { ...resolved, model };
+        const value = settings?.verification?.contentProfiles?.[contentVerificationKey(modelConfig)];
+        return {
+          name: model,
+          verification: verificationStatus(settings, 'content', providerVerificationRevision('content', modelConfig), Boolean(resolved.apiKey), value),
+        };
+      }),
+      activeModel: profile.activeModel,
+      timeoutMs: profile.timeoutMs,
+      configured: Boolean(resolved.apiKey),
+      needsReentry: Boolean(resolved.encryptedApiKey && !resolved.apiKey),
+      credentialSource: resolved.credentialSource,
+    };
+  });
   return {
+    schemaVersion: 3,
     configured: Boolean(config.apiKey),
     asrNeedsReentry: Boolean(settings.encryptedApiKey && !config.apiKey),
+    asrCredentialSource: process.env.DASHSCOPE_API_KEY ? 'environment' : config.apiKey ? 'stored' : 'none',
+    transcriptionProviderId: config.providerId,
+    transcriptionProviderLabel: '阿里云百炼',
+    transcriptionModel: config.model,
+    transcriptionVerification,
     workspaceId: config.workspaceId,
     region: config.region,
-    provider: 'qwen3-asr-flash-realtime',
+    provider: config.model,
     secureStorage: safeStorage.isEncryptionAvailable(),
     llmConfigured: Boolean(llmConfig.apiKey),
-    llmNeedsReentry: Boolean(settings.encryptedLlmApiKey && !llmConfig.apiKey),
-    llmBaseUrl: String(settings.llmBaseUrl || 'https://api.deepseek.com'),
-    llmModel: String(settings.llmModel || 'deepseek-v4-flash'),
-    llmTimeoutMs: Math.max(10000, Math.min(60000, Number(settings.llmTimeoutMs) || 30000)),
-    autoNameNotes: settings.autoNameNotes === true,
-    autoNameRecordings: settings.autoNameRecordings === true,
-    autoOrganizeLinks: settings.autoOrganizeLinks === true,
-    aiMigrationNoticePending: Object.keys(settings).length > 0 && settings.aiSettingsVersion !== 1,
+    llmNeedsReentry: Boolean(llmConfig.encryptedApiKey && !llmConfig.apiKey),
+    llmCredentialSource: llmConfig.credentialSource,
+    llmProviderId: llmConfig.providerId,
+    llmProviderLabel: providerFor(llmConfig.providerId).label,
+    llmBaseUrl: llmConfig.baseUrl,
+    llmModel: llmConfig.model,
+    llmModels: llmConfig.models,
+    llmTimeoutMs: llmConfig.timeoutMs,
+    contentVerification,
+    contentProviders: publicContentProviders(),
+    contentProviderConfigs,
+    autoNameNotes: settings?.automations?.nameNotes === true || settings.autoNameNotes === true,
+    autoNameRecordings: settings?.automations?.nameRecordings === true || settings.autoNameRecordings === true,
+    autoOrganizeLinks: settings?.automations?.organizeLinks === true || settings.autoOrganizeLinks === true,
+    aiMigrationNoticePending: Object.keys(settings).length > 0 && settings.aiSettingsVersion !== 2,
   };
 }
 
@@ -2775,7 +2874,7 @@ function transcriptionUrl(config) {
     : config.region === 'singapore'
       ? 'dashscope-intl.aliyuncs.com'
       : 'dashscope.aliyuncs.com';
-  return `wss://${host}/api-ws/v1/realtime?model=${TRANSCRIPTION_MODEL}&heartbeat=true`;
+  return `wss://${host}/api-ws/v1/realtime?model=${encodeURIComponent(config.model || TRANSCRIPTION_MODEL)}&heartbeat=true`;
 }
 
 function transcriptionEventId() {
@@ -2863,7 +2962,82 @@ aiModelService = createAIService({
 
 ipcMain.handle('ai:run', (event, payload) => aiModelService.run(event.sender.id, payload));
 ipcMain.handle('ai:cancel', (event, requestId) => aiModelService.cancel(event.sender.id, requestId));
-ipcMain.handle('ai:test-provider', async (event) => {
+
+function persistProviderVerification(slot, result, capabilities = null, expectedRevision = '') {
+  const settings = readStoredTranscriptionSettings();
+  const config = slot === 'transcription' ? resolveTranscriptionConfig() : resolveLlmConfig();
+  const revision = providerVerificationRevision(slot, config);
+  if (expectedRevision && revision !== expectedRevision) return false;
+  const entry = {
+    state: result.ok ? 'verified' : 'failed',
+    verifiedAt: new Date().toISOString(),
+    revision,
+    error: result.ok ? '' : String(result.error || 'unknown').slice(0, 80),
+    capabilities: result.ok && capabilities ? capabilities : null,
+  };
+  const verification = { ...(settings.verification || {}), [slot]: entry };
+  if (slot === 'content') {
+    verification.contentProfiles = {
+      ...(settings.verification?.contentProfiles || {}),
+      [contentVerificationKey(config)]: entry,
+    };
+  }
+  writeTranscriptionSettings({
+    ...settings,
+    schemaVersion: 3,
+    verification,
+  });
+  return true;
+}
+
+function testTranscriptionProvider() {
+  const config = resolveTranscriptionConfig();
+  if (!config.apiKey) return Promise.resolve({ ok: false, error: 'not_configured' });
+  return new Promise((resolve) => {
+    const headers = {
+      Authorization: `Bearer ${config.apiKey}`,
+      'OpenAI-Beta': 'realtime=v1',
+      'User-Agent': 'DynamicPanel/0.3',
+    };
+    if (config.workspaceId) headers['X-DashScope-WorkSpace'] = config.workspaceId;
+    const socket = new WebSocket(transcriptionUrl(config), { headers });
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { socket.close(); } catch (error) {}
+      resolve(result);
+    };
+    const timer = setTimeout(() => finish({ ok: false, error: 'connect_timeout' }), 8000);
+    socket.on('message', (raw) => {
+      let message;
+      try { message = JSON.parse(String(raw)); } catch (error) { return; }
+      if (message.type === 'session.created' || message.type === 'session.updated') {
+        finish({ ok: true, capabilities: { realtimeTranscription: true } });
+      } else if (message.type === 'error') {
+        finish({ ok: false, error: 'provider_error' });
+      }
+    });
+    socket.once('unexpected-response', (_request, response) => {
+      finish({ ok: false, error: response.statusCode === 401 || response.statusCode === 403 ? 'authentication_failed' : `http_${response.statusCode || 0}` });
+    });
+    socket.once('error', () => finish({ ok: false, error: 'network_error' }));
+    socket.once('close', () => finish({ ok: false, error: 'connection_closed' }));
+  });
+}
+
+ipcMain.handle('ai:test-provider', async (event, payload) => {
+  const slot = payload?.slot === 'transcription' ? 'transcription' : 'content';
+  if (slot === 'transcription') {
+    const expectedRevision = providerVerificationRevision(slot, resolveTranscriptionConfig());
+    const result = await testTranscriptionProvider();
+    try {
+      if (!persistProviderVerification(slot, result, result.capabilities, expectedRevision)) return { ok: false, error: 'stale_context' };
+    } catch (error) {}
+    return result;
+  }
+  const expectedRevision = providerVerificationRevision(slot, resolveLlmConfig());
   const referenceTime = new Date().toISOString();
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const textResult = await aiModelService.run(event.sender.id, {
@@ -2874,7 +3048,12 @@ ipcMain.handle('ai:test-provider', async (event) => {
     timeZone,
     categories: {},
   });
-  if (!textResult.ok) return textResult;
+  if (!textResult.ok) {
+    try {
+      if (!persistProviderVerification(slot, textResult, null, expectedRevision)) return { ok: false, error: 'stale_context' };
+    } catch (error) {}
+    return textResult;
+  }
   const structuredResult = await aiModelService.run(event.sender.id, {
     requestId: `connection-json-${crypto.randomUUID()}`,
     action: 'nameLink',
@@ -2883,8 +3062,13 @@ ipcMain.handle('ai:test-provider', async (event) => {
     timeZone,
     categories: {},
   });
-  if (!structuredResult.ok) return { ...structuredResult, error: 'structured_output_unsupported', providerError: structuredResult.error };
-  return { ok: true, capabilities: { text: true, structuredJson: true }, promptVersion: structuredResult.promptVersion };
+  const result = structuredResult.ok
+    ? { ok: true, capabilities: { text: true, stream: true, structuredJson: true }, promptVersion: structuredResult.promptVersion }
+    : { ...structuredResult, error: 'structured_output_unsupported', providerError: structuredResult.error };
+  try {
+    if (!persistProviderVerification(slot, result, result.capabilities, expectedRevision)) return { ok: false, error: 'stale_context' };
+  } catch (error) {}
+  return result;
 });
 
 ipcMain.handle('ai:get-diagnostics', () => ({ ok: true, items: readAIDiagnostics() }));
@@ -2893,7 +3077,7 @@ ipcMain.handle('ai:clear-diagnostics', () => {
   catch (error) { return { ok: false, error: 'clear_failed' }; }
 });
 ipcMain.handle('ai:ack-migration', () => {
-  try { writeTranscriptionSettings({ ...readStoredTranscriptionSettings(), aiSettingsVersion: 1 }); return { ok: true, ...publicTranscriptionConfig() }; }
+  try { writeTranscriptionSettings({ ...readStoredTranscriptionSettings(), schemaVersion: 3, aiSettingsVersion: 2 }); return { ok: true, ...publicTranscriptionConfig() }; }
   catch (error) { return { ok: false, error: 'save_failed' }; }
 });
 
@@ -2901,46 +3085,138 @@ ipcMain.handle('transcription:get-config', () => publicTranscriptionConfig());
 
 ipcMain.handle('transcription:set-config', (event, payload) => {
   const previous = readStoredTranscriptionSettings();
-  const region = payload && payload.region === 'singapore' ? 'singapore' : 'beijing';
-  const workspaceId = String(payload && payload.workspaceId || '').trim();
-  const apiKey = String(payload && payload.apiKey || '').trim();
-  const llmApiKey = String(payload && payload.llmApiKey || '').trim();
-  const llmBaseUrl = String(payload && payload.llmBaseUrl || previous.llmBaseUrl || 'https://api.deepseek.com').trim();
-  const llmModel = String(payload && payload.llmModel || previous.llmModel || 'deepseek-v4-flash').replace(/\s+/g, ' ').trim().slice(0, 120);
-  const llmTimeoutMs = Math.max(10000, Math.min(60000, Number(payload && payload.llmTimeoutMs) || Number(previous.llmTimeoutMs) || 30000));
-  if (workspaceId && !/^[A-Za-z0-9_-]{1,128}$/.test(workspaceId)) {
-    return { ok: false, error: 'invalid_workspace' };
+  const previousContentState = normalizeContentProfiles(previous);
+  const previousActiveContent = resolveLlmConfig();
+  const region = payload?.region === 'singapore' ? 'singapore' : 'beijing';
+  const workspaceId = String(payload?.workspaceId || '').trim();
+  const apiKey = String(payload?.apiKey || '').trim();
+  const llmApiKey = String(payload?.llmApiKey || '').trim();
+  const removeAsr = payload?.removeAsr === true;
+  const removeContent = payload?.removeContent === true;
+  const llmProviderId = String(payload?.llmProviderId || previousContentState.activeProviderId);
+  if (!PROVIDERS[llmProviderId]) return { ok: false, error: 'invalid_provider' };
+  const llmProvider = providerFor(llmProviderId);
+  const previousProviderProfile = previousContentState.profiles[llmProviderId] || normalizeContentProfile(llmProviderId);
+  const rawModels = Array.isArray(payload?.llmModels) ? payload.llmModels : [payload?.llmModel];
+  if (!removeContent && (rawModels.length < 1 || rawModels.length > 12)) return { ok: false, error: 'invalid_model_count' };
+  if (!removeContent && rawModels.some((model) => typeof model !== 'string')) return { ok: false, error: 'invalid_model' };
+  const normalizedRequestedModels = rawModels.map(normalizeModelName);
+  if (!removeContent && normalizedRequestedModels.some((model) => !model)) return { ok: false, error: 'invalid_model' };
+  const llmModels = normalizeModelList(normalizedRequestedModels);
+  if (!removeContent && llmModels.length !== normalizedRequestedModels.length) return { ok: false, error: 'duplicate_model' };
+  const requestedActiveModel = normalizeModelName(payload?.llmModel);
+  const llmModel = llmModels.includes(requestedActiveModel) ? requestedActiveModel : llmModels[0] || '';
+  const llmBaseUrl = String(llmProvider.endpointEditable
+    ? payload?.llmBaseUrl || previousProviderProfile.baseUrl || llmProvider.defaultBaseUrl
+    : previousProviderProfile.baseUrl || llmProvider.defaultBaseUrl).trim().replace(/\/+$/, '');
+  const llmTimeoutMs = Math.max(10000, Math.min(60000, Number(payload?.llmTimeoutMs) || previousProviderProfile.timeoutMs || 30000));
+  if (workspaceId && !/^[A-Za-z0-9_-]{1,128}$/.test(workspaceId)) return { ok: false, error: 'invalid_workspace' };
+  if ((apiKey || llmApiKey) && !safeStorage.isEncryptionAvailable()) return { ok: false, error: 'secure_storage_unavailable' };
+
+  const encryptedApiKey = removeAsr ? '' : apiKey
+    ? safeStorage.encryptString(apiKey).toString('base64') : String(previous.encryptedApiKey || '');
+  const previousEncryptedLlmKey = storedContentCredential(previous, llmProviderId);
+  const selectedEncryptedLlmKey = removeContent ? '' : llmApiKey
+    ? safeStorage.encryptString(llmApiKey).toString('base64') : previousEncryptedLlmKey;
+  const contentConfigured = Boolean(process.env.NOTCH_LLM_API_KEY || decryptStoredSecret(selectedEncryptedLlmKey));
+  let parsedLlmUrl = null;
+  if (llmBaseUrl) {
+    try { parsedLlmUrl = new URL(llmBaseUrl); } catch (error) {}
   }
-  let parsedLlmUrl;
-  try { parsedLlmUrl = new URL(llmBaseUrl); } catch (error) { parsedLlmUrl = null; }
-  if (!parsedLlmUrl || parsedLlmUrl.protocol !== 'https:' || parsedLlmUrl.username || parsedLlmUrl.password) {
+  if (!removeContent && contentConfigured && (!parsedLlmUrl || parsedLlmUrl.protocol !== 'https:' || parsedLlmUrl.username || parsedLlmUrl.password)) {
     return { ok: false, error: 'invalid_llm_url' };
   }
-  if ((apiKey || llmApiKey) && !safeStorage.isEncryptionAvailable()) {
-    return { ok: false, error: 'secure_storage_unavailable' };
+  if (!removeContent && !llmModel) return { ok: false, error: 'invalid_model' };
+
+  const rawContent = previous?.services?.content && typeof previous.services.content === 'object'
+    ? previous.services.content : {};
+  const rawProfiles = rawContent.profiles && typeof rawContent.profiles === 'object' && !Array.isArray(rawContent.profiles)
+    ? rawContent.profiles : {};
+  const contentProfiles = { ...rawProfiles };
+  for (const profile of Object.values(previousContentState.profiles)) {
+    const raw = rawProfiles[profile.providerId] && typeof rawProfiles[profile.providerId] === 'object'
+      ? rawProfiles[profile.providerId] : {};
+    contentProfiles[profile.providerId] = {
+      ...raw,
+      ...profile,
+      encryptedApiKey: storedContentCredential(previous, profile.providerId),
+    };
   }
-  const next = {
-    ...previous,
+  if (removeContent) delete contentProfiles[llmProviderId];
+  else {
+    contentProfiles[llmProviderId] = {
+      ...(contentProfiles[llmProviderId] || {}),
+      providerId: llmProviderId,
+      adapterId: llmProvider.adapterId,
+      baseUrl: parsedLlmUrl ? parsedLlmUrl.toString().replace(/\/+$/, '') : llmBaseUrl,
+      models: llmModels,
+      activeModel: llmModel,
+      timeoutMs: llmTimeoutMs,
+      encryptedApiKey: selectedEncryptedLlmKey,
+    };
+  }
+  let activeProviderId = removeContent && previousContentState.activeProviderId === llmProviderId
+    ? Object.keys(contentProfiles).find((providerId) => PROVIDERS[providerId]) || llmProviderId
+    : removeContent ? previousContentState.activeProviderId : llmProviderId;
+  if (!PROVIDERS[activeProviderId]) activeProviderId = 'deepseek';
+  const activeProfile = contentProfiles[activeProviderId]
+    ? normalizeContentProfile(activeProviderId, contentProfiles[activeProviderId])
+    : normalizeContentProfile(activeProviderId);
+  const activeEncryptedLlmKey = contentProfiles[activeProviderId]?.encryptedApiKey || '';
+  const contentService = {
+    ...rawContent,
+    activeProviderId,
+    profiles: contentProfiles,
+    providerId: activeProviderId,
+    adapterId: providerFor(activeProviderId).adapterId,
+    baseUrl: activeProfile.baseUrl,
+    model: activeProfile.activeModel,
+    timeoutMs: activeProfile.timeoutMs,
+  };
+  const transcriptionService = {
+    providerId: 'aliyun-bailian-realtime',
+    model: TRANSCRIPTION_MODEL,
     region,
     workspaceId,
-    encryptedApiKey: apiKey
-      ? safeStorage.encryptString(apiKey).toString('base64')
-      : String(previous.encryptedApiKey || ''),
-    llmBaseUrl: parsedLlmUrl.toString().replace(/\/$/, ''),
-    llmModel,
-    llmTimeoutMs,
-    autoNameNotes: payload && payload.autoNameNotes === true,
-    autoNameRecordings: payload && payload.autoNameRecordings === true,
-    autoOrganizeLinks: payload && payload.autoOrganizeLinks === true,
-    aiSettingsVersion: 1,
-    encryptedLlmApiKey: llmApiKey
-      ? safeStorage.encryptString(llmApiKey).toString('base64')
-      : String(previous.encryptedLlmApiKey || ''),
+  };
+  const verification = { ...(previous.verification || {}) };
+  const previousTranscription = resolveTranscriptionConfig();
+  const transcriptionChanged = apiKey || removeAsr || transcriptionConfigRevision(previousTranscription) !== transcriptionConfigRevision(transcriptionService);
+  if (transcriptionChanged) delete verification.transcription;
+  const activeContentChanged = llmApiKey || removeContent
+    || contentConfigRevision(previousActiveContent) !== contentConfigRevision({ ...activeProfile, model: activeProfile.activeModel });
+  if (activeContentChanged) delete verification.content;
+  const automations = {
+    nameNotes: payload?.autoNameNotes === true,
+    nameRecordings: payload?.autoNameRecordings === true,
+    organizeLinks: payload?.autoOrganizeLinks === true,
+  };
+  const next = {
+    ...previous,
+    schemaVersion: 3,
+    services: { ...(previous.services || {}), transcription: transcriptionService, content: contentService },
+    automations,
+    verification,
+    region,
+    workspaceId,
+    encryptedApiKey,
+    llmProviderId: activeProviderId,
+    llmBaseUrl: activeProfile.baseUrl,
+    llmModel: activeProfile.activeModel,
+    llmTimeoutMs: activeProfile.timeoutMs,
+    autoNameNotes: automations.nameNotes,
+    autoNameRecordings: automations.nameRecordings,
+    autoOrganizeLinks: automations.organizeLinks,
+    aiSettingsVersion: 2,
+    encryptedLlmApiKey: activeEncryptedLlmKey,
   };
   try {
     writeTranscriptionSettings(next);
     aiContextGeneration += 1;
     aiModelService?.cancelAll();
+    if (transcriptionChanged) {
+      for (const session of [...transcriptionSessions.values()]) closeTranscriptionSession(session, { ok: false, error: 'config_changed' });
+    }
     return { ok: true, ...publicTranscriptionConfig() };
   } catch (error) {
     return { ok: false, error: 'save_failed' };

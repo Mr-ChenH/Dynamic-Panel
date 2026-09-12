@@ -1749,6 +1749,7 @@ renderPomodoro();
 const NOTE_KEY = 'notch-home-note';
 const NOTE_ARCHIVE_KEY = 'notch-note-archive-v1';
 const NOTE_ACTIVE_ARCHIVE_KEY = 'notch-note-active-archive-v1';
+const NOTE_CATEGORIES_KEY = 'notch-note-categories-v1';
 const noteInput = document.getElementById('home-note');
 const notePreview = document.getElementById('home-note-preview');
 const noteSaveButton = document.getElementById('note-save-btn');
@@ -1757,6 +1758,33 @@ const notesSearch = document.getElementById('notes-search');
 const notesDetail = document.getElementById('notes-detail');
 const notesCount = document.getElementById('notes-count');
 const notesNewButton = document.getElementById('notes-new');
+const notesTaxonomyTree = document.getElementById('notes-taxonomy-tree');
+const notesTaxonomyCount = document.getElementById('notes-taxonomy-count');
+const notesCategoryFilter = document.getElementById('notes-category-filter');
+const notesCategoryAdd = document.getElementById('notes-category-add');
+const notesCategoryRename = document.getElementById('notes-category-rename');
+const notesCategoryDelete = document.getElementById('notes-category-delete');
+const notesCategoryEditor = document.getElementById('notes-category-editor');
+const notesCategoryName = document.getElementById('notes-category-name');
+const notesCategorySave = document.getElementById('notes-category-save');
+const notesCategoryCancel = document.getElementById('notes-category-cancel');
+const notesCategoryConfirm = document.getElementById('notes-category-confirm');
+const notesCategoryConfirmText = document.getElementById('notes-category-confirm-text');
+const notesCategoryDeleteCancel = document.getElementById('notes-category-delete-cancel');
+const notesCategoryDeleteConfirm = document.getElementById('notes-category-delete-confirm');
+const notesTagToolbar = document.getElementById('notes-tag-toolbar');
+const notesTagFilter = document.getElementById('notes-tag-filter');
+const notesTagAdd = document.getElementById('notes-tag-add');
+const notesTagRename = document.getElementById('notes-tag-rename');
+const notesTagDelete = document.getElementById('notes-tag-delete');
+const notesTagEditor = document.getElementById('notes-tag-editor');
+const notesTagName = document.getElementById('notes-tag-name');
+const notesTagSave = document.getElementById('notes-tag-save');
+const notesTagCancel = document.getElementById('notes-tag-cancel');
+const notesTagConfirm = document.getElementById('notes-tag-confirm');
+const notesTagConfirmText = document.getElementById('notes-tag-confirm-text');
+const notesTagDeleteCancel = document.getElementById('notes-tag-delete-cancel');
+const notesTagDeleteConfirm = document.getElementById('notes-tag-delete-confirm');
 const noteFormatActions = document.getElementById('note-format-actions');
 const noteModeButtons = Array.from(document.querySelectorAll('[data-note-mode]'));
 const noteEditButton = document.getElementById('note-edit-btn');
@@ -2376,16 +2404,47 @@ if (noteInput) {
   noteInput.hidden = false;
 }
 
-function loadNoteArchive() {
+function loadNoteCategories() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(NOTE_ARCHIVE_KEY) || '[]');
-    return window.NotchDomain.normalizeNoteArchive(parsed);
+    return window.NotchDomain.normalizeNoteCategories(JSON.parse(localStorage.getItem(NOTE_CATEGORIES_KEY) || '[]'));
   } catch (error) {
     return [];
   }
 }
 
+function loadNoteArchive() {
+  try {
+    const parsed = window.NotchDomain.normalizeNoteArchive(JSON.parse(localStorage.getItem(NOTE_ARCHIVE_KEY) || '[]'));
+    const categories = new Map(loadNoteCategories().map((category) => [category.id, new Set(category.tags.map((tag) => tag.id))]));
+    return parsed.map((note) => {
+      const tags = categories.get(note.categoryId);
+      if (!tags) return { ...note, categoryId: '', tagId: '' };
+      return tags.has(note.tagId) ? note : { ...note, tagId: '' };
+    });
+  } catch (error) {
+    return [];
+  }
+}
+
+function noteCategoryName(note, categories = loadNoteCategories()) {
+  return categories.find((category) => category.id === String(note && note.categoryId || ''))?.name || '未分类';
+}
+
+function noteTagName(note, categories = loadNoteCategories()) {
+  const category = categories.find((item) => item.id === String(note && note.categoryId || ''));
+  return category?.tags.find((tag) => tag.id === String(note && note.tagId || ''))?.name || '';
+}
+
+function saveNoteCategories(categories) {
+  const normalized = window.NotchDomain.normalizeNoteCategories(categories);
+  localStorage.setItem(NOTE_CATEGORIES_KEY, JSON.stringify(normalized));
+  return normalized;
+}
+
 let selectedNoteId = '';
+let noteCategoryEditorMode = '';
+let noteTagEditorMode = '';
+const expandedNoteCategories = new Set();
 
 function noteArchiveTitle(note) {
   return String(note && note.title || '').trim() || '未命名笔记';
@@ -2432,6 +2491,235 @@ function noteActionButton(action, label, icon, className = 'notes-icon-button') 
   return button;
 }
 
+function selectedNoteCategory(categories = loadNoteCategories()) {
+  const id = String(notesCategoryFilter?.value || '');
+  return categories.find((category) => category.id === id) || null;
+}
+
+function renderNoteCategoryControls(categories, archive) {
+  if (!notesCategoryFilter) return;
+  const selected = notesCategoryFilter.value;
+  const counts = new Map(categories.map((category) => [category.id, 0]));
+  let uncategorized = 0;
+  archive.forEach((note) => {
+    if (counts.has(note.categoryId)) counts.set(note.categoryId, counts.get(note.categoryId) + 1);
+    else uncategorized += 1;
+  });
+  notesCategoryFilter.replaceChildren();
+  const all = document.createElement('option');
+  all.value = '';
+  all.textContent = `全部分类 (${archive.length})`;
+  const empty = document.createElement('option');
+  empty.value = '__uncategorized__';
+  empty.textContent = `未分类 (${uncategorized})`;
+  notesCategoryFilter.append(all, empty);
+  categories.forEach((category) => {
+    const option = document.createElement('option');
+    option.value = category.id;
+    option.textContent = `${category.name} (${counts.get(category.id) || 0})`;
+    notesCategoryFilter.append(option);
+  });
+  notesCategoryFilter.value = [...notesCategoryFilter.options].some((option) => option.value === selected) ? selected : '';
+  const customSelected = Boolean(selectedNoteCategory(categories));
+  if (notesCategoryAdd) notesCategoryAdd.disabled = categories.length >= 40;
+  if (notesCategoryRename) notesCategoryRename.disabled = !customSelected;
+  if (notesCategoryDelete) notesCategoryDelete.disabled = !customSelected;
+}
+
+function selectedNoteTag(category = selectedNoteCategory()) {
+  const id = String(notesTagFilter?.value || '');
+  return category?.tags.find((tag) => tag.id === id) || null;
+}
+
+function renderNoteTagControls(category, archive) {
+  if (!notesTagToolbar || !notesTagFilter) return;
+  notesTagToolbar.hidden = !category;
+  if (!category) {
+    notesTagFilter.replaceChildren();
+    if (notesTagEditor) notesTagEditor.hidden = true;
+    if (notesTagConfirm) notesTagConfirm.hidden = true;
+    return;
+  }
+  const selected = notesTagFilter.value;
+  const categoryNotes = archive.filter((note) => note.categoryId === category.id);
+  const counts = new Map(category.tags.map((tag) => [tag.id, 0]));
+  let untagged = 0;
+  categoryNotes.forEach((note) => {
+    if (counts.has(note.tagId)) counts.set(note.tagId, counts.get(note.tagId) + 1);
+    else untagged += 1;
+  });
+  notesTagFilter.replaceChildren();
+  const all = document.createElement('option');
+  all.value = '';
+  all.textContent = `全部标签 (${categoryNotes.length})`;
+  const empty = document.createElement('option');
+  empty.value = '__untagged__';
+  empty.textContent = `无标签 (${untagged})`;
+  notesTagFilter.append(all, empty);
+  category.tags.forEach((tag) => {
+    const option = document.createElement('option');
+    option.value = tag.id;
+    option.textContent = `${tag.name} (${counts.get(tag.id) || 0})`;
+    notesTagFilter.append(option);
+  });
+  notesTagFilter.value = [...notesTagFilter.options].some((option) => option.value === selected) ? selected : '';
+  const customSelected = Boolean(selectedNoteTag(category));
+  if (notesTagAdd) notesTagAdd.disabled = category.tags.length >= 30;
+  if (notesTagRename) notesTagRename.disabled = !customSelected;
+  if (notesTagDelete) notesTagDelete.disabled = !customSelected;
+}
+
+function notesTaxonomyAction(action, label, icon) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'notes-taxonomy-action';
+  button.dataset.notesTaxonomyAction = action;
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.innerHTML = icon;
+  return button;
+}
+
+function notesTaxonomySelect(label, count, scope, selected, categoryId = '', tagId = '') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `notes-taxonomy-select${selected ? ' active' : ''}`;
+  button.dataset.notesTaxonomyScope = scope;
+  if (categoryId) button.dataset.categoryId = categoryId;
+  if (tagId) button.dataset.tagId = tagId;
+  button.setAttribute('aria-current', selected ? 'true' : 'false');
+  const name = document.createElement('span');
+  name.textContent = label;
+  const total = document.createElement('small');
+  total.textContent = String(count);
+  button.append(name, total);
+  return button;
+}
+
+function renderNotesTaxonomy(categories, archive) {
+  if (!notesTaxonomyTree) return;
+  if (notesTaxonomyCount) notesTaxonomyCount.textContent = `${categories.length} 个分类`;
+  const selectedCategoryId = String(notesCategoryFilter?.value || '');
+  const selectedTagId = String(notesTagFilter?.value || '');
+  notesTaxonomyTree.replaceChildren();
+  notesTaxonomyTree.append(
+    notesTaxonomySelect('全部笔记', archive.length, 'all', !selectedCategoryId),
+    notesTaxonomySelect('未分类', archive.filter((note) => !note.categoryId).length, 'uncategorized', selectedCategoryId === '__uncategorized__')
+  );
+  const plusIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  const editIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 16 9.5-9.5 4 4L8 20H4zM12 8l4 4"/></svg>';
+  const deleteIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12"/></svg>';
+  categories.forEach((category) => {
+    const group = document.createElement('section');
+    group.className = 'notes-taxonomy-group';
+    const row = document.createElement('div');
+    row.className = 'notes-taxonomy-row';
+    const expanded = expandedNoteCategories.has(category.id);
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'notes-taxonomy-toggle';
+    toggle.dataset.notesTaxonomyToggle = category.id;
+    toggle.setAttribute('aria-label', `${expanded ? '折叠' : '展开'}${category.name}`);
+    toggle.setAttribute('aria-expanded', String(expanded));
+    toggle.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg>';
+    const count = archive.filter((note) => note.categoryId === category.id).length;
+    const select = notesTaxonomySelect(category.name, count, 'category', selectedCategoryId === category.id && !selectedTagId, category.id);
+    const actions = document.createElement('div');
+    actions.className = 'notes-taxonomy-actions';
+    const addTag = notesTaxonomyAction('add-tag', `在${category.name}中新建标签`, plusIcon);
+    addTag.dataset.categoryId = category.id;
+    const rename = notesTaxonomyAction('rename-category', `重命名${category.name}`, editIcon);
+    rename.dataset.categoryId = category.id;
+    const remove = notesTaxonomyAction('delete-category', `删除${category.name}`, deleteIcon);
+    remove.dataset.categoryId = category.id;
+    remove.classList.add('danger');
+    actions.append(addTag, rename, remove);
+    row.append(toggle, select, actions);
+    group.append(row);
+    if (expanded) {
+      const children = document.createElement('div');
+      children.className = 'notes-taxonomy-children';
+      const untagged = archive.filter((note) => note.categoryId === category.id && !note.tagId).length;
+      children.append(notesTaxonomySelect('无标签', untagged, 'untagged', selectedCategoryId === category.id && selectedTagId === '__untagged__', category.id, '__untagged__'));
+      category.tags.forEach((tag) => {
+        const tagRow = document.createElement('div');
+        tagRow.className = 'notes-taxonomy-row tag';
+        const tagCount = archive.filter((note) => note.categoryId === category.id && note.tagId === tag.id).length;
+        const tagSelect = notesTaxonomySelect(tag.name, tagCount, 'tag', selectedCategoryId === category.id && selectedTagId === tag.id, category.id, tag.id);
+        const tagActions = document.createElement('div');
+        tagActions.className = 'notes-taxonomy-actions';
+        const renameTag = notesTaxonomyAction('rename-tag', `重命名${tag.name}`, editIcon);
+        renameTag.dataset.categoryId = category.id;
+        renameTag.dataset.tagId = tag.id;
+        const removeTag = notesTaxonomyAction('delete-tag', `删除${tag.name}`, deleteIcon);
+        removeTag.dataset.categoryId = category.id;
+        removeTag.dataset.tagId = tag.id;
+        removeTag.classList.add('danger');
+        tagActions.append(renameTag, removeTag);
+        tagRow.append(tagSelect, tagActions);
+        children.append(tagRow);
+      });
+      group.append(children);
+    }
+    notesTaxonomyTree.append(group);
+  });
+}
+
+function closeNoteTagControls() {
+  noteTagEditorMode = '';
+  if (notesTagEditor) notesTagEditor.hidden = true;
+  if (notesTagConfirm) notesTagConfirm.hidden = true;
+  if (notesTagName) {
+    notesTagName.value = '';
+    notesTagName.removeAttribute('aria-invalid');
+  }
+}
+
+function closeNoteCategoryControls() {
+  noteCategoryEditorMode = '';
+  if (notesCategoryEditor) notesCategoryEditor.hidden = true;
+  if (notesCategoryConfirm) notesCategoryConfirm.hidden = true;
+  if (notesCategoryName) {
+    notesCategoryName.value = '';
+    notesCategoryName.removeAttribute('aria-invalid');
+  }
+}
+
+function openNoteTagEditor(mode) {
+  closeNoteCategoryControls();
+  const category = selectedNoteCategory();
+  const tag = selectedNoteTag(category);
+  if (!category || (mode === 'rename' && !tag)) return;
+  noteTagEditorMode = mode;
+  if (notesTagConfirm) notesTagConfirm.hidden = true;
+  if (notesTagEditor) notesTagEditor.hidden = false;
+  if (notesTagName) {
+    notesTagName.value = mode === 'rename' ? tag.name : '';
+    notesTagName.removeAttribute('aria-invalid');
+    requestAnimationFrame(() => {
+      notesTagName.focus({ preventScroll: true });
+      notesTagName.select();
+    });
+  }
+}
+
+function openNoteCategoryEditor(mode) {
+  closeNoteTagControls();
+  const category = selectedNoteCategory();
+  if (mode === 'rename' && !category) return;
+  noteCategoryEditorMode = mode;
+  if (notesCategoryConfirm) notesCategoryConfirm.hidden = true;
+  if (notesCategoryEditor) notesCategoryEditor.hidden = false;
+  if (notesCategoryName) {
+    notesCategoryName.value = mode === 'rename' ? category.name : '';
+    notesCategoryName.removeAttribute('aria-invalid');
+    requestAnimationFrame(() => {
+      notesCategoryName.focus({ preventScroll: true });
+      notesCategoryName.select();
+    });
+  }
+}
+
 function renderNotesDetail(notes = loadNoteArchive()) {
   if (!notesDetail) return;
   notesDetail.replaceChildren();
@@ -2460,10 +2748,46 @@ function renderNotesDetail(notes = loadNoteArchive()) {
   title.autocomplete = 'off';
   title.spellcheck = false;
   title.setAttribute('aria-label', '笔记标题');
+  const meta = document.createElement('div');
+  meta.className = 'notes-detail-meta';
+  const category = document.createElement('select');
+  category.className = 'notes-detail-category';
+  category.dataset.noteId = note.id;
+  category.setAttribute('aria-label', '笔记分类');
+  const uncategorized = document.createElement('option');
+  uncategorized.value = '';
+  uncategorized.textContent = '未分类';
+  category.append(uncategorized);
+  const noteCategories = loadNoteCategories();
+  noteCategories.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = item.name;
+    category.append(option);
+  });
+  category.value = note.categoryId || '';
+  const tag = document.createElement('select');
+  tag.className = 'notes-detail-tag';
+  tag.dataset.noteId = note.id;
+  tag.setAttribute('aria-label', '笔记标签');
+  const untagged = document.createElement('option');
+  untagged.value = '';
+  untagged.textContent = note.categoryId ? '无标签' : '先选择分类';
+  tag.append(untagged);
+  const noteCategory = noteCategories.find((item) => item.id === note.categoryId);
+  noteCategory?.tags.forEach((item) => {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = item.name;
+    tag.append(option);
+  });
+  tag.value = note.tagId || '';
+  tag.disabled = !noteCategory;
   const time = document.createElement('time');
   time.className = 'notes-detail-time';
   time.textContent = `已保存 · ${noteArchiveTime(note.updatedAt)}`;
-  heading.append(title, time);
+  meta.append(category, tag, time);
+  heading.append(title, meta);
 
   const actions = document.createElement('div');
   actions.className = 'notes-detail-actions';
@@ -2646,15 +2970,32 @@ function scheduleNotesEditorSave(editor) {
 
 function renderNotesLibrary() {
   if (!notesList) return;
+  const categories = loadNoteCategories();
   const archive = loadNoteArchive();
-  const notes = window.NotchDomain.filterNotes(archive, notesSearch?.value || '');
-  if (notesCount) notesCount.textContent = `${archive.length} 篇`;
+  renderNoteCategoryControls(categories, archive);
+  const selectedCategory = selectedNoteCategory(categories);
+  renderNoteTagControls(selectedCategory, archive);
+  renderNotesTaxonomy(categories, archive);
+  const categoryId = notesCategoryFilter?.value || '';
+  const tagId = selectedCategory ? notesTagFilter?.value || '' : '';
+  const searchQuery = notesSearch?.value || '';
+  const scopedNotes = window.NotchDomain.filterNotes(archive, '', categoryId, tagId);
+  const notes = window.NotchDomain.filterNotes(scopedNotes, searchQuery);
+  if (notesCount) {
+    notesCount.textContent = searchQuery.trim() && notes.length !== scopedNotes.length
+      ? `${notes.length} / ${scopedNotes.length} 篇`
+      : `${scopedNotes.length} 篇`;
+  }
   if (!notes.some((note) => note.id === selectedNoteId)) selectedNoteId = notes[0]?.id || '';
   notesList.replaceChildren();
   if (!notes.length) {
     const empty = document.createElement('div');
     empty.className = 'notes-list-empty';
-    empty.textContent = archive.length ? '没有找到相关笔记' : '保存的笔记会出现在这里';
+    empty.textContent = !archive.length
+      ? '保存的笔记会出现在这里'
+      : scopedNotes.length
+        ? '没有匹配的笔记'
+        : '当前范围还没有笔记';
     notesList.append(empty);
     renderNotesDetail(notes);
     return;
@@ -2668,11 +3009,15 @@ function renderNotesLibrary() {
     button.setAttribute('aria-pressed', String(note.id === selectedNoteId));
     const title = document.createElement('strong');
     title.textContent = noteArchiveTitle(note);
-    const excerpt = document.createElement('span');
-    excerpt.textContent = noteArchiveExcerpt(note);
     const time = document.createElement('time');
     time.textContent = noteArchiveTime(note.updatedAt);
-    button.append(title, excerpt, time);
+    const excerpt = document.createElement('span');
+    excerpt.textContent = noteArchiveExcerpt(note);
+    const category = document.createElement('small');
+    category.className = 'notes-list-category';
+    const tag = noteTagName(note, categories);
+    category.textContent = tag ? `${noteCategoryName(note, categories)} · ${tag}` : noteCategoryName(note, categories);
+    button.append(title, time, excerpt, category);
     notesList.append(button);
   });
   renderNotesDetail(notes);
@@ -2681,10 +3026,14 @@ function renderNotesLibrary() {
 function createNote() {
   flushNotesEditorSave();
   const now = Date.now();
+  const selectedCategoryId = selectedNoteCategory()?.id || '';
+  const selectedTagId = selectedCategoryId ? selectedNoteTag()?.id || '' : '';
   const note = {
     id: generateId(),
     title: '',
     titleSource: '',
+    categoryId: selectedCategoryId,
+    tagId: selectedTagId,
     content: '',
     createdAt: now,
     updatedAt: now,
@@ -2699,6 +3048,7 @@ function createNote() {
   selectedNoteId = note.id;
   notesEditorMode = 'edit';
   if (notesSearch) notesSearch.value = '';
+  if (notesCategoryFilter && selectedCategoryId) notesCategoryFilter.value = selectedCategoryId;
   renderNotesLibrary();
   requestAnimationFrame(() => notesDetail?.querySelector('.notes-detail-title')?.focus({ preventScroll: true }));
   return note;
@@ -2903,7 +3253,7 @@ window.NotchNotes = {
   async undoGenerated(snapshot) {
     const notes = loadNoteArchive();
     const note = notes.find((item) => item.id === snapshot?.id);
-    if (!note || note.title !== snapshot.title || note.content !== snapshot.content || note.createdAt !== snapshot.createdAt) return { ok: false, error: 'conflict' };
+    if (!note || note.title !== snapshot.title || note.content !== snapshot.content || note.categoryId !== snapshot.categoryId || note.tagId !== snapshot.tagId || note.createdAt !== snapshot.createdAt) return { ok: false, error: 'conflict' };
     try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.filter((item) => item.id !== note.id))); }
     catch (error) { return { ok: false, error: 'save_failed' }; }
     if (selectedNoteId === note.id) selectedNoteId = null;
@@ -2915,7 +3265,7 @@ window.NotchNotes = {
     const notes = loadNoteArchive();
     if (notes.length >= 200) return { ok: false, error: 'capacity' };
     const now = Date.now();
-    const note = { id: generateId(), title: String(title || '').slice(0, 80), titleSource: 'model', content: String(content || ''), createdAt: now, updatedAt: now };
+    const note = { id: generateId(), title: String(title || '').slice(0, 80), titleSource: 'model', categoryId: '', tagId: '', content: String(content || ''), createdAt: now, updatedAt: now };
     try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify([note, ...notes])); }
     catch (error) { return { ok: false, error: 'save_failed' }; }
     renderNotesLibrary();
@@ -2945,7 +3295,7 @@ noteSaveButton?.addEventListener('click', () => {
     existing.updatedAt = Date.now();
   } else {
     activeId = generateId();
-    notes.unshift({ id: activeId, content, createdAt: Date.now(), updatedAt: Date.now() });
+    notes.unshift({ id: activeId, categoryId: '', tagId: '', content, createdAt: Date.now(), updatedAt: Date.now() });
   }
   localStorage.setItem(NOTE_ACTIVE_ARCHIVE_KEY, activeId);
   localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
@@ -2966,6 +3316,245 @@ notesList?.addEventListener('click', (event) => {
 notesSearch?.addEventListener('input', () => {
   flushNotesEditorSave();
   renderNotesLibrary();
+});
+
+function selectNotesTaxonomy(categoryId, tagId = '') {
+  flushNotesEditorSave();
+  closeNoteCategoryControls();
+  closeNoteTagControls();
+  if (notesCategoryFilter) notesCategoryFilter.value = categoryId;
+  if (notesTagFilter) notesTagFilter.value = '';
+  if (categoryId && categoryId !== '__uncategorized__') expandedNoteCategories.add(categoryId);
+  renderNotesLibrary();
+  if (notesTagFilter && tagId) {
+    notesTagFilter.value = tagId;
+    renderNotesLibrary();
+  }
+}
+
+notesTaxonomyTree?.addEventListener('click', (event) => {
+  const toggle = event.target.closest('[data-notes-taxonomy-toggle]');
+  if (toggle) {
+    const categoryId = toggle.dataset.notesTaxonomyToggle;
+    if (expandedNoteCategories.has(categoryId)) expandedNoteCategories.delete(categoryId);
+    else expandedNoteCategories.add(categoryId);
+    renderNotesTaxonomy(loadNoteCategories(), loadNoteArchive());
+    return;
+  }
+  const action = event.target.closest('[data-notes-taxonomy-action]');
+  if (action) {
+    const categoryId = action.dataset.categoryId || '';
+    const tagId = action.dataset.tagId || '';
+    selectNotesTaxonomy(categoryId, tagId);
+    if (action.dataset.notesTaxonomyAction === 'add-tag') notesTagAdd?.click();
+    if (action.dataset.notesTaxonomyAction === 'rename-category') notesCategoryRename?.click();
+    if (action.dataset.notesTaxonomyAction === 'delete-category') notesCategoryDelete?.click();
+    if (action.dataset.notesTaxonomyAction === 'rename-tag') notesTagRename?.click();
+    if (action.dataset.notesTaxonomyAction === 'delete-tag') notesTagDelete?.click();
+    return;
+  }
+  const item = event.target.closest('[data-notes-taxonomy-scope]');
+  if (!item) return;
+  const scope = item.dataset.notesTaxonomyScope;
+  if (scope === 'all') selectNotesTaxonomy('');
+  else if (scope === 'uncategorized') selectNotesTaxonomy('__uncategorized__');
+  else selectNotesTaxonomy(item.dataset.categoryId || '', scope === 'category' ? '' : item.dataset.tagId || '');
+});
+
+notesTaxonomyTree?.addEventListener('keydown', (event) => {
+  if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+  const items = [...notesTaxonomyTree.querySelectorAll('.notes-taxonomy-select')];
+  const index = items.indexOf(document.activeElement);
+  if (index < 0 || !items.length) return;
+  event.preventDefault();
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+    : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+  items[next].focus();
+});
+
+notesCategoryFilter?.addEventListener('change', () => {
+  flushNotesEditorSave();
+  closeNoteCategoryControls();
+  closeNoteTagControls();
+  if (notesTagFilter) notesTagFilter.value = '';
+  const category = selectedNoteCategory();
+  if (category) expandedNoteCategories.add(category.id);
+  renderNotesLibrary();
+});
+
+notesCategoryAdd?.addEventListener('click', () => openNoteCategoryEditor('create'));
+notesCategoryRename?.addEventListener('click', () => openNoteCategoryEditor('rename'));
+notesCategoryCancel?.addEventListener('click', closeNoteCategoryControls);
+notesCategoryDeleteCancel?.addEventListener('click', closeNoteCategoryControls);
+notesCategoryDelete?.addEventListener('click', () => {
+  const category = selectedNoteCategory();
+  if (!category || !notesCategoryConfirm) return;
+  noteCategoryEditorMode = '';
+  if (notesCategoryEditor) notesCategoryEditor.hidden = true;
+  notesCategoryConfirm.hidden = false;
+  if (notesCategoryConfirmText) notesCategoryConfirmText.textContent = `删除“${category.name}”？其中笔记将移至未分类。`;
+  notesCategoryDeleteCancel?.focus({ preventScroll: true });
+});
+
+function saveNoteCategoryEdit() {
+  if (!noteCategoryEditorMode || !notesCategoryName) return;
+  const editingMode = noteCategoryEditorMode;
+  const name = window.NotchDomain.normalizeNoteCategoryName(notesCategoryName.value);
+  const categories = loadNoteCategories();
+  const current = selectedNoteCategory(categories);
+  const duplicate = categories.some((category) => category.id !== current?.id && category.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+  if (!name || duplicate || (noteCategoryEditorMode === 'create' && categories.length >= 40)) {
+    notesCategoryName.setAttribute('aria-invalid', 'true');
+    showStatusToast(!name ? '请输入分类名称' : duplicate ? '已有同名分类' : '最多创建 40 个分类');
+    return;
+  }
+  const categoryId = editingMode === 'rename' && current ? current.id : `note-category-${generateId()}`;
+  const next = editingMode === 'rename'
+    ? categories.map((category) => category.id === categoryId ? { ...category, name } : category)
+    : [...categories, { id: categoryId, name, tags: [] }];
+  try {
+    saveNoteCategories(next);
+  } catch (error) {
+    showStatusToast('分类保存失败，请检查存储空间');
+    return;
+  }
+  closeNoteCategoryControls();
+  renderNotesLibrary();
+  showStatusToast(editingMode === 'rename' ? '分类已重命名' : '分类已创建');
+  void syncWorkspaceSnapshot();
+}
+
+notesCategorySave?.addEventListener('click', saveNoteCategoryEdit);
+notesCategoryName?.addEventListener('input', () => notesCategoryName.removeAttribute('aria-invalid'));
+notesCategoryName?.addEventListener('keydown', (event) => {
+  if (event.isComposing) return;
+  if (event.key === 'Enter') { event.preventDefault(); saveNoteCategoryEdit(); }
+  if (event.key === 'Escape') { event.preventDefault(); closeNoteCategoryControls(); notesCategoryFilter?.focus(); }
+});
+notesCategoryDeleteConfirm?.addEventListener('click', () => {
+  const category = selectedNoteCategory();
+  if (!category) return;
+  flushNotesEditorSave();
+  const result = window.NotchDomain.removeNoteCategory(loadNoteCategories(), loadNoteArchive(), category.id, Date.now());
+  try {
+    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(result.notes.slice(0, 200)));
+    saveNoteCategories(result.categories);
+  } catch (error) {
+    showStatusToast('分类删除失败，请检查存储空间');
+    return;
+  }
+  closeNoteCategoryControls();
+  closeNoteTagControls();
+  if (notesCategoryFilter) notesCategoryFilter.value = '__uncategorized__';
+  renderNotesLibrary();
+  showStatusToast('分类已删除，笔记已移至未分类');
+  void syncWorkspaceSnapshot();
+});
+
+notesTagFilter?.addEventListener('change', () => {
+  flushNotesEditorSave();
+  closeNoteTagControls();
+  renderNotesLibrary();
+});
+notesTagAdd?.addEventListener('click', () => openNoteTagEditor('create'));
+notesTagRename?.addEventListener('click', () => openNoteTagEditor('rename'));
+notesTagCancel?.addEventListener('click', closeNoteTagControls);
+notesTagDeleteCancel?.addEventListener('click', closeNoteTagControls);
+notesTagDelete?.addEventListener('click', () => {
+  const category = selectedNoteCategory();
+  const tag = selectedNoteTag(category);
+  if (!category || !tag || !notesTagConfirm) return;
+  noteTagEditorMode = '';
+  if (notesTagEditor) notesTagEditor.hidden = true;
+  notesTagConfirm.hidden = false;
+  if (notesTagConfirmText) notesTagConfirmText.textContent = `删除“${tag.name}”？笔记将保留在“${category.name}”。`;
+  notesTagDeleteCancel?.focus({ preventScroll: true });
+});
+
+function saveNoteTagEdit() {
+  if (!noteTagEditorMode || !notesTagName) return;
+  const editingMode = noteTagEditorMode;
+  const name = window.NotchDomain.normalizeNoteCategoryName(notesTagName.value);
+  const categories = loadNoteCategories();
+  const category = selectedNoteCategory(categories);
+  const current = selectedNoteTag(category);
+  if (!category) return;
+  const duplicate = category.tags.some((tag) => tag.id !== current?.id && tag.name.toLocaleLowerCase() === name.toLocaleLowerCase());
+  if (!name || duplicate || (editingMode === 'create' && category.tags.length >= 30)) {
+    notesTagName.setAttribute('aria-invalid', 'true');
+    showStatusToast(!name ? '请输入标签名称' : duplicate ? '当前分类已有同名标签' : '每个分类最多创建 30 个标签');
+    return;
+  }
+  const tagId = editingMode === 'rename' && current ? current.id : `note-tag-${generateId()}`;
+  const tags = editingMode === 'rename'
+    ? category.tags.map((tag) => tag.id === tagId ? { ...tag, name } : tag)
+    : [...category.tags, { id: tagId, name }];
+  try {
+    saveNoteCategories(categories.map((item) => item.id === category.id ? { ...item, tags } : item));
+  } catch (error) {
+    showStatusToast('标签保存失败，请检查存储空间');
+    return;
+  }
+  closeNoteTagControls();
+  renderNotesLibrary();
+  showStatusToast(editingMode === 'rename' ? '标签已重命名' : '标签已创建');
+  void syncWorkspaceSnapshot();
+}
+
+notesTagSave?.addEventListener('click', saveNoteTagEdit);
+notesTagName?.addEventListener('input', () => notesTagName.removeAttribute('aria-invalid'));
+notesTagName?.addEventListener('keydown', (event) => {
+  if (event.isComposing) return;
+  if (event.key === 'Enter') { event.preventDefault(); saveNoteTagEdit(); }
+  if (event.key === 'Escape') { event.preventDefault(); closeNoteTagControls(); notesTagFilter?.focus(); }
+});
+notesTagDeleteConfirm?.addEventListener('click', () => {
+  const category = selectedNoteCategory();
+  const tag = selectedNoteTag(category);
+  if (!category || !tag) return;
+  flushNotesEditorSave();
+  const result = window.NotchDomain.removeNoteTag(loadNoteCategories(), loadNoteArchive(), category.id, tag.id, Date.now());
+  try {
+    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(result.notes.slice(0, 200)));
+    saveNoteCategories(result.categories);
+  } catch (error) {
+    showStatusToast('标签删除失败，请检查存储空间');
+    return;
+  }
+  closeNoteTagControls();
+  if (notesTagFilter) notesTagFilter.value = '__untagged__';
+  renderNotesLibrary();
+  showStatusToast('标签已删除，笔记已移至无标签');
+  void syncWorkspaceSnapshot();
+});
+
+notesDetail?.addEventListener('change', (event) => {
+  const category = event.target.closest('.notes-detail-category');
+  const tag = event.target.closest('.notes-detail-tag');
+  if (!category?.dataset.noteId && !tag?.dataset.noteId) return;
+  flushNotesEditorSave();
+  const categories = loadNoteCategories();
+  const notes = loadNoteArchive();
+  let updated;
+  if (category) {
+    const categoryId = categories.some((item) => item.id === category.value) ? category.value : '';
+    updated = window.NotchDomain.updateNoteCategory(notes, category.dataset.noteId, categoryId, Date.now());
+  } else {
+    const note = notes.find((item) => item.id === tag.dataset.noteId);
+    const parent = categories.find((item) => item.id === note?.categoryId);
+    const tagId = parent?.tags.some((item) => item.id === tag.value) ? tag.value : '';
+    updated = window.NotchDomain.updateNoteTag(notes, tag.dataset.noteId, tagId, Date.now());
+  }
+  try {
+    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(updated.slice(0, 200)));
+  } catch (error) {
+    showStatusToast(category ? '笔记分类保存失败' : '笔记标签保存失败');
+    renderNotesLibrary();
+    return;
+  }
+  selectedNoteId = (category || tag).dataset.noteId;
+  renderNotesLibrary();
+  void syncWorkspaceSnapshot();
 });
 
 notesDetail?.addEventListener('input', (event) => {

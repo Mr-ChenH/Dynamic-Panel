@@ -28,8 +28,10 @@
   function select(index,focus=false){
     buttons.forEach((button,i)=>{button.setAttribute('aria-selected',String(i===index));button.tabIndex=i===index?0:-1;cards[i].hidden=i!==index;});
     content.scrollTop=0;if(focus)buttons[index].focus();
-    if(groups[index].id==='launcher')window.NotchLauncher?.renderSettings();
+    const selectedId=groups[index].id;
+    if(selectedId==='launcher')window.NotchLauncher?.renderSettings();
     else window.NotchLauncher?.hideSettings();
+    window.dispatchEvent(new CustomEvent('notch:settings-category-change',{detail:{id:selectedId}}));
   }
   buttons.forEach((button,index)=>button.addEventListener('click',()=>select(index)));
   nav.addEventListener('keydown',event=>{

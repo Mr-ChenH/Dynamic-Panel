@@ -1,7 +1,24 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateRequest, normalizeResponse } = require('../ai/schema');
-const { createAIService, endpointFor, providerError, completionError, readProviderPayload, MAX_PROVIDER_BYTES } = require('../ai/service');
+const {
+  createAIService,
+  endpointFor,
+  providerError,
+  completionError,
+  readProviderPayload,
+  readAnthropicPayload,
+  buildProviderRequest,
+  MAX_PROVIDER_BYTES,
+} = require('../ai/service');
+const {
+  providerFor,
+  inferProviderId,
+  normalizeContentProfiles,
+  normalizeContentService,
+  normalizeTranscriptionService,
+  publicContentProviders,
+} = require('../ai/providers');
 const AIDomain = require('../renderer/ai-domain');
 
 function request(overrides = {}) {
@@ -305,8 +322,112 @@ test('AI provider response reader rejects oversized streamed bodies', async () =
 test('AI provider helpers normalize endpoints and errors', () => {
   assert.equal(endpointFor('https://api.example.test/v1/'), 'https://api.example.test/v1/chat/completions');
   assert.equal(endpointFor('https://api.example.test/chat/completions'), 'https://api.example.test/chat/completions');
+  assert.equal(endpointFor('https://api.anthropic.com', 'anthropic-messages'), 'https://api.anthropic.com/v1/messages');
   assert.equal(providerError(401), 'authentication_failed');
   assert.equal(providerError(429), 'rate_limited');
+});
+
+test('AI provider registry migrates legacy content and transcription settings', () => {
+  const legacy = {
+    llmBaseUrl: 'https://api.deepseek.com/v1/',
+    llmModel: 'deepseek-v4-flash',
+    llmTimeoutMs: 42000,
+    region: 'singapore',
+    workspaceId: 'workspace_1',
+  };
+  assert.deepEqual(normalizeContentService(legacy), {
+    providerId: 'deepseek',
+    adapterId: 'openai-chat',
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-v4-flash',
+    timeoutMs: 42000,
+  });
+  assert.deepEqual(normalizeTranscriptionService(legacy), {
+    providerId: 'aliyun-bailian-realtime',
+    model: 'qwen3-asr-flash-realtime',
+    region: 'singapore',
+    workspaceId: 'workspace_1',
+  });
+  const profiles = normalizeContentProfiles({ services: { content: {
+    activeProviderId: 'openai',
+    profiles: {
+      deepseek: { baseUrl: 'https://api.deepseek.com', models: ['deepseek-chat', 'deepseek-reasoner'], activeModel: 'deepseek-reasoner', timeoutMs: 20000 },
+      openai: { baseUrl: 'https://api.openai.com/v1', models: ['gpt-4.1-mini', 'gpt-4.1'], activeModel: 'gpt-4.1' },
+    },
+  } } });
+  assert.equal(profiles.activeProviderId, 'openai');
+  assert.deepEqual(profiles.profiles.deepseek.models, ['deepseek-chat', 'deepseek-reasoner']);
+  assert.equal(profiles.profiles.deepseek.activeModel, 'deepseek-reasoner');
+  assert.equal(normalizeContentService({ services: { content: profiles } }).model, 'gpt-4.1');
+  assert.equal(normalizeContentProfiles(legacy).profiles.deepseek.models[0], 'deepseek-v4-flash');
+  assert.equal(normalizeContentService({}).providerId, 'deepseek');
+  assert.equal(inferProviderId('https://tenant.openai.azure.com/openai/v1'), 'azure');
+  assert.equal(providerFor('anthropic').adapterId, 'anthropic-messages');
+  assert.ok(publicContentProviders().some((provider) => provider.id === 'custom-openai' && provider.endpointEditable));
+});
+
+test('Anthropic adapter uses Messages authentication and normalizes responses', async () => {
+  const prompt = { system: 'Return JSON.', user: 'Name this note.' };
+  const providerRequest = buildProviderRequest({
+    providerId: 'anthropic',
+    adapterId: 'anthropic-messages',
+    apiKey: 'anthropic-secret',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-sonnet-4-5',
+  }, request({ action: 'nameNote' }), prompt);
+  assert.equal(providerRequest.endpoint, 'https://api.anthropic.com/v1/messages');
+  assert.equal(providerRequest.headers['x-api-key'], 'anthropic-secret');
+  assert.equal(providerRequest.headers['anthropic-version'], '2023-06-01');
+  assert.equal(providerRequest.body.system, prompt.system);
+  assert.equal('response_format' in providerRequest.body, false);
+
+  const normalized = await readAnthropicPayload({
+    json: async () => ({
+      content: [{ type: 'text', text: '{"title":"项目计划"}' }],
+      stop_reason: 'end_turn',
+      usage: { input_tokens: 8, output_tokens: 3 },
+    }),
+  });
+  assert.equal(normalized.choices[0].message.content, '{"title":"项目计划"}');
+  assert.equal(normalized.choices[0].finish_reason, 'stop');
+  assert.deepEqual(normalized.usage, { prompt_tokens: 8, completion_tokens: 3 });
+});
+
+test('Anthropic adapter parses text deltas and requires message_stop', async () => {
+  const stream = (includeStop) => ({
+    headers: { get: () => 'text/event-stream' },
+    body: new ReadableStream({ start(controller) {
+      const events = [
+        'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":5}}}\n\n',
+        'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"完成"}}\n\n',
+        'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}\n\n',
+      ];
+      if (includeStop) events.push('event: message_stop\ndata: {"type":"message_stop"}\n\n');
+      events.forEach((value) => controller.enqueue(new TextEncoder().encode(value)));
+      controller.close();
+    } }),
+  });
+  const deltas = [];
+  const result = await readAnthropicPayload(stream(true), (delta) => deltas.push(delta));
+  assert.equal(result.choices[0].message.content, '完成');
+  assert.deepEqual(deltas, ['完成']);
+  await assert.rejects(() => readAnthropicPayload(stream(false)), /stream_incomplete/);
+});
+
+test('providers with strict SSE completion reject finish_reason without DONE', async () => {
+  const service = createAIService({
+    getConfig: () => ({ providerId: 'deepseek', adapterId: 'openai-chat', apiKey: 'secret', baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash' }),
+    validateEndpoint: async (url) => url,
+    fetchImpl: async () => ({
+      ok: true,
+      headers: { get: () => 'text/event-stream' },
+      body: new ReadableStream({ start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"partial"},"finish_reason":"stop"}]}\n\n'));
+        controller.close();
+      } }),
+    }),
+  });
+  assert.equal((await service.run(7, request({ action: 'summarize' }))).error, 'stream_incomplete');
 });
 
 test('AI todo duplicate detection finds similar unfinished titles and batch candidates', () => {

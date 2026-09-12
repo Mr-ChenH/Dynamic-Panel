@@ -322,29 +322,47 @@
 
           <section id="tab-notes" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-notes" aria-hidden="true" inert>
             <div class="notes-page">
+              <aside class="notes-taxonomy tile" aria-label="笔记分类与标签">
+                <div class="notes-taxonomy-head">
+                  <div><span class="tile-label">资料架</span><strong id="notes-taxonomy-count">0 个分类</strong></div>
+                  <button type="button" id="notes-category-add" class="notes-taxonomy-add" aria-label="新建笔记分类" title="新建分类"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+                </div>
+                <select id="notes-category-filter" class="notes-filter-state" aria-hidden="true" tabindex="-1"><option value="">全部分类</option><option value="__uncategorized__">未分类</option></select>
+                <div id="notes-tag-toolbar" class="notes-filter-state" hidden>
+                  <select id="notes-tag-filter" aria-hidden="true" tabindex="-1"><option value="">全部标签</option><option value="__untagged__">无标签</option></select>
+                  <button type="button" id="notes-tag-add" hidden></button><button type="button" id="notes-tag-rename" hidden></button><button type="button" id="notes-tag-delete" hidden></button>
+                </div>
+                <button type="button" id="notes-category-rename" hidden></button><button type="button" id="notes-category-delete" hidden></button>
+                <nav class="notes-taxonomy-tree" id="notes-taxonomy-tree" aria-label="分类与标签筛选"></nav>
+                <div class="notes-taxonomy-feedback">
+                  <div class="notes-category-editor" id="notes-category-editor" hidden>
+                    <input id="notes-category-name" type="text" maxlength="24" placeholder="分类名称" aria-label="分类名称" autocomplete="off" />
+                    <button type="button" id="notes-category-save" aria-label="保存分类" title="保存分类"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button>
+                    <button type="button" id="notes-category-cancel" aria-label="取消编辑分类" title="取消"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+                  </div>
+                  <div class="notes-category-confirm" id="notes-category-confirm" hidden>
+                    <span id="notes-category-confirm-text"></span><button type="button" id="notes-category-delete-cancel">取消</button><button type="button" id="notes-category-delete-confirm" class="danger">删除</button>
+                  </div>
+                  <div class="notes-category-editor" id="notes-tag-editor" hidden>
+                    <input id="notes-tag-name" type="text" maxlength="24" placeholder="标签名称" aria-label="标签名称" autocomplete="off" />
+                    <button type="button" id="notes-tag-save" aria-label="保存标签" title="保存标签"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button>
+                    <button type="button" id="notes-tag-cancel" aria-label="取消编辑标签" title="取消"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+                  </div>
+                  <div class="notes-category-confirm" id="notes-tag-confirm" hidden>
+                    <span id="notes-tag-confirm-text"></span><button type="button" id="notes-tag-delete-cancel">取消</button><button type="button" id="notes-tag-delete-confirm" class="danger">删除</button>
+                  </div>
+                </div>
+              </aside>
               <aside class="notes-library tile">
                 <div class="notes-library-head">
-                  <div>
-                    <span class="tile-label">笔记库</span>
-                    <strong id="notes-count">0 篇</strong>
-                  </div>
-                  <button class="notes-new-button" id="notes-new" type="button">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                    <span>新建</span>
-                  </button>
+                  <div><span class="tile-label">笔记</span><strong id="notes-count">0 篇</strong></div>
+                  <button class="notes-new-button" id="notes-new" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>新建</span></button>
                 </div>
-                <label class="notes-search-wrap">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
-                  <input id="notes-search" type="search" placeholder="搜索标题与正文" aria-label="搜索笔记" autocomplete="off" />
-                </label>
+                <label class="notes-search-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg><input id="notes-search" type="search" placeholder="搜索标题与正文" aria-label="搜索笔记" autocomplete="off" /></label>
                 <div class="notes-list" id="notes-list"></div>
               </aside>
               <section class="notes-detail tile" id="notes-detail">
-                <div class="notes-detail-empty">
-                  <span class="notes-empty-mark" aria-hidden="true">✎</span>
-                  <strong>还没有笔记</strong>
-                  <button class="notes-empty-create" type="button" data-action="create-note">新建笔记</button>
-                </div>
+                <div class="notes-detail-empty"><span class="notes-empty-mark" aria-hidden="true">✎</span><strong>还没有笔记</strong><button class="notes-empty-create" type="button" data-action="create-note">新建笔记</button></div>
               </section>
             </div>
           </section>
@@ -441,15 +459,78 @@
               <div class="settings-column settings-column-primary">
                 <section class="tile settings-card settings-api-card">
                   <div class="settings-card-heading">
-                    <div><span class="tile-label">智能能力</span><strong>API 配置</strong></div>
-                    <button class="workspace-button compact" id="settings-api-configure" type="button">配置或替换</button>
+                    <div><span class="tile-label">服务与模型</span><strong>AI 与转写</strong></div>
+                    <small>两个服务独立配置 · 密钥仅加密保存在本机</small>
                   </div>
-                  <div class="settings-status-list">
-                    <div><span>通义百炼实时转写</span><small id="settings-transcription-status" data-state="empty">未配置</small></div>
-                    <div><span>内容整理服务</span><small id="settings-llm-status" data-state="empty">未配置</small></div>
-                  </div>
-                  <p>密钥由系统安全存储加密，仅在你主动查看或复制时解密。</p>
                   <div class="settings-ai-migration" id="settings-ai-migration" hidden><span>内容自动命名现已改为按需开启，原有 API 配置和标题均已保留。</span><button type="button" id="settings-ai-migration-ack">知道了</button></div>
+                  <div class="ai-settings-layout">
+                    <aside class="ai-provider-sidebar" aria-label="AI 服务与厂商">
+                      <div class="ai-provider-group">
+                        <span class="ai-provider-group-label">实时转写</span>
+                        <button class="ai-provider-option" id="ai-provider-transcription" type="button" data-ai-service="transcription" aria-selected="false">
+                          <span><strong>阿里云百炼</strong><small>Qwen3-ASR 实时转写</small></span>
+                          <i id="ai-transcription-nav-status" data-state="empty" aria-label="未配置"></i>
+                        </button>
+                      </div>
+                      <div class="ai-provider-group">
+                        <span class="ai-provider-group-label">内容整理</span>
+                        <div class="ai-content-provider-list" id="ai-content-provider-list"></div>
+                      </div>
+                    </aside>
+                    <section class="ai-provider-config" aria-live="polite">
+                      <div class="ai-provider-config-scroll">
+                        <section class="ai-service-panel" id="ai-service-panel-transcription" aria-labelledby="ai-provider-transcription" hidden>
+                          <div class="ai-service-heading"><div><strong>实时语音转写</strong><span>阿里云百炼 · 仅在主动录音时发送音频</span></div><small id="transcription-verification-status" data-state="empty">未配置</small></div>
+                          <div class="transcription-field api-key-field">
+                            <div class="api-field-heading"><label for="transcription-api-key">API Key</label><small id="transcription-api-status" data-state="empty">未配置</small></div>
+                            <input id="transcription-api-key" type="password" placeholder="sk-…（已配置时留空即可）" autocomplete="off" spellcheck="false" />
+                            <button class="api-key-help" id="transcription-api-help" type="button">前往阿里云百炼管理 API Key <span aria-hidden="true">↗</span></button>
+                          </div>
+                          <div class="transcription-fields-row">
+                            <label class="transcription-field"><span>地域</span><select id="transcription-region"><option value="beijing">华北 2（北京）</option><option value="singapore">新加坡</option></select></label>
+                            <label class="transcription-field"><span>Workspace ID（可选）</span><input id="transcription-workspace" type="text" placeholder="业务空间 ID" autocomplete="off" spellcheck="false" /></label>
+                          </div>
+                          <div class="ai-service-actions"><button class="workspace-button compact" id="transcription-provider-test" type="button">验证配置</button><button class="workspace-button compact danger" id="transcription-provider-remove" type="button">移除配置</button></div>
+                        </section>
+                        <section class="ai-service-panel" id="ai-service-panel-content" aria-labelledby="ai-content-provider-title">
+                          <div class="ai-service-heading"><div><strong id="ai-content-provider-title">内容整理</strong><span id="ai-content-provider-description">摘要、翻译、待办提取与智能命名</span></div><small id="content-verification-status" data-state="empty">未配置</small></div>
+                          <select id="llm-provider" hidden tabindex="-1" aria-hidden="true"></select>
+                          <div class="transcription-field api-key-field">
+                            <div class="api-field-heading"><label for="llm-api-key">API Key</label><small id="llm-api-status" data-state="empty">未配置</small></div>
+                            <input id="llm-api-key" type="password" placeholder="已配置时留空即可" autocomplete="off" spellcheck="false" />
+                            <button class="api-key-help" id="llm-api-help" type="button"><span id="llm-api-help-label">前往厂商控制台管理 API Key</span> <span aria-hidden="true">↗</span></button>
+                          </div>
+                          <div class="transcription-fields-row llm-fields-row">
+                            <label class="transcription-field llm-base-url-field" id="llm-base-url-field" hidden><span>Base URL</span><input id="llm-base-url" type="url" placeholder="https://服务地址/v1" autocomplete="off" spellcheck="false" /></label>
+                            <label class="transcription-field"><span>请求超时（毫秒）</span><input id="llm-timeout" type="number" min="10000" max="60000" step="1000" value="30000" /></label>
+                          </div>
+                          <section class="ai-model-settings" aria-labelledby="ai-model-settings-title">
+                            <div class="ai-model-settings-heading"><div><strong id="ai-model-settings-title">模型</strong><small>选择一个模型作为当前内容整理默认项</small></div><button class="workspace-button compact" id="llm-model-add" type="button">添加模型</button></div>
+                            <input id="llm-model" type="hidden" />
+                            <div class="ai-model-list" id="llm-model-list"></div>
+                            <p class="ai-model-limit" id="llm-model-limit">每个厂商最多保存 12 个模型。</p>
+                          </section>
+                          <div class="ai-service-actions"><button class="workspace-button compact" id="ai-provider-test" type="button">验证当前模型</button><button class="workspace-button compact danger" id="content-provider-remove" type="button">移除厂商配置</button></div>
+                        </section>
+                        <div id="ai-content-settings-secondary">
+                          <div class="api-settings-divider"><span>自动整理</span><small>使用当前内容服务</small></div>
+                          <div class="ai-auto-settings">
+                            <label><span>笔记自动命名</span><input id="ai-auto-name-notes" type="checkbox" /></label>
+                            <label><span>录音自动命名与分类</span><input id="ai-auto-name-recordings" type="checkbox" /></label>
+                            <label><span>链接智能命名与分类</span><input id="ai-auto-organize-links" type="checkbox" /></label>
+                          </div>
+                          <div class="api-settings-divider"><span>请求诊断</span><small>不记录正文、引用或密钥</small></div>
+                          <div class="ai-diagnostics" id="ai-diagnostics"><p>暂无请求记录</p></div>
+                          <div class="ai-diagnostics-actions"><button class="workspace-button compact" id="ai-diagnostics-copy" type="button">复制诊断</button><button class="workspace-button compact danger" id="ai-diagnostics-clear" type="button">清空诊断</button></div>
+                        </div>
+                      </div>
+                      <footer class="ai-settings-actions">
+                        <p class="transcription-settings-note" id="transcription-settings-note" role="status" aria-live="polite">已配置的 API Key 可留空；新输入的密钥会覆盖旧值。</p>
+                        <button class="workspace-button compact" id="ai-settings-reset" type="button" disabled>撤销更改</button>
+                        <button class="workspace-button compact primary" id="transcription-settings-save" type="button">保存更改</button>
+                      </footer>
+                    </section>
+                  </div>
                 </section>
 
                 <section class="tile settings-card settings-features-card">
@@ -578,76 +659,6 @@
           </section>
         </div>
 
-        <div class="transcription-settings-backdrop" id="transcription-settings-backdrop" hidden>
-          <section class="transcription-settings-card" role="dialog" aria-modal="true" aria-labelledby="transcription-settings-title">
-            <div class="transcription-settings-head">
-              <div>
-                <strong id="transcription-settings-title">API 配置</strong>
-                <span>实时转写与内容整理 · 密钥仅加密保存在本机</span>
-              </div>
-              <button id="transcription-settings-close" type="button" aria-label="关闭转写设置">×</button>
-            </div>
-            <div class="transcription-field api-key-field">
-              <div class="api-field-heading">
-                <label for="transcription-api-key">通义百炼实时转写 API Key</label>
-                <small id="transcription-api-status" data-state="empty">未配置</small>
-              </div>
-              <input id="transcription-api-key" type="password" placeholder="sk-…（已配置时留空即可）" autocomplete="off" spellcheck="false" />
-              <button class="api-key-help" id="transcription-api-help" type="button">前往阿里云百炼创建或管理 API Key <span aria-hidden="true">↗</span></button>
-            </div>
-            <div class="transcription-fields-row">
-              <label class="transcription-field">
-                <span>地域</span>
-                <select id="transcription-region">
-                  <option value="beijing">华北 2（北京）</option>
-                  <option value="singapore">新加坡</option>
-                </select>
-              </label>
-              <label class="transcription-field">
-                <span>Workspace ID（可选）</span>
-                <input id="transcription-workspace" type="text" placeholder="业务空间 ID" autocomplete="off" spellcheck="false" />
-              </label>
-            </div>
-            <div class="api-settings-divider"><span>内容整理服务</span><small>OpenAI-compatible</small></div>
-            <div class="transcription-field api-key-field">
-              <div class="api-field-heading">
-                <label for="llm-api-key">内容整理 API Key</label>
-                <small id="llm-api-status" data-state="empty">未配置</small>
-              </div>
-              <input id="llm-api-key" type="password" placeholder="已配置时留空即可" autocomplete="off" spellcheck="false" />
-              <button class="api-key-help" id="llm-api-help" type="button">前往 DeepSeek 创建或管理 API Key <span aria-hidden="true">↗</span></button>
-            </div>
-            <div class="transcription-fields-row llm-fields-row">
-              <label class="transcription-field">
-                <span>Base URL</span>
-                <input id="llm-base-url" type="url" placeholder="https://…/v1" autocomplete="off" spellcheck="false" />
-              </label>
-              <label class="transcription-field">
-                <span>模型</span>
-                <input id="llm-model" type="text" placeholder="deepseek-v4-flash" autocomplete="off" spellcheck="false" />
-              </label>
-              <label class="transcription-field">
-                <span>请求超时（毫秒）</span>
-                <input id="llm-timeout" type="number" min="10000" max="60000" step="1000" value="30000" />
-              </label>
-            </div>
-            <div class="api-settings-divider"><span>自动整理</span><small>默认关闭，可随时手动整理</small></div>
-            <div class="ai-auto-settings">
-              <label><span>笔记自动命名</span><input id="ai-auto-name-notes" type="checkbox" /></label>
-              <label><span>录音自动命名与分类</span><input id="ai-auto-name-recordings" type="checkbox" /></label>
-              <label><span>链接智能命名与分类</span><input id="ai-auto-organize-links" type="checkbox" /></label>
-            </div>
-            <div class="api-settings-divider"><span>请求诊断</span><small>不记录正文、引用或密钥</small></div>
-            <div class="ai-diagnostics" id="ai-diagnostics"><p>暂无请求记录</p></div>
-            <div class="ai-diagnostics-actions"><button class="workspace-button compact" id="ai-diagnostics-copy" type="button">复制诊断</button><button class="workspace-button compact danger" id="ai-diagnostics-clear" type="button">清空诊断</button></div>
-            <p class="transcription-settings-note" id="transcription-settings-note">API Key 会由系统安全存储加密，渲染页面无法读取。</p>
-            <div class="transcription-settings-actions">
-              <button class="workspace-button compact" id="ai-provider-test" type="button">测试连接</button>
-              <button class="workspace-button compact" id="transcription-settings-cancel" type="button">取消</button>
-              <button class="workspace-button compact primary" id="transcription-settings-save" type="button">保存</button>
-            </div>
-          </section>
-        </div>
         <div class="status-toast" id="status-toast" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true" hidden>
           <span id="status-toast-message"></span>
           <button id="status-toast-action" type="button" hidden>撤销</button>
