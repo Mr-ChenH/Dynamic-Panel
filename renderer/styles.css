@@ -5370,7 +5370,17 @@ textarea::placeholder { color: var(--text-4); opacity: 1; }
 .notes-detail-tag:focus { border-color: rgba(142,178,255,.58); }
 .notes-detail-tag { color: #d2b47d; }
 .notes-detail-tag:disabled { color: var(--text-4); opacity: .72; }
-.notes-detail-head time { color: var(--text-4); font: var(--fs-micro) var(--font-mono); white-space: nowrap; }
+.notes-detail-head time {
+  /* Save status must not reflow the category/tag row while typing. */
+  flex: 0 0 100%;
+  min-width: 0;
+  height: 18px;
+  overflow: hidden;
+  color: var(--text-4);
+  font: var(--fs-micro)/18px var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .notes-detail-actions { flex: 0 0 auto; display: flex; align-items: center; gap: var(--s-2); }
 .notes-mode-control {
   display: flex;

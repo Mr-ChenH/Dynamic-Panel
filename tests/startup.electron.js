@@ -517,6 +517,20 @@ app.on('web-contents-created', (_event, contents) => {
           await new Promise(resolve=>setTimeout(resolve,300));
           fs.writeFileSync(path.join(__dirname,`../dist.noindex/module-${tab}-review.png`),(await contents.capturePage()).toPNG());
         }
+        const noteTyping = await contents.executeJavaScript(`(async()=>{
+          await window.NotchPanel.navigate({tab:'notes'});
+          await new Promise(resolve=>setTimeout(resolve,100));
+          const editor=document.getElementById('notes-editor');
+          editor.focus();editor.setSelectionRange(0,0);
+          const before=editor.getBoundingClientRect().top;
+          editor.dispatchEvent(new Event('input',{bubbles:true}));
+          const during=editor.getBoundingClientRect().top;
+          await new Promise(resolve=>setTimeout(resolve,300));
+          return {before,during,after:editor.getBoundingClientRect().top,same:document.getElementById('notes-editor')===editor,focused:document.activeElement===editor,caret:editor.selectionStart};
+        })()`);
+        assert.equal(noteTyping.before,noteTyping.during,JSON.stringify(noteTyping));
+        assert.equal(noteTyping.during,noteTyping.after,JSON.stringify(noteTyping));
+        assert.equal(noteTyping.same,true);assert.equal(noteTyping.focused,true);assert.equal(noteTyping.caret,0);
         console.log('Production workspace, note attachment and launcher checks passed');
         app.quit();
       } catch (error) {
