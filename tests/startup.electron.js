@@ -512,7 +512,7 @@ app.on('web-contents-created', (_event, contents) => {
         })()`);
         assert.deepEqual(moduleLayouts.failures,[]);
         assert.equal(moduleLayouts.visited.length,7);
-        for(const tab of ['notes','links','recordings','credentials']){
+        for(const tab of ['home','todo','notes','links','recordings','credentials']){
           await contents.executeJavaScript(`window.NotchPanel.navigate({tab:${JSON.stringify(tab)}})`);
           await new Promise(resolve=>setTimeout(resolve,300));
           fs.writeFileSync(path.join(__dirname,`../dist.noindex/module-${tab}-review.png`),(await contents.capturePage()).toPNG());

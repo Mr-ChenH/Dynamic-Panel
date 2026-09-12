@@ -2,7 +2,7 @@
 .topbar { --launcher-control-space: 84px; }
 #panel .topbar > .tabs { right: var(--launcher-control-space); width: calc(100% - var(--launcher-control-space)); max-width: calc(100% - var(--launcher-control-space)); }
 #panel .topbar > .tabs:not(.is-split) { width: max-content; }
-#launcher-open { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 4; margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 68px; min-height: 30px; border-radius: var(--r-input); }
+#launcher-open { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 4; margin: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 76px; white-space: nowrap; min-height: 32px; border-radius: var(--r-input); }
 #launcher-open svg { width: 15px; height: 15px; flex-shrink: 0; }
 #launcher-open:active { transform: translateY(-50%) scale(.97); }
 .launcher { --launcher-pad: 18px; --launcher-row-height: 56px; --launcher-icon-size: 34px; --launcher-selection: rgba(142,178,255,.10); --launcher-icon-bg: rgba(142,178,255,.10); }
@@ -17,18 +17,18 @@
 #launcher-search[aria-invalid='true'] { color: #f2a19a; }
 .launcher-actions { max-height: calc(100% - 110px); overflow-y: auto; }
 .launcher-actions > button { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
-.launcher-actions kbd { color: var(--text-4); font: 10px var(--font); white-space: nowrap; }
-.launcher-action-hint { margin: 2px 0; color: var(--text-3); font-size: 10px; line-height: 1.5; }
-#launcher-close { flex-shrink: 0; padding: 3px 7px; border-radius: 5px; font-size: 10px; line-height: 18px; color: var(--text-3); background: var(--surface-2); }
-.launcher-status { flex: 0 0 28px; min-height: 28px; box-sizing: border-box; padding: 7px var(--launcher-pad) 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.launcher-actions kbd { color: var(--text-4); font: var(--fs-micro) var(--font); white-space: nowrap; }
+.launcher-action-hint { margin: 2px 0; color: var(--text-3); font-size: var(--fs-micro); line-height: 1.5; }
+#launcher-close { flex-shrink: 0; padding: 3px 7px; border-radius: 5px; font-size: var(--fs-micro); line-height: 18px; color: var(--text-3); background: var(--surface-2); }
+.launcher-status { flex: 0 0 28px; min-height: 28px; box-sizing: border-box; padding: 7px var(--launcher-pad) 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-micro); }
 .launcher-results { padding: 0 8px 8px; scrollbar-gutter: stable; overflow-anchor: none; }
-.launcher-group { padding: 10px 12px 6px; font-size: 10px; color: var(--text-4); letter-spacing: .3px; }
+.launcher-group { padding: 10px 12px 6px; font-size: var(--fs-micro); color: var(--text-4); letter-spacing: .3px; }
 .launcher-result { min-height: var(--launcher-row-height); padding: 9px 12px; gap: 12px; border-radius: 9px; box-shadow: none; }
 .launcher-result.selected { background: var(--launcher-selection); box-shadow: none; }
 .launcher-result:hover:not(.selected) { background: var(--surface-2); box-shadow: none; }
-.launcher-result strong { font-size: 13px; font-weight: 550; line-height: 19px; }
+.launcher-result strong { font-size: var(--fs-body); font-weight: 550; line-height: 19px; }
 .launcher-result-copy { gap: 2px; }
-.launcher-result-copy span { font-size: 11px; line-height: 16px; color: var(--text-3); }
+.launcher-result-copy span { font-size: var(--fs-small); line-height: 16px; color: var(--text-3); }
 .launcher-result-icon { flex: 0 0 var(--launcher-icon-size); width: var(--launcher-icon-size); height: var(--launcher-icon-size); border-radius: 9px; display: flex; align-items: center; justify-content: center; color: #99b9ff; background: var(--launcher-icon-bg); }
 .launcher-result-icon svg { width: 21px; height: 21px; }
 .launcher-result-icon[data-category='note'] { color: #e4bf75; background: rgba(228,191,117,.10); }
@@ -37,7 +37,7 @@
 .launcher-result-icon[data-category='command'], .launcher-result-icon[data-category='extension'] { color: #b7a1ec; background: rgba(183,161,236,.10); }
 .launcher-result-icon.native-icon { background: transparent; }
 .launcher-result-icon img { width: 26px; height: 26px; object-fit: contain; }
-.launcher-result-type { flex: 0 0 auto; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-4); font-size: 10px; }
+.launcher-result-type { flex: 0 0 auto; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-4); font-size: var(--fs-micro); }
 .launcher-footer { min-height: 44px; padding: 6px 14px; background: var(--surface-1); }
-.launcher-footer button { border-color: transparent; background: transparent; border-radius: 6px; font-size: 11px; }
+.launcher-footer button { border-color: transparent; background: transparent; border-radius: 6px; font-size: var(--fs-small); }
 .launcher-footer button:hover { border-color: var(--hairline); }
