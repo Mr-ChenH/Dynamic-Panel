@@ -13,6 +13,7 @@ const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'settings.js'), 'utf8');
 const homeJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home.js'), 'utf8');
+const markdownJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'markdown.js'), 'utf8');
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
@@ -175,6 +176,22 @@ test('settings exposes every panel tab as a possible default opening page', () =
     'home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings',
   ]);
   assert.match(workspaceJs, /setDefaultTab/);
+});
+
+test('home chat exposes temporary-session state, recovery controls and safe markdown', () => {
+  assert.match(html, /id="home-chat-empty"/);
+  assert.match(html, /id="home-chat-provider"/);
+  assert.match(html, /id="home-chat-model-name"/);
+  assert.match(html, /id="home-chat-new"[^>]*aria-label="新建对话"/);
+  assert.match(html, /script src="markdown\.js"/);
+  assert.match(markdownJs, /window\.NotchMarkdown = \{ render \}/);
+  assert.match(markdownJs, /code\.textContent = codeText/);
+  assert.doesNotMatch(markdownJs, /container\.innerHTML\s*=/);
+  assert.match(mainJs, /ipcMain\.handle\('shell:openExternal',[\s\S]*?validatePublicHttpUrl\(value\)/);
+  assert.match(homeJs, /setTurnState\(turn, 'stopped'/);
+  assert.match(homeJs, /setTurnState\(turn, 'error'/);
+  assert.match(homeJs, /NotchNotes\?\.saveGenerated/);
+  assert.doesNotMatch(homeJs, /pendingReply\?\.remove|pendingUser\?\.remove/);
 });
 
 test('home music is app-owned and configures local or public HTTPS sources', () => {

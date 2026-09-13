@@ -7,10 +7,10 @@
 - TASK-005：README、CHANGELOG、测试及截图。
 
 ## 验证
-- npm test：181项领域/结构测试，180通过，1项POSIX行为因Windows跳过，0失败；三个Electron场景及语法检查全部通过。
+- npm test：182 项领域/结构测试，181 通过，1 项 POSIX 行为因 Windows 跳过，0 失败；三个 Electron 场景及语法检查全部通过。
 - 新测试覆盖天气输入、编码、缓存、并发、旧缓存标识、12小时/7天边界与扩展请求参数；音乐库本地/网络来源、嵌套文件夹导入、重复/空文件/符号链接过滤、路径脱敏、公开 HTTPS 与私网拒绝、音频加载；聊天角色注入、超长上下文、两种adapter消息与流式设置。
-- Electron首页：快速收集、城市选择/清除、天气概况四指标、详情页 12 小时温度曲线/降雨柱/逐时图标、7 天共同温标及今天当前温度标记、音乐库 IPC、常驻音乐库入口、队列位置、应用内 WAV 解码、播放状态/进度、播放中切换本地/网络设置面板不暂停且不清空音频、AI回复、停止、清空、720px内容宽度溢出检查。天气服务在此场景使用假IPC；对话使用假模型。
-- 标准窗口截图人工检查：dist.noindex/home-workbench-review.png、settings-music-review.png、home-weather-review.png、home-weather-detail-review.png、home-chat-review.png。图中测试歌曲和同步失败提示来自验收数据。
+- Electron首页：快速收集、城市选择/清除、天气概况四指标、详情页 12 小时温度曲线/降雨柱/逐时图标、7 天共同温标及今天当前温度标记、音乐库 IPC、常驻音乐库入口、队列位置、应用内 WAV 解码、播放状态/进度、播放中切换本地/网络设置面板不暂停且不清空音频；AI 临时对话覆盖安全 Markdown 标题/列表/代码块、停止保留部分回复、失败保留问题、原位重试、保存笔记/撤销、新建对话和 720px 内容宽度溢出检查。天气服务在此场景使用假 IPC；对话使用假模型。
+- 标准窗口截图人工检查：dist.noindex/home-workbench-review.png、settings-music-review.png、home-weather-review.png、home-weather-detail-review.png、home-chat-review.png、home-chat-conversation-review.png。图中测试歌曲、假模型回复和同步失败提示来自验收数据。
 - 真实Open-Meteo请求：Beijing搜索返回有效候选，北京坐标天气请求成功。
 
 ## 未验证/后续

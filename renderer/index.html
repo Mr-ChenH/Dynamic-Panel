@@ -145,7 +145,11 @@
                 <button class="home-music-configure" id="home-music-configure" type="button">添加音乐</button>
                 <audio id="home-music-audio" preload="metadata"></audio>
               </section>
-              <section class="home-card home-ai-entry"><header><h2>AI 助手</h2></header><p>讨论想法、解释问题、帮你组织下一步。</p><button type="button" id="home-chat-open">开始对话 ↗</button><small>使用设置中的默认内容模型；仅发送对话内容</small></section>
+              <section class="home-card home-ai-entry">
+                <header><div><span class="home-ai-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/></svg></span><h2>AI 助手</h2></div><span id="home-ai-model" class="home-ai-model">内容模型</span></header>
+                <div class="home-ai-copy"><strong>把下一步想清楚</strong><p>讨论想法、解释问题或拆解行动。</p></div>
+                <button type="button" id="home-chat-open"><span>开始临时对话</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><small>仅发送你输入的对话内容</small>
+              </section>
             </div>
             <section id="home-weather-detail" class="home-weather-detail" hidden aria-label="详细天气预报">
               <header><div><h2 id="home-weather-detail-location">天气</h2><span id="home-weather-detail-updated">尚未更新</span></div><div><button type="button" id="home-weather-detail-refresh">刷新</button><button type="button" id="home-weather-detail-close">返回工作台</button></div></header>
@@ -156,10 +160,15 @@
               </div>
               <footer><span>天气数据由 Open-Meteo 提供</span><button type="button" id="home-weather-detail-source">查看数据来源</button></footer>
             </section>
-            <section id="home-chat" class="home-chat" hidden aria-label="AI 对话">
-              <header><div><h2>AI 对话</h2><span>仅本次会话 · 不自动读取工作区</span></div><div><button type="button" id="home-chat-clear">清空</button><button type="button" id="home-chat-close">返回工作台</button></div></header>
-              <div id="home-chat-messages" aria-label="对话记录"><p class="home-hint">你想讨论什么？可以直接提问。</p></div>
-              <form id="home-chat-form"><textarea id="home-chat-input" maxlength="12000" placeholder="输入问题，Ctrl / ⌘ + Enter 发送" aria-label="对话消息"></textarea><footer><span id="home-chat-status" role="status">对话不会自动保存到笔记</span><button type="button" id="home-chat-stop" hidden>停止</button><button type="submit" id="home-chat-send">发送</button></footer></form>
+            <section id="home-chat" class="home-chat" hidden aria-label="AI 临时对话">
+              <header class="home-chat-header">
+                <div class="home-chat-identity"><button type="button" id="home-chat-close" aria-label="返回工作台" title="返回工作台"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><div><h2>临时对话</h2><span><i aria-hidden="true"></i>仅本次会话</span></div></div>
+                <div class="home-chat-meta"><button type="button" id="home-chat-model" title="配置内容模型"><span id="home-chat-provider">内容模型</span><small id="home-chat-model-name">读取配置中</small></button><button type="button" id="home-chat-new" aria-label="新建对话" title="新建对话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>
+              </header>
+              <div id="home-chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="对话记录">
+                <section id="home-chat-empty" class="home-chat-empty"><span class="home-chat-empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/><path d="m19 3 .7 1.8L21.5 5.5l-1.8.7L19 8l-.7-1.8-1.8-.7 1.8-.7z"/></svg></span><h3>从一个具体问题开始</h3><div class="home-chat-starters"><button type="button" data-home-chat-prompt="帮我根据目标拆解今天最重要的三步">规划今天</button><button type="button" data-home-chat-prompt="帮我整理这段想法，找出核心观点和下一步">整理想法</button><button type="button" data-home-chat-prompt="用清晰易懂的方式解释这个问题：">解释问题</button><button type="button" data-home-chat-prompt="把这件事拆成可以立即执行的行动项：">拆解行动</button></div></section>
+              </div>
+              <form id="home-chat-form" data-busy="false"><div class="home-chat-composer"><textarea id="home-chat-input" maxlength="12000" rows="1" placeholder="向 AI 提问" aria-label="对话消息"></textarea><div class="home-chat-submit"><button type="submit" id="home-chat-send" aria-label="发送消息" title="发送消息"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 7-7 7 7M12 19V5"/></svg></button><button type="button" id="home-chat-stop" aria-label="停止生成" title="停止生成" hidden><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"/></svg></button></div></div><footer><span id="home-chat-status" role="status">不读取工作区 · Enter 发送，Shift + Enter 换行</span><span id="home-chat-count">0 / 12000</span></footer></form>
             </section>
             <div class="home-bento" id="home-bento" aria-hidden="true" hidden inert>
               <!-- 本地汽水音乐控制 -->
@@ -729,6 +738,7 @@
     <script src="ai.js"></script>
     <script src="launcher.js"></script>
     <script src="settings.js"></script>
+    <script src="markdown.js"></script>
     <script src="home.js"></script>
     <script src="icon-motion.js"></script>
   </body>

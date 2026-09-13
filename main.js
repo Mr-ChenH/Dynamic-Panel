@@ -1764,10 +1764,11 @@ ipcMain.handle('media:microphone', () => requestMacMediaAccess('microphone'));
 ipcMain.handle('tasks:recent', () => taskCompletionHistory);
 
 // 快捷链接：URL 走外部浏览器（仅 http/https），本地路径走系统打开（仅绝对路径）
-ipcMain.handle('shell:openExternal', (event, url) => {
-  if (typeof url === 'string' && /^https?:\/\//i.test(url)) {
-    return shell.openExternal(url);
-  }
+ipcMain.handle('shell:openExternal', async (event, value) => {
+  const url = await validatePublicHttpUrl(value);
+  if (!url) return false;
+  await shell.openExternal(url.toString());
+  return true;
 });
 
 ipcMain.handle('shell:openPath', (event, p) => {

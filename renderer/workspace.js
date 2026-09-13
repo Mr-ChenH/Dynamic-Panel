@@ -1450,6 +1450,7 @@
     }
     transcriptionConfig = result;
     window.NotchAISettings = { ...transcriptionConfig };
+    window.dispatchEvent(new CustomEvent('notch:ai-settings-changed'));
     removeAsrOnSave = false;
     removeContentOnSave = false;
     aiSettingsDirty = false;
