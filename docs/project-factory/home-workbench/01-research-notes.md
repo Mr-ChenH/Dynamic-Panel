@@ -20,6 +20,6 @@
 
 检索：Open Meteo API free non commercial attribution geocoding api forecast；Windows GlobalSystemMediaTransportControlsSessionManager TryTogglePlayPauseAsync；Apple Weather current conditions hourly forecast precipitation wind humidity；Apple Support next 12 hours weather forecast。
 
-音乐来源结论：本地文件由系统文件选择器授权后保存绝对路径；网络来源首版仅接受公开 HTTPS 音频直链。主进程校验 DNS 解析结果、固定已验证公网地址、拒绝重定向并限制下载大小，渲染层只播放主进程返回的字节 Blob。
+音乐来源结论：本地文件由系统文件或文件夹选择器授权后保存绝对路径；文件夹递归导入但不跟随符号链接。网络来源首版仅接受公开 HTTPS 音频直链。主进程校验 DNS 解析结果、固定已验证公网地址、拒绝重定向并限制下载大小，渲染层只播放主进程返回的字节 Blob。
 
 执行方式：尝试Paseo（配置不兼容）及Herdr（父会话未开启控制）均不可用，改由当前代理顺序实施，不修改全局环境。

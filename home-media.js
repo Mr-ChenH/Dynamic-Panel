@@ -9,6 +9,8 @@ const { isPrivateAddress } = require('./main-services');
 const AUDIO_EXTENSIONS = new Set(['mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'flac', 'webm']);
 const MAX_AUDIO_BYTES = 128 * 1024 * 1024;
 const MAX_TRACKS = 200;
+const MAX_FOLDER_ENTRIES = 10000;
+const MAX_FOLDER_DEPTH = 20;
 const MIME_TYPES = {
   mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav',
   ogg: 'audio/ogg', opus: 'audio/ogg', flac: 'audio/flac', webm: 'audio/webm',
@@ -162,24 +164,69 @@ function createMusicLibrary({ filePath, now = Date.now, uuid = crypto.randomUUID
     const library = read(); library.mode = mode;
     return write(library) ? list() : { ok: false, error: 'save_failed' };
   }
+  const localIdentity = (location) => process.platform === 'win32' ? location.toLowerCase() : location;
+  function localTrackIdentities(library) {
+    return new Set(library.tracks.filter((track) => track.kind === 'local').map((track) => localIdentity(track.location)));
+  }
+  async function appendLocalTrack(library, existing, candidate) {
+    const location = path.resolve(String(candidate || ''));
+    const identity = localIdentity(location);
+    if (existing.has(identity) || !AUDIO_EXTENSIONS.has(extensionFor(location)) || library.tracks.length >= MAX_TRACKS) return false;
+    let stat;
+    try { stat = await fs.promises.lstat(location); } catch { return false; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0 || stat.size > MAX_AUDIO_BYTES) return false;
+    library.tracks.push({ id: uuid(), kind: 'local', title: defaultTrackTitle(location, 'local'), location, mimeType: detectMime(location), createdAt: now() });
+    existing.add(identity); return true;
+  }
   async function addLocal(filePaths) {
     if (!Array.isArray(filePaths)) return { ok: false, error: 'invalid_files' };
     const library = read();
     if (library.tracks.length >= MAX_TRACKS) return { ok: false, error: 'track_limit' };
-    const existing = new Set(library.tracks.filter((track) => track.kind === 'local').map((track) => process.platform === 'win32' ? track.location.toLowerCase() : track.location));
+    const existing = localTrackIdentities(library);
     let added = 0;
-    for (const candidate of filePaths.slice(0, 50)) {
-      const location = path.resolve(String(candidate || ''));
-      const identity = process.platform === 'win32' ? location.toLowerCase() : location;
-      if (existing.has(identity) || !AUDIO_EXTENSIONS.has(extensionFor(location)) || library.tracks.length >= MAX_TRACKS) continue;
-      let stat;
-      try { stat = await fs.promises.stat(location); } catch { continue; }
-      if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_AUDIO_BYTES) continue;
-      library.tracks.push({ id: uuid(), kind: 'local', title: defaultTrackTitle(location, 'local'), location, mimeType: detectMime(location), createdAt: now() });
-      existing.add(identity); added += 1;
-    }
+    for (const candidate of filePaths.slice(0, 50)) if (await appendLocalTrack(library, existing, candidate)) added += 1;
     library.mode = 'local';
     return write(library) ? { ...list(), added } : { ok: false, error: 'save_failed' };
+  }
+  async function addFolder(folderPath) {
+    const selected = String(folderPath || '').trim();
+    if (!selected || selected.length > 4096 || !path.isAbsolute(selected)) return { ok: false, error: 'invalid_folder' };
+    const root = path.resolve(selected);
+    let rootStat;
+    try { rootStat = await fs.promises.lstat(root); } catch { return { ok: false, error: 'invalid_folder' }; }
+    if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) return { ok: false, error: 'invalid_folder' };
+    const library = read();
+    if (library.tracks.length >= MAX_TRACKS) return { ok: false, error: 'track_limit' };
+    const existing = localTrackIdentities(library);
+    const pending = [{ directory: root, depth: 0 }];
+    let added = 0, scanned = 0, truncated = false, scanLimitReached = false, limitReached = false;
+    while (pending.length && !scanLimitReached && !limitReached) {
+      const current = pending.pop();
+      let entries;
+      try { entries = await fs.promises.readdir(current.directory, { withFileTypes: true }); }
+      catch {
+        if (current.depth === 0) return { ok: false, error: 'invalid_folder' };
+        continue;
+      }
+      entries.sort((left, right) => left.name.toLowerCase().localeCompare(right.name.toLowerCase()));
+      const childDirectories = [];
+      for (const entry of entries) {
+        scanned += 1;
+        if (scanned > MAX_FOLDER_ENTRIES) { truncated = true; scanLimitReached = true; break; }
+        if (entry.isSymbolicLink()) continue;
+        const location = path.join(current.directory, entry.name);
+        if (entry.isDirectory()) {
+          if (current.depth < MAX_FOLDER_DEPTH) childDirectories.push({ directory: location, depth: current.depth + 1 });
+          else truncated = true;
+          continue;
+        }
+        if (entry.isFile() && await appendLocalTrack(library, existing, location)) added += 1;
+        if (library.tracks.length >= MAX_TRACKS) { limitReached = true; break; }
+      }
+      for (let index = childDirectories.length - 1; index >= 0; index -= 1) pending.push(childDirectories[index]);
+    }
+    library.mode = 'local';
+    return write(library) ? { ...list(), added, scanned: Math.min(scanned, MAX_FOLDER_ENTRIES), truncated, limitReached } : { ok: false, error: 'save_failed' };
   }
   async function addNetwork(payload) {
     const location = boundedText(payload?.url, 2048);
@@ -220,7 +267,7 @@ function createMusicLibrary({ filePath, now = Date.now, uuid = crypto.randomUUID
       return { ok: false, error: known };
     }
   }
-  return { list, setMode, addLocal, addNetwork, remove, load };
+  return { list, setMode, addLocal, addFolder, addNetwork, remove, load };
 }
 
-module.exports = { AUDIO_EXTENSIONS, MAX_AUDIO_BYTES, createMusicLibrary, normalizeLibrary, resolvePublicAudioUrl };
+module.exports = { AUDIO_EXTENSIONS, MAX_AUDIO_BYTES, MAX_FOLDER_ENTRIES, createMusicLibrary, normalizeLibrary, resolvePublicAudioUrl };

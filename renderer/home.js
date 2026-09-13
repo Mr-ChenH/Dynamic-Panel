@@ -11,7 +11,7 @@
   let signature = '', location = read(LOCATION_KEY, null), weatherEpoch = 0, weatherData = null;
   let lastWeather = 0;
   let musicLibrary = { mode: 'local', tracks: [] }, activeMusicId = localStorage.getItem('notch-home-music-track-v1') || '';
-  let loadedMusicId = '', musicObjectUrl = '', musicLoadEpoch = 0, musicLoading = false;
+  let loadedMusicId = '', musicObjectUrl = '', musicLoadEpoch = 0, musicLoading = false, musicImporting = false;
   const visible = () => !document.hidden && $('app').classList.contains('expanded') && $('tab-home').classList.contains('active') && !root.hidden;
   function changeView(view) {
     root.hidden = view !== 'dashboard';
@@ -406,12 +406,25 @@
     if (!applyMusicLibrary(result, true)) setText($('music-settings-status'), '音乐来源切换失败');
     else setText($('music-settings-status'), `已切换到${button.dataset.musicSource === 'local' ? '本地音乐' : '网络音乐'}`);
   }));
-  $('music-local-add').addEventListener('click', async () => {
-    const result = await api?.chooseHomeMusicFiles?.().catch(() => null);
-    if (result?.error === 'cancelled') return;
-    if (!applyMusicLibrary(result, true)) setText($('music-settings-status'), result?.error === 'track_limit' ? '音乐库最多保存 200 首' : '没有添加音频，请检查格式或文件大小');
-    else setText($('music-settings-status'), result.added > 0 ? `已添加 ${result.added} 首本地音乐` : '所选文件已存在或不符合大小限制');
-  });
+  async function importLocalMusic(kind) {
+    if (musicImporting) return;
+    musicImporting = true;
+    const buttons = [$('music-local-add'), $('music-local-add-folder')]; buttons.forEach((button) => { button.disabled = true; });
+    setText($('music-settings-status'), kind === 'folder' ? '正在扫描文件夹…' : '正在读取所选文件…');
+    const request = kind === 'folder' ? api?.chooseHomeMusicFolder : api?.chooseHomeMusicFiles;
+    const result = typeof request === 'function' ? await request().catch(() => null) : null;
+    musicImporting = false; buttons.forEach((button) => { button.disabled = false; });
+    if (result?.error === 'cancelled') { setText($('music-settings-status'), ''); return; }
+    if (!applyMusicLibrary(result, true)) {
+      const errors = { track_limit: '音乐库最多保存 200 首', invalid_folder: '无法读取所选文件夹' };
+      setText($('music-settings-status'), errors[result?.error] || '没有添加音频，请检查格式或文件大小'); return;
+    }
+    if (!(result.added > 0)) { setText($('music-settings-status'), kind === 'folder' ? '文件夹中没有新的受支持音频' : '所选文件已存在或不符合大小限制'); return; }
+    const suffix = result.limitReached ? '，音乐库已达到 200 首' : result.truncated ? '，已达到 10,000 项扫描上限' : '';
+    setText($('music-settings-status'), `已添加 ${result.added} 首本地音乐${suffix}`);
+  }
+  $('music-local-add').addEventListener('click', () => void importLocalMusic('files'));
+  $('music-local-add-folder').addEventListener('click', () => void importLocalMusic('folder'));
   $('music-network-form').addEventListener('submit', async (event) => {
     event.preventDefault(); const url = $('music-network-url').value.trim(); if (!url) { $('music-network-url').focus(); return; }
     const result = await api?.addHomeMusicUrl?.({ url, title: $('music-network-title').value.trim() }).catch(() => null);

@@ -181,10 +181,11 @@ test('home music is app-owned and configures local or public HTTPS sources', () 
   assert.match(html, /id="home-music-audio"/);
   assert.match(html, /data-music-source="local"/);
   assert.match(html, /data-music-source="network"/);
+  assert.match(html, /id="music-local-add-folder"/);
   assert.match(html, /id="music-volume"[^>]*type="range"/);
   assert.match(settingsJs, /id:'music'/);
-  for (const api of ['getHomeMusicLibrary', 'setHomeMusicMode', 'chooseHomeMusicFiles', 'addHomeMusicUrl', 'removeHomeMusicTrack', 'loadHomeMusicTrack']) assert.match(preloadJs, new RegExp(api));
-  for (const channel of ['home:music-library', 'home:music-mode', 'home:music-choose-files', 'home:music-add-network', 'home:music-remove', 'home:music-load']) assert.match(mainJs, new RegExp(channel));
+  for (const api of ['getHomeMusicLibrary', 'setHomeMusicMode', 'chooseHomeMusicFiles', 'chooseHomeMusicFolder', 'addHomeMusicUrl', 'removeHomeMusicTrack', 'loadHomeMusicTrack']) assert.match(preloadJs, new RegExp(api));
+  for (const channel of ['home:music-library', 'home:music-mode', 'home:music-choose-files', 'home:music-choose-folder', 'home:music-add-network', 'home:music-remove', 'home:music-load']) assert.match(mainJs, new RegExp(channel));
   assert.match(homeJs, /URL\.createObjectURL/);
   assert.doesNotMatch(preloadJs, /getHomeMedia|controlHomeMedia|getMusicStatus|controlMusic/);
   assert.doesNotMatch(mainJs, /home:media-status|home:media-control|music:status|music:control|SODA_MUSIC/);

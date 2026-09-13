@@ -82,6 +82,32 @@ test('music library owns local and public HTTPS sources without exposing local p
   assert.equal(library.remove('track-1').tracks.length, 1);
 });
 
+test('music folders import nested audio once and ignore unsupported files and symbolic links', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-music-folder-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const musicFolder = path.join(directory, 'Music'); const albumFolder = path.join(musicFolder, 'Album');
+  fs.mkdirSync(albumFolder, { recursive: true });
+  fs.writeFileSync(path.join(musicFolder, 'First.MP3'), 'first');
+  fs.writeFileSync(path.join(albumFolder, 'Second.flac'), 'second');
+  fs.writeFileSync(path.join(albumFolder, 'cover.jpg'), 'cover');
+  fs.writeFileSync(path.join(albumFolder, 'empty.ogg'), '');
+  const outside = path.join(directory, 'Outside.wav'); fs.writeFileSync(outside, 'outside');
+  let linked = false;
+  try { fs.symlinkSync(outside, path.join(musicFolder, 'Linked.wav')); linked = true; } catch {}
+  let id = 0;
+  const library = createMusicLibrary({ filePath: path.join(directory, 'library.json'), uuid: () => `folder-${++id}`, now: () => 20 });
+  const imported = await library.addFolder(musicFolder);
+  assert.equal(imported.ok, true);
+  assert.equal(imported.added, 2);
+  assert.equal(imported.tracks.length, 2);
+  assert.deepEqual(new Set(imported.tracks.map((track) => track.title)), new Set(['First', 'Second']));
+  assert.equal(imported.tracks.some((track) => track.title === 'Linked'), false, linked ? 'symbolic link must be skipped' : 'symbolic link unavailable');
+  assert.equal((await library.addFolder(musicFolder)).added, 0);
+  assert.equal((await library.addFolder(path.join(directory, 'missing'))).error, 'invalid_folder');
+  assert.equal((await library.addFolder('')).error, 'invalid_folder');
+  assert.equal(JSON.stringify(library.list()).includes(musicFolder), false);
+});
+
 test('network music rejects private hosts, credentials and unsupported URLs', async () => {
   const privateLookup = async () => [{ address: '127.0.0.1', family: 4 }];
   assert.equal(await resolvePublicAudioUrl('https://localhost/song.mp3', privateLookup), null);

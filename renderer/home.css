@@ -121,7 +121,8 @@
 .music-volume-control output { color: var(--text-3); font: var(--fs-micro) var(--font-mono); text-align: right; }
 .music-source-panel { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 72px; padding-block: 14px; border-block: 1px solid var(--hairline-soft); }
 .music-source-panel[hidden] { display: none !important; }
-.music-source-panel > div { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.music-source-panel > .music-source-copy { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.music-local-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .music-source-panel strong, .music-library-heading strong { color: var(--text-1); font-size: var(--fs-ui); }
 .music-source-panel span, .music-source-panel > small, .music-library-heading span { color: var(--text-3); font-size: var(--fs-micro); line-height: 1.5; }
 #music-network-form { flex: 1; display: grid; grid-template-columns: minmax(220px, 1.4fr) minmax(160px, 1fr) auto; align-items: end; gap: 12px; }

@@ -2563,6 +2563,11 @@ ipcMain.handle('home:music-choose-files', async () => {
   if (choice.canceled || !choice.filePaths.length) return { ok: false, error: 'cancelled' };
   return homeMusic.addLocal(choice.filePaths);
 });
+ipcMain.handle('home:music-choose-folder', async () => {
+  const choice = await showOwnedOpenDialog({ title: '添加音乐文件夹', properties: ['openDirectory'] });
+  if (choice.canceled || !choice.filePaths.length) return { ok: false, error: 'cancelled' };
+  return homeMusic.addFolder(choice.filePaths[0]);
+});
 ipcMain.handle('home:music-add-network', (event, payload) => homeMusic.addNetwork(payload));
 ipcMain.handle('home:music-remove', (event, trackId) => homeMusic.remove(trackId));
 ipcMain.handle('home:music-load', (event, trackId) => homeMusic.load(trackId));

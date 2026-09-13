@@ -544,7 +544,7 @@ app.on('web-contents-created', (_event, contents) => {
         assert.equal(noteTyping.before,noteTyping.during,JSON.stringify(noteTyping));
         assert.equal(noteTyping.during,noteTyping.after,JSON.stringify(noteTyping));
         assert.equal(noteTyping.same,true);assert.equal(noteTyping.focused,true);assert.equal(noteTyping.caret,0);
-        const homeChannels=['home:weather-search','home:weather','home:music-library','home:music-mode','home:music-choose-files','home:music-add-network','home:music-remove','home:music-load'];
+        const homeChannels=['home:weather-search','home:weather','home:music-library','home:music-mode','home:music-choose-files','home:music-choose-folder','home:music-add-network','home:music-remove','home:music-load'];
         for (const channel of homeChannels) require('electron').ipcMain.removeHandler(channel);
         require('electron').ipcMain.handle('home:weather-search',()=>({ok:true,locations:[{name:'北京',country:'中国',latitude:39,longitude:116}]}));
         require('electron').ipcMain.handle('home:weather',()=>({ok:true,temperature:22,apparentTemperature:21,humidity:58,precipitation:0,windSpeed:11,windDirection:45,isDay:true,code:0,high:25,low:16,sunrise:'2026-09-12T05:50',sunset:'2026-09-12T18:20',hours:Array.from({length:12},(_,index)=>({time:`2026-09-12T${String(index+10).padStart(2,'0')}:00`,temperature:22+index/2,code:index>7?2:0,precipitationProbability:index*3,isDay:index<8})),days:Array.from({length:7},(_,index)=>({date:`2026-09-${String(index+12).padStart(2,'0')}`,code:index>3?2:0,high:25+index,low:16+index,precipitationProbability:index*5,sunrise:'2026-09-12T05:50',sunset:'2026-09-12T18:20'})),updatedAt:Date.now()}));
@@ -552,6 +552,7 @@ app.on('web-contents-created', (_event, contents) => {
         require('electron').ipcMain.handle('home:music-library',()=>testMusicLibrary);
         require('electron').ipcMain.handle('home:music-mode',(_event,mode)=>(testMusicLibrary={...testMusicLibrary,mode}));
         require('electron').ipcMain.handle('home:music-choose-files',()=>testMusicLibrary);
+        require('electron').ipcMain.handle('home:music-choose-folder',()=>testMusicLibrary);
         require('electron').ipcMain.handle('home:music-add-network',()=>testMusicLibrary);
         require('electron').ipcMain.handle('home:music-remove',()=>testMusicLibrary);
         require('electron').ipcMain.handle('home:music-load',()=>({ok:true,bytes:silentWav(),mimeType:'audio/wav'}));

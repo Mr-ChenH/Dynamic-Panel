@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   getHomeMusicLibrary: () => ipcRenderer.invoke('home:music-library'),
   setHomeMusicMode: (mode) => ipcRenderer.invoke('home:music-mode', mode),
   chooseHomeMusicFiles: () => ipcRenderer.invoke('home:music-choose-files'),
+  chooseHomeMusicFolder: () => ipcRenderer.invoke('home:music-choose-folder'),
   addHomeMusicUrl: (payload) => ipcRenderer.invoke('home:music-add-network', payload),
   removeHomeMusicTrack: (trackId) => ipcRenderer.invoke('home:music-remove', trackId),
   loadHomeMusicTrack: (trackId) => ipcRenderer.invoke('home:music-load', trackId),
