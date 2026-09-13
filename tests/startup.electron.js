@@ -548,7 +548,7 @@ app.on('web-contents-created', (_event, contents) => {
         for (const channel of homeChannels) require('electron').ipcMain.removeHandler(channel);
         require('electron').ipcMain.handle('home:weather-search',()=>({ok:true,locations:[{name:'北京',country:'中国',latitude:39,longitude:116}]}));
         require('electron').ipcMain.handle('home:weather',()=>({ok:true,temperature:22,apparentTemperature:21,humidity:58,precipitation:0,windSpeed:11,windDirection:45,isDay:true,code:0,high:25,low:16,sunrise:'2026-09-12T05:50',sunset:'2026-09-12T18:20',hours:Array.from({length:12},(_,index)=>({time:`2026-09-12T${String(index+10).padStart(2,'0')}:00`,temperature:22+index/2,code:index>7?2:0,precipitationProbability:index*3,isDay:index<8})),days:Array.from({length:7},(_,index)=>({date:`2026-09-${String(index+12).padStart(2,'0')}`,code:index>3?2:0,high:25+index,low:16+index,precipitationProbability:index*5,sunrise:'2026-09-12T05:50',sunset:'2026-09-12T18:20'})),updatedAt:Date.now()}));
-        let testMusicLibrary={ok:true,mode:'local',tracks:[{id:'test-track',kind:'local',title:'测试歌曲',detail:'test.wav',mimeType:'audio/wav'}]};
+        let testMusicLibrary={ok:true,mode:'local',tracks:[{id:'test-track',kind:'local',title:'测试歌曲',detail:'test.wav',mimeType:'audio/wav'},{id:'network-track',kind:'network',title:'网络测试歌曲',detail:'media.example.com',mimeType:'audio/wav'}]};
         require('electron').ipcMain.handle('home:music-library',()=>testMusicLibrary);
         require('electron').ipcMain.handle('home:music-mode',(_event,mode)=>(testMusicLibrary={...testMusicLibrary,mode}));
         require('electron').ipcMain.handle('home:music-choose-files',()=>testMusicLibrary);
@@ -582,6 +582,13 @@ app.on('web-contents-created', (_event, contents) => {
             &&!document.getElementById('home-media-progress').hidden
             &&document.querySelector('.home-media').dataset.mediaPlaying==='true'
             &&document.querySelector('[data-home-media="toggle"]').getAttribute('aria-label')==='暂停';
+          const audio=document.getElementById('home-music-audio'),sourceBefore=audio.src;let emptied=0;audio.addEventListener('emptied',()=>{emptied+=1;});
+          await window.NotchPanel.navigate({tab:'settings'});window.NotchSettings.select('music');document.querySelector('[data-music-source="network"]').click();await pause();
+          const musicPanelStable=audio.src===sourceBefore&&!audio.paused&&emptied===0
+            &&document.getElementById('home-media-title').textContent==='测试歌曲'
+            &&document.getElementById('home-media-source-label').textContent==='本地音乐'
+            &&!document.querySelector('[data-music-source-panel="network"]').hidden;
+          await window.NotchPanel.navigate({tab:'home'});await pause();
           document.getElementById('home-chat-open').click();const input=document.getElementById('home-chat-input');input.value='你好';document.getElementById('home-chat-form').requestSubmit();await pause();
           const chatted=document.querySelector('#home-chat-messages [data-role="assistant"] p')?.textContent==='整理后的内容';
           input.value='流式测试';document.getElementById('home-chat-form').requestSubmit();document.getElementById('home-chat-stop').click();await pause();
@@ -593,9 +600,9 @@ app.on('web-contents-created', (_event, contents) => {
           dashboard.style.width='720px';
           fits=fits&&dashboard.scrollWidth<=dashboard.clientWidth+1&&[...dashboard.children].every(card=>card.scrollWidth<=card.clientWidth+1);
           dashboard.style.width='';
-          return {saved,weather,weatherDetail,cleared,media,chatted,cancelled,clearChat,classicRemoved,fits};
+          return {saved,weather,weatherDetail,cleared,media,musicPanelStable,chatted,cancelled,clearChat,classicRemoved,fits};
         })()`);
-        assert.deepEqual(homeAudit,{saved:true,weather:true,weatherDetail:true,cleared:true,media:true,chatted:true,cancelled:true,clearChat:true,classicRemoved:true,fits:true});
+        assert.deepEqual(homeAudit,{saved:true,weather:true,weatherDetail:true,cleared:true,media:true,musicPanelStable:true,chatted:true,cancelled:true,clearChat:true,classicRemoved:true,fits:true});
         await contents.executeJavaScript(`document.getElementById('home-weather-city').value='北京';document.getElementById('home-weather-form').requestSubmit()`);
         await new Promise(resolve=>setTimeout(resolve,100));
         await contents.executeJavaScript(`document.querySelector('#home-weather-results button').click()`);

@@ -11,7 +11,7 @@
   let signature = '', location = read(LOCATION_KEY, null), weatherEpoch = 0, weatherData = null;
   let lastWeather = 0;
   let musicLibrary = { mode: 'local', tracks: [] }, activeMusicId = localStorage.getItem('notch-home-music-track-v1') || '';
-  let loadedMusicId = '', musicObjectUrl = '', musicLoadEpoch = 0, musicLoading = false, musicImporting = false;
+  let loadedMusicId = '', musicObjectUrl = '', musicLoadEpoch = 0, musicLoading = false, musicImporting = false, musicModeBusy = false;
   const visible = () => !document.hidden && $('app').classList.contains('expanded') && $('tab-home').classList.contains('active') && !root.hidden;
   function changeView(view) {
     root.hidden = view !== 'dashboard';
@@ -297,8 +297,10 @@
     const value = Math.max(0, Math.floor(Number(seconds) || 0));
     return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
   }
-  function musicQueue() { return musicLibrary.tracks.filter((track) => track.kind === musicLibrary.mode); }
+  function musicQueue(kind = musicLibrary.mode) { return musicLibrary.tracks.filter((track) => track.kind === kind); }
   function activeMusicTrack() {
+    const loaded = musicLibrary.tracks.find((track) => track.id === loadedMusicId);
+    if (loaded) return loaded;
     const queue = musicQueue();
     return queue.find((track) => track.id === activeMusicId) || queue[0] || null;
   }
@@ -322,12 +324,13 @@
     setText($('home-media-position'), musicTime(position)); setText($('home-media-duration'), musicTime(duration));
   }
   function renderMusicCard() {
-    const card = document.querySelector('.home-media'), queue = musicQueue();
+    const card = document.querySelector('.home-media');
     let track = activeMusicTrack();
+    const queue = musicQueue(track?.kind || musicLibrary.mode);
     if (track && track.id !== activeMusicId) rememberActiveMusic(track);
     const playing = Boolean(track && loadedMusicId === track.id && !musicAudio.paused && !musicAudio.ended);
     card.dataset.mediaState = musicLoading ? 'loading' : track ? 'ready' : 'empty'; card.dataset.mediaPlaying = String(playing);
-    setText($('home-media-source-label'), musicLibrary.mode === 'local' ? '本地音乐' : '网络音乐');
+    setText($('home-media-source-label'), (track?.kind || musicLibrary.mode) === 'local' ? '本地音乐' : '网络音乐');
     const title = track?.title || '还没有音乐'; setText($('home-media-title'), title); $('home-media-title').title = title;
     setText($('home-media-artist'), track ? (track.kind === 'local' ? '本地音频' : '网络音频') : '在设置中添加本地或网络音频');
     const detail = track?.detail || ''; setText($('home-media-album'), detail); $('home-media-album').hidden = !detail;
@@ -357,10 +360,10 @@
       select.addEventListener('click', () => void loadMusicTrack(track, true)); row.append(select, remove); list.append(row);
     });
   }
-  function applyMusicLibrary(result, stopOnModeChange = false) {
+  function applyMusicLibrary(result) {
     if (!result?.ok) return false;
-    const previousMode = musicLibrary.mode; musicLibrary = { mode: result.mode === 'network' ? 'network' : 'local', tracks: Array.isArray(result.tracks) ? result.tracks : [] };
-    if ((stopOnModeChange && previousMode !== musicLibrary.mode) || (loadedMusicId && !musicLibrary.tracks.some((track) => track.id === loadedMusicId))) releaseMusicSource();
+    musicLibrary = { mode: result.mode === 'network' ? 'network' : 'local', tracks: Array.isArray(result.tracks) ? result.tracks : [] };
+    if (loadedMusicId && !musicLibrary.tracks.some((track) => track.id === loadedMusicId)) releaseMusicSource();
     const track = activeMusicTrack(); rememberActiveMusic(track); renderMusicCard(); renderMusicSettings(); return true;
   }
   async function refreshMusicLibrary() {
@@ -384,7 +387,8 @@
     }
   }
   function moveMusic(direction, autoplay = !musicAudio.paused) {
-    const queue = musicQueue(), track = activeMusicTrack(); if (queue.length < 2 || !track) return;
+    const track = activeMusicTrack(); if (!track) return;
+    const queue = musicQueue(track.kind); if (queue.length < 2) return;
     const index = queue.findIndex((item) => item.id === track.id); const next = queue[(index + direction + queue.length) % queue.length];
     if (autoplay) void loadMusicTrack(next, true); else { releaseMusicSource(); rememberActiveMusic(next); renderMusicCard(); }
   }
@@ -399,12 +403,16 @@
   document.querySelector('[data-home-media="next"]').addEventListener('click', () => moveMusic(1));
   musicAudio.addEventListener('play', renderMusicCard); musicAudio.addEventListener('pause', renderMusicCard);
   musicAudio.addEventListener('loadedmetadata', () => { renderMusicProgress(); renderMusicCard(); }); musicAudio.addEventListener('timeupdate', renderMusicProgress);
-  musicAudio.addEventListener('ended', () => { if (musicQueue().length > 1) moveMusic(1, true); else renderMusicCard(); });
+  musicAudio.addEventListener('ended', () => { const track = activeMusicTrack(); if (track && musicQueue(track.kind).length > 1) moveMusic(1, true); else renderMusicCard(); });
   musicAudio.addEventListener('error', () => { if (musicAudio.src) { renderMusicCard(); setText($('home-media-status'), '无法解码该音频格式'); } });
   document.querySelectorAll('[data-music-source]').forEach((button) => button.addEventListener('click', async () => {
-    const result = await api?.setHomeMusicMode?.(button.dataset.musicSource).catch(() => null);
-    if (!applyMusicLibrary(result, true)) setText($('music-settings-status'), '音乐来源切换失败');
-    else setText($('music-settings-status'), `已切换到${button.dataset.musicSource === 'local' ? '本地音乐' : '网络音乐'}`);
+    const mode = button.dataset.musicSource;
+    if (musicModeBusy || mode === musicLibrary.mode) return;
+    musicModeBusy = true; const sourceButtons = [...document.querySelectorAll('[data-music-source]')]; sourceButtons.forEach((item) => { item.disabled = true; });
+    const result = await api?.setHomeMusicMode?.(mode).catch(() => null);
+    musicModeBusy = false; sourceButtons.forEach((item) => { item.disabled = false; });
+    if (!applyMusicLibrary(result)) setText($('music-settings-status'), '音乐来源切换失败');
+    else setText($('music-settings-status'), `已切换到${mode === 'local' ? '本地音乐' : '网络音乐'}，当前播放保持不变`);
   }));
   async function importLocalMusic(kind) {
     if (musicImporting) return;
@@ -415,7 +423,7 @@
     const result = typeof request === 'function' ? await request().catch(() => null) : null;
     musicImporting = false; buttons.forEach((button) => { button.disabled = false; });
     if (result?.error === 'cancelled') { setText($('music-settings-status'), ''); return; }
-    if (!applyMusicLibrary(result, true)) {
+    if (!applyMusicLibrary(result)) {
       const errors = { track_limit: '音乐库最多保存 200 首', invalid_folder: '无法读取所选文件夹' };
       setText($('music-settings-status'), errors[result?.error] || '没有添加音频，请检查格式或文件大小'); return;
     }
@@ -428,7 +436,7 @@
   $('music-network-form').addEventListener('submit', async (event) => {
     event.preventDefault(); const url = $('music-network-url').value.trim(); if (!url) { $('music-network-url').focus(); return; }
     const result = await api?.addHomeMusicUrl?.({ url, title: $('music-network-title').value.trim() }).catch(() => null);
-    if (!applyMusicLibrary(result, true)) { const errors = { invalid_audio_url: '请输入公开 HTTPS 音频直链，并使用支持的音频扩展名', track_limit: '音乐库最多保存 200 首' }; setText($('music-settings-status'), errors[result?.error] || '网络音乐添加失败'); return; }
+    if (!applyMusicLibrary(result)) { const errors = { invalid_audio_url: '请输入公开 HTTPS 音频直链，并使用支持的音频扩展名', track_limit: '音乐库最多保存 200 首' }; setText($('music-settings-status'), errors[result?.error] || '网络音乐添加失败'); return; }
     $('music-network-url').value = ''; $('music-network-title').value = ''; setText($('music-settings-status'), result.added === false ? '该网络音乐已在库中' : '网络音乐已添加');
   });
   $('music-library-list').addEventListener('click', async (event) => {
