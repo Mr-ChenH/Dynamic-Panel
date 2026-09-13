@@ -179,6 +179,8 @@ test('settings exposes every panel tab as a possible default opening page', () =
 
 test('home music is app-owned and configures local or public HTTPS sources', () => {
   assert.match(html, /id="home-music-audio"/);
+  assert.match(html, /id="home-media-library"[^>]*aria-label="打开音乐库"/);
+  assert.match(html, /id="home-media-queue"/);
   assert.match(html, /data-music-source="local"/);
   assert.match(html, /data-music-source="network"/);
   assert.match(html, /id="music-local-add-folder"/);

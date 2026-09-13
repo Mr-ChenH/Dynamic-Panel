@@ -326,11 +326,13 @@
   function renderMusicCard() {
     const card = document.querySelector('.home-media');
     let track = activeMusicTrack();
-    const queue = musicQueue(track?.kind || musicLibrary.mode);
+    const source = track?.kind || musicLibrary.mode, queue = musicQueue(source);
     if (track && track.id !== activeMusicId) rememberActiveMusic(track);
+    const queueIndex = track ? queue.findIndex((item) => item.id === track.id) : -1;
     const playing = Boolean(track && loadedMusicId === track.id && !musicAudio.paused && !musicAudio.ended);
-    card.dataset.mediaState = musicLoading ? 'loading' : track ? 'ready' : 'empty'; card.dataset.mediaPlaying = String(playing);
-    setText($('home-media-source-label'), (track?.kind || musicLibrary.mode) === 'local' ? '本地音乐' : '网络音乐');
+    card.dataset.mediaState = musicLoading ? 'loading' : track ? 'ready' : 'empty'; card.dataset.mediaPlaying = String(playing); card.dataset.mediaSource = source;
+    setText($('home-media-source-label'), source === 'local' ? '本地音乐' : '网络音乐');
+    setText($('home-media-queue'), queueIndex >= 0 ? `${queueIndex + 1} / ${queue.length}` : `${queue.length} 首`);
     const title = track?.title || '还没有音乐'; setText($('home-media-title'), title); $('home-media-title').title = title;
     setText($('home-media-artist'), track ? (track.kind === 'local' ? '本地音频' : '网络音频') : '在设置中添加本地或网络音频');
     const detail = track?.detail || ''; setText($('home-media-album'), detail); $('home-media-album').hidden = !detail;
@@ -392,8 +394,10 @@
     const index = queue.findIndex((item) => item.id === track.id); const next = queue[(index + direction + queue.length) % queue.length];
     if (autoplay) void loadMusicTrack(next, true); else { releaseMusicSource(); rememberActiveMusic(next); renderMusicCard(); }
   }
+  async function openMusicSettings() { await navigate({ tab: 'settings' }); window.NotchSettings?.select('music'); }
   $('home-media-refresh').addEventListener('click', refreshMusicLibrary);
-  $('home-music-configure').addEventListener('click', async () => { await navigate({ tab: 'settings' }); window.NotchSettings?.select('music'); });
+  $('home-media-library').addEventListener('click', openMusicSettings);
+  $('home-music-configure').addEventListener('click', openMusicSettings);
   document.querySelector('[data-home-media="toggle"]').addEventListener('click', async () => {
     const track = activeMusicTrack(); if (!track || musicLoading) return;
     if (loadedMusicId !== track.id || !musicAudio.src) { await loadMusicTrack(track, true); return; }

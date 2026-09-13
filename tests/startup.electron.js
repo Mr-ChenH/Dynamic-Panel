@@ -583,7 +583,7 @@ app.on('web-contents-created', (_event, contents) => {
             &&document.querySelector('.home-media').dataset.mediaPlaying==='true'
             &&document.querySelector('[data-home-media="toggle"]').getAttribute('aria-label')==='暂停';
           const audio=document.getElementById('home-music-audio'),sourceBefore=audio.src;let emptied=0;audio.addEventListener('emptied',()=>{emptied+=1;});
-          await window.NotchPanel.navigate({tab:'settings'});window.NotchSettings.select('music');document.querySelector('[data-music-source="network"]').click();await pause();
+          document.getElementById('home-media-library').click();await pause();document.querySelector('[data-music-source="network"]').click();await pause();
           const musicPanelStable=audio.src===sourceBefore&&!audio.paused&&emptied===0
             &&document.getElementById('home-media-title').textContent==='测试歌曲'
             &&document.getElementById('home-media-source-label').textContent==='本地音乐'
