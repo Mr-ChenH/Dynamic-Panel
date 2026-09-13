@@ -168,6 +168,15 @@
               <div id="home-chat-messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="对话记录">
                 <section id="home-chat-empty" class="home-chat-empty"><span class="home-chat-empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"/><path d="m19 3 .7 1.8L21.5 5.5l-1.8.7L19 8l-.7-1.8-1.8-.7 1.8-.7z"/></svg></span><h3>从一个具体问题开始</h3><div class="home-chat-starters"><button type="button" data-home-chat-prompt="帮我根据目标拆解今天最重要的三步">规划今天</button><button type="button" data-home-chat-prompt="帮我整理这段想法，找出核心观点和下一步">整理想法</button><button type="button" data-home-chat-prompt="用清晰易懂的方式解释这个问题：">解释问题</button><button type="button" data-home-chat-prompt="把这件事拆成可以立即执行的行动项：">拆解行动</button></div></section>
               </div>
+              <section id="home-chat-reader" class="home-chat-reader" role="dialog" aria-modal="true" aria-labelledby="home-chat-reader-title" hidden>
+                <header>
+                  <button type="button" id="home-chat-reader-close" aria-label="返回对话" title="返回对话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+                  <div><h2 id="home-chat-reader-title">AI 长回答</h2><span id="home-chat-reader-meta">0 字符</span></div>
+                  <nav aria-label="长回答操作"><button type="button" id="home-chat-reader-copy" aria-label="复制全文" title="复制全文"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg></button><button type="button" id="home-chat-reader-copy-selection" aria-label="复制选区" title="复制选区" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4H5a1 1 0 0 0-1 1v3M16 4h3a1 1 0 0 1 1 1v3M8 20H5a1 1 0 0 1-1-1v-3M16 20h3a1 1 0 0 0 1-1v-3"/><path d="M9 9h6M9 12h6M9 15h4"/></svg></button><button type="button" id="home-chat-reader-save" aria-label="保存为笔记" title="保存为笔记"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h8V5M8 20v-6h8v6"/></svg></button><button type="button" id="home-chat-reader-todos" aria-label="提取待办" title="提取待办"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 6h10M10 12h10M10 18h10"/><path d="m4 6 1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg></button></nav>
+                </header>
+                <div class="home-chat-reader-body"><nav class="home-chat-reader-outline" aria-label="回答大纲"><strong>大纲</strong><div id="home-chat-reader-outline"></div></nav><article id="home-chat-reader-content" class="home-chat-reader-content home-chat-message-body" tabindex="0"></article></div>
+                <footer><span id="home-chat-reader-status" role="status">阅读视图不会自动保存内容</span></footer>
+              </section>
               <section id="home-chat-session-panel" class="home-chat-session-panel" role="dialog" aria-label="当前工作区的对话历史" hidden>
                 <header><div><h3>对话历史</h3><span>保存在当前工作区</span></div><button type="button" id="home-chat-session-close" aria-label="关闭对话历史" title="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
                 <p>保存后会复制消息、回答和已选资料的文字快照，不包含附件、图片、音频或 API Key。</p>
@@ -754,6 +763,7 @@
     <script src="settings.js"></script>
     <script src="chat-context.js"></script>
     <script src="chat-sessions.js"></script>
+    <script src="chat-reader.js"></script>
     <script src="markdown.js"></script>
     <script src="home.js"></script>
     <script src="icon-motion.js"></script>

@@ -453,12 +453,15 @@
   void refreshMusicLibrary();
   const ChatContext = window.NotchChatContext;
   const ChatSessions = window.NotchChatSessions;
+  const ChatReader = window.NotchChatReader;
   let history = [], requestId = '', sequence = 0, pendingTurn = null, selectedSources = [], contextCatalog = [], contextType = 'all';
   let conversationRecords = [], savedSessions = ChatSessions.parseSessions(localStorage.getItem(ChatSessions.STORAGE_KEY));
   let currentSessionId = '', currentSessionTitle = '', currentSessionCreatedAt = 0, sessionDirty = false, editingSessionId = '', confirmDeleteSessionId = '';
   const messages = $('home-chat-messages'), chatInput = $('home-chat-input'), chatEmpty = $('home-chat-empty'), chatForm = $('home-chat-form');
   const contextPicker = $('home-chat-context-picker'), contextSearch = $('home-chat-context-search'), contextList = $('home-chat-context-list'), contextChips = $('home-chat-context-chips');
   const sessionPanel = $('home-chat-session-panel'), sessionSearch = $('home-chat-session-search'), sessionList = $('home-chat-session-list');
+  const reader = $('home-chat-reader'), readerContent = $('home-chat-reader-content'), readerOutline = $('home-chat-reader-outline');
+  let readerTurn = null, readerScrollTop = 0, readerInertState = [];
   const chatIcons = {
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>',
     retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg>',
@@ -468,6 +471,7 @@
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>',
     close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>',
+    reader: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>',
   };
   const chatErrors = {
     not_configured: '尚未配置内容模型，请先完成 AI 设置。', service_busy: 'AI 正在处理其他请求，请稍后重试。', authentication_failed: '模型凭据验证失败，请检查设置。',
@@ -603,6 +607,7 @@
   function openSavedSession(sessionId) {
     if (sessionId === currentSessionId) { closeSessionPanel({ focus: true }); return; }
     if (requestId) cancelChat();
+    closeReader({ focus: false });
     if (sessionDirty) { setText($('home-chat-status'), '当前会话有未保存更改，请先处理容量或存储问题'); return; }
     const session = savedSessions.find((item) => item.id === sessionId); if (!session) return;
     currentSessionId = session.id; currentSessionTitle = session.title; currentSessionCreatedAt = session.createdAt; sessionDirty = false;
@@ -708,31 +713,84 @@
     turn.reply.querySelector('.home-chat-message-state')?.remove();
     if (detail) { const note = document.createElement('p'); note.className = 'home-chat-message-state'; note.textContent = detail; turn.reply.append(note); }
   }
-  function noteTitle(answer) {
-    return String(answer || '').split('\n').map((line) => line.replace(/^#{1,6}\s+/, '').replace(/[*_`]/g, '').trim()).find(Boolean)?.slice(0, 80) || 'AI 对话回复';
+  function noteTitle(answer) { return ChatReader.title(answer) || 'AI 对话回复'; }
+  function setReaderStatus(text, error = false) {
+    setText($('home-chat-reader-status'), text); $('home-chat-reader-status').dataset.error = String(error);
+  }
+  function reportTurnStatus(turn, text, error = false) {
+    setText($('home-chat-status'), text);
+    if (!reader.hidden && readerTurn === turn) setReaderStatus(text, error);
+  }
+  function updateReaderSaveAction() {
+    const button = $('home-chat-reader-save'); if (!readerTurn) return;
+    button.disabled = Boolean(readerTurn.noteMutating);
+    button.dataset.saved = String(Boolean(readerTurn.savedNote));
+    button.innerHTML = readerTurn.savedNote ? chatIcons.undo : chatIcons.save;
+    button.setAttribute('aria-label', readerTurn.savedNote ? '撤销保存笔记' : '保存为笔记'); button.title = button.getAttribute('aria-label');
+  }
+  async function toggleTurnNote(turn) {
+    if (!turn || turn.noteMutating) return;
+    turn.noteMutating = true; addTurnActions(turn, true); if (readerTurn === turn) updateReaderSaveAction();
+    if (turn.savedNote) {
+      const undone = await window.NotchNotes?.undoGenerated?.(turn.savedNote).catch(() => null);
+      if (undone?.ok) { turn.savedNote = null; reportTurnStatus(turn, undone.workspaceSynced === false ? '已在本机撤销，工作区同步失败' : '已撤销保存笔记', undone.workspaceSynced === false); }
+      else reportTurnStatus(turn, '笔记已变化，无法撤销', true);
+    } else {
+      const result = await window.NotchNotes?.saveGenerated?.(noteTitle(turn.answer), turn.answer, 'model').catch(() => null);
+      if (result?.ok) { turn.savedNote = result.note; reportTurnStatus(turn, result.workspaceSynced === false ? '已保存到本机，工作区同步失败' : '已保存为笔记', result.workspaceSynced === false); }
+      else reportTurnStatus(turn, result?.error === 'capacity' ? '笔记库已达到 200 篇上限' : '保存笔记失败', true);
+    }
+    turn.noteMutating = false; addTurnActions(turn, true); if (readerTurn === turn) updateReaderSaveAction();
+  }
+  function readerSelectionText() {
+    if (reader.hidden) return '';
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount || !readerContent.contains(selection.anchorNode) || !readerContent.contains(selection.focusNode)) return '';
+    return selection.toString().trim();
+  }
+  function updateReaderSelectionActions() {
+    if (reader.hidden || !readerTurn) return;
+    const selected = readerSelectionText();
+    $('home-chat-reader-copy-selection').disabled = !selected;
+    const source = ChatReader.todoSource(readerTurn.answer, selected);
+    const todos = $('home-chat-reader-todos'); todos.disabled = !source.ok;
+    todos.title = source.ok ? (source.scope === 'selection' ? `从选中的 ${source.length} 个字符提取待办` : '从全文提取待办')
+      : source.error === 'source_too_long' ? '请先选择不超过 12000 字符的内容' : '没有可提取的内容';
+  }
+  function closeReader({ focus = true } = {}) {
+    if (reader.hidden) return;
+    const turn = readerTurn; reader.hidden = true; readerTurn = null; window.getSelection()?.removeAllRanges(); messages.scrollTop = readerScrollTop;
+    readerInertState.forEach(([node, inert]) => { node.inert = inert; }); readerInertState = [];
+    if (focus) (turn?.readerButton?.isConnected ? turn.readerButton : chatInput).focus({ preventScroll: true });
+  }
+  function openReader(turn) {
+    if (!turn || turn.state !== 'complete' || !ChatReader.analyze(turn.answer).eligible) return;
+    if (requestId) { setText($('home-chat-status'), '请先停止当前生成，再打开长回答'); return; }
+    closeContextPicker(); closeSessionPanel(); readerTurn = turn; readerScrollTop = messages.scrollTop;
+    readerInertState = [...reader.parentElement.children].filter((node) => node !== reader).map((node) => [node, node.inert]); readerInertState.forEach(([node]) => { node.inert = true; });
+    const analysis = ChatReader.analyze(turn.answer); setText($('home-chat-reader-title'), ChatReader.title(turn.answer));
+    setText($('home-chat-reader-meta'), `${analysis.charCount} 字符 · ${analysis.headings.length || 1} 个章节 · ${currentSessionId ? currentSessionTitle : '临时对话'}`);
+    renderChatText(readerContent, turn.answer); readerOutline.replaceChildren();
+    const headingNodes = [...readerContent.querySelectorAll('h2, h3, h4, h5')];
+    headingNodes.forEach((heading, index) => {
+      heading.id = `chat-reader-section-${index + 1}`;
+      const button = document.createElement('button'); button.type = 'button'; button.dataset.level = String(Math.max(1, Number(heading.tagName.slice(1)) - 1)); button.textContent = heading.textContent || `第 ${index + 1} 节`; button.title = button.textContent;
+      button.addEventListener('click', () => heading.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })); readerOutline.append(button);
+    });
+    if (!headingNodes.length) { const empty = document.createElement('p'); empty.className = 'home-chat-reader-outline-empty'; empty.textContent = '全文'; readerOutline.append(empty); }
+    reader.hidden = false; readerContent.scrollTop = 0; updateReaderSaveAction(); updateReaderSelectionActions(); setReaderStatus('阅读视图不会自动保存内容'); requestAnimationFrame(() => $('home-chat-reader-close').focus({ preventScroll: true }));
   }
   function addTurnActions(turn, complete) {
     turn.reply.querySelector('.home-chat-message-actions')?.remove();
     const actions = document.createElement('div'); actions.className = 'home-chat-message-actions';
     if (turn.answer) actions.append(actionButton('copy', '复制回复', async () => {
-      try { await api?.writeClipboard?.({ text: turn.answer }); setText($('home-chat-status'), '回复已复制'); } catch { setText($('home-chat-status'), '复制失败'); }
+      try { await api?.writeClipboard?.({ text: turn.answer }); reportTurnStatus(turn, '回复已复制'); } catch { reportTurnStatus(turn, '复制失败', true); }
     }));
+    if (complete && ChatReader.analyze(turn.answer).eligible) { turn.readerButton = actionButton('reader', '打开长回答工作台', () => openReader(turn)); actions.append(turn.readerButton); }
     actions.append(actionButton('retry', complete ? '重新生成' : '重试', () => void submitChat(turn.prompt, { user: turn.user, context: turn.context, sources: turn.sources, versionOf: turn })));
     if (complete) {
-      const save = actionButton('save', '保存为笔记', async () => {
-        save.disabled = true;
-        if (turn.savedNote) {
-          const undone = await window.NotchNotes?.undoGenerated?.(turn.savedNote).catch(() => null);
-          if (undone?.ok) { turn.savedNote = null; save.dataset.saved = 'false'; save.innerHTML = chatIcons.save; save.setAttribute('aria-label', '保存为笔记'); save.title = '保存为笔记'; setText($('home-chat-status'), '已撤销保存'); }
-          else setText($('home-chat-status'), '笔记已变化，无法撤销');
-        } else {
-          const result = await window.NotchNotes?.saveGenerated?.(noteTitle(turn.answer), turn.answer, 'model').catch(() => null);
-          if (result?.ok) { turn.savedNote = result.note; save.dataset.saved = 'true'; save.innerHTML = chatIcons.undo; save.setAttribute('aria-label', '撤销保存'); save.title = '撤销保存'; setText($('home-chat-status'), result.workspaceSynced === false ? '已保存到本机，工作区同步失败' : '已保存为笔记'); }
-          else setText($('home-chat-status'), result?.error === 'capacity' ? '笔记库已达到 200 篇上限' : '保存笔记失败');
-        }
-        save.disabled = false;
-      });
-      actions.append(save);
+      const save = actionButton(turn.savedNote ? 'undo' : 'save', turn.savedNote ? '撤销保存' : '保存为笔记', () => void toggleTurnNote(turn));
+      save.dataset.saved = String(Boolean(turn.savedNote)); save.disabled = Boolean(turn.noteMutating); actions.append(save);
     }
     turn.reply.append(actions);
   }
@@ -754,7 +812,7 @@
   function resetChat({ keepSessionPanel = false, status = '已开始新的临时对话', force = false } = {}) {
     cancelChat();
     if (sessionDirty && !force) { setText($('home-chat-status'), '当前会话有未保存更改，请先处理容量或存储问题'); return false; }
-    history = []; conversationRecords = []; currentSessionId = ''; currentSessionTitle = ''; currentSessionCreatedAt = 0; sessionDirty = false; selectedSources = []; closeContextPicker(); if (!keepSessionPanel) closeSessionPanel(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); updateSessionHeader(); setText($('home-chat-status'), status); chatInput.focus(); return true;
+    closeReader({ focus: false }); history = []; conversationRecords = []; currentSessionId = ''; currentSessionTitle = ''; currentSessionCreatedAt = 0; sessionDirty = false; selectedSources = []; closeContextPicker(); if (!keepSessionPanel) closeSessionPanel(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); updateSessionHeader(); setText($('home-chat-status'), status); chatInput.focus(); return true;
   }
   async function refreshChatModel() {
     const config = await api?.getTranscriptionConfig?.().catch(() => null);
@@ -795,7 +853,7 @@
     setText($('home-chat-status'), !saved.ok ? sessionError(saved.error) : reusableTurns ? `回复完成 · 后续将使用最近 ${reusableTurns} 轮` : '回复完成 · 本轮内容过长，不加入下一轮上下文'); chatInput.focus();
   }
   $('home-chat-open').addEventListener('click', () => { changeView('chat'); void refreshChatModel(); chatInput.focus(); });
-  $('home-chat-close').addEventListener('click', () => { cancelChat(); closeContextPicker(); closeSessionPanel(); changeView('dashboard'); $('home-chat-open').focus(); });
+  $('home-chat-close').addEventListener('click', () => { cancelChat(); closeReader({ focus: false }); closeContextPicker(); closeSessionPanel(); changeView('dashboard'); $('home-chat-open').focus(); });
   $('home-chat-stop').addEventListener('click', cancelChat); $('home-chat-new').addEventListener('click', () => resetChat()); $('home-chat-model').addEventListener('click', openAISettings);
   $('home-chat-session-save').addEventListener('click', () => {
     if (!currentSessionId) { openSessionPanel(); setText($('home-chat-status'), '确认保存范围后，将对话写入当前工作区'); $('home-chat-session-confirm-save').focus(); return; }
@@ -847,6 +905,30 @@
     if (codeCopy) { const code = codeCopy.closest('.markdown-code')?.querySelector('code')?.textContent || ''; try { await api?.writeClipboard?.({ text: code }); setText($('home-chat-status'), '代码已复制'); } catch { setText($('home-chat-status'), '复制失败'); } return; }
     const link = event.target.closest('[data-external-url]'); if (link) { event.preventDefault(); await api?.openExternal?.(link.dataset.externalUrl).catch(() => {}); }
   });
+  $('home-chat-reader-close').addEventListener('click', () => closeReader());
+  $('home-chat-reader-copy').addEventListener('click', async () => {
+    if (!readerTurn) return;
+    try { await api?.writeClipboard?.({ text: readerTurn.answer }); setReaderStatus('全文已复制'); } catch { setReaderStatus('复制全文失败', true); }
+  });
+  $('home-chat-reader-copy-selection').addEventListener('click', async () => {
+    const text = readerSelectionText(); if (!text) { setReaderStatus('请先在正文中选择内容', true); return; }
+    try { await api?.writeClipboard?.({ text }); setReaderStatus(`已复制 ${text.length} 个字符`); } catch { setReaderStatus('复制选区失败', true); }
+  });
+  $('home-chat-reader-save').addEventListener('click', () => { if (readerTurn) void toggleTurnNote(readerTurn); });
+  $('home-chat-reader-todos').addEventListener('click', () => {
+    if (!readerTurn) return;
+    const source = ChatReader.todoSource(readerTurn.answer, readerSelectionText());
+    if (!source.ok) { setReaderStatus(source.error === 'source_too_long' ? '内容超过 12000 字符，请先缩小选区' : '没有可提取的内容', true); return; }
+    setReaderStatus(source.scope === 'selection' ? `使用选中的 ${source.length} 个字符提取待办` : '使用全文提取待办');
+    window.NotchAI?.open?.({ action: 'extractTodos', sourceType: 'manual', sourceTitle: noteTitle(readerTurn.answer), text: source.text });
+  });
+  readerContent.addEventListener('click', async (event) => {
+    const codeCopy = event.target.closest('[data-markdown-copy]');
+    if (codeCopy) { const code = codeCopy.closest('.markdown-code')?.querySelector('code')?.textContent || ''; try { await api?.writeClipboard?.({ text: code }); setReaderStatus('代码已复制'); } catch { setReaderStatus('复制代码失败', true); } return; }
+    const link = event.target.closest('[data-external-url]'); if (link) { event.preventDefault(); await api?.openExternal?.(link.dataset.externalUrl).catch(() => {}); }
+  });
+  reader.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !event.isComposing) { event.preventDefault(); closeReader(); } });
+  document.addEventListener('selectionchange', updateReaderSelectionActions);
   api?.onAIEvent?.((event) => {
     if (event?.requestId !== requestId || event.type !== 'textDelta' || !pendingTurn) return;
     const follow = messages.scrollHeight - messages.scrollTop - messages.clientHeight < 80;
@@ -856,13 +938,13 @@
   });
   resizeChatInput(); updateSessionHeader(); void refreshChatModel();
   window.addEventListener('notch:ai-settings-changed', refreshChatModel);
-  api?.onWorkspaceChanged?.(() => { cancelChat(); history = []; conversationRecords = []; savedSessions = []; currentSessionId = ''; currentSessionTitle = ''; currentSessionCreatedAt = 0; sessionDirty = false; selectedSources = []; closeContextPicker(); closeSessionPanel(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); updateSessionHeader(); ++weatherEpoch; });
+  api?.onWorkspaceChanged?.(() => { cancelChat(); closeReader({ focus: false }); history = []; conversationRecords = []; savedSessions = []; currentSessionId = ''; currentSessionTitle = ''; currentSessionCreatedAt = 0; sessionDirty = false; selectedSources = []; closeContextPicker(); closeSessionPanel(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); updateSessionHeader(); ++weatherEpoch; });
   function tick() {
     if (!visible()) return;
     refreshLists();
     if (Date.now() - lastWeather > 15 * 60 * 1000) void refreshWeather();
   }
   const timer = setInterval(tick, 2000);
-  window.addEventListener('pagehide', () => { clearInterval(timer); cancelChat(); releaseMusicSource(); ++weatherEpoch; }, { once: true });
+  window.addEventListener('pagehide', () => { clearInterval(timer); cancelChat(); closeReader({ focus: false }); releaseMusicSource(); ++weatherEpoch; }, { once: true });
   changeView('dashboard');
 })();

@@ -7,10 +7,10 @@
 - TASK-005：README、CHANGELOG、测试及截图。
 
 ## 验证
-- `npm test`：187 项领域/结构测试，186 通过，1 项 POSIX 行为因 Windows 跳过，0 失败；三个 Electron 场景及语法检查全部通过。
-- 新测试覆盖天气输入、编码、缓存、并发、旧缓存标识、12 小时/7 天边界与扩展请求参数；音乐库本地/网络来源、嵌套文件夹导入、重复/空文件/符号链接过滤、路径脱敏、公开 HTTPS 与私网拒绝、音频加载；聊天角色注入、资料类型/去重/数量/总长度校验、不可信 JSON 封装、超长上下文、两种 adapter 消息与流式设置；工作区会话损坏数据恢复、保存/搜索/重命名/删除，以及回复数、单会话、会话数和总容量边界。
-- Electron 首页：快速收集、城市选择/清除、天气概况四指标、详情页 12 小时温度曲线/降雨柱/逐时图标、7 天共同温标及今天当前温度标记、音乐库 IPC、常驻音乐库入口、队列位置、应用内 WAV 解码、播放状态/进度、播放中切换本地/网络设置面板不暂停且不清空音频；AI 对话覆盖安全 Markdown 标题/列表/代码块、资料选择/标签/发送、原资料变化后的冻结快照重试、资料进入成功历史、停止保留部分回复、失败保留问题、保存笔记/撤销、新建对话，以及工作区会话首次保存确认、搜索、切换、重命名、删除、停止/错误状态恢复、刷新恢复和刷新后冻结资料重试。天气服务在此场景使用假 IPC；对话使用假模型。
-- 标准窗口截图人工检查：`dist.noindex/home-workbench-review.png`、`settings-music-review.png`、`home-weather-review.png`、`home-weather-detail-review.png`、`home-chat-review.png`、`home-chat-context-review.png`、`home-chat-conversation-review.png`、`home-chat-sessions-review.png`。图中测试歌曲、假模型回复和同步失败提示来自验收数据。
+- `npm test`：190 项领域/结构测试，189 通过，1 项 POSIX 行为因 Windows 跳过，0 失败；三个 Electron 场景及语法检查全部通过。
+- 新测试覆盖天气输入、编码、缓存、并发、旧缓存标识、12 小时/7 天边界与扩展请求参数；音乐库本地/网络来源、嵌套文件夹导入、重复/空文件/符号链接过滤、路径脱敏、公开 HTTPS 与私网拒绝、音频加载；聊天角色注入、资料类型/去重/数量/总长度校验、不可信 JSON 封装、超长上下文、两种 adapter 消息与流式设置；工作区会话损坏数据恢复、保存/搜索/重命名/删除，以及回复数、单会话、会话数和总容量边界；长回答资格、大纲围栏忽略、标题生成、选区优先和 12,000 字符待办来源边界。
+- Electron 首页：快速收集、城市选择/清除、天气概况四指标、详情页 12 小时温度曲线/降雨柱/逐时图标、7 天共同温标及今天当前温度标记、音乐库 IPC、常驻音乐库入口、队列位置、应用内 WAV 解码、播放状态/进度、播放中切换本地/网络设置面板不暂停且不清空音频；AI 对话覆盖安全 Markdown 标题/列表/代码块、资料选择/标签/发送、原资料变化后的冻结快照重试、资料进入成功历史、停止保留部分回复、失败保留问题、保存笔记/撤销、新建对话，以及工作区会话首次保存确认、搜索、切换、重命名、删除、停止/错误状态恢复、刷新恢复和刷新后冻结资料重试。长回答场景另覆盖仅完整回复显示入口、安全 Markdown、标题大纲定位、全文/选区/代码复制、超长全文限制、选区待办候选预览、笔记保存/撤销同步、草稿恢复和 520px 无横向溢出。天气服务在此场景使用假 IPC；对话使用假模型。
+- 标准窗口截图人工检查：`dist.noindex/home-workbench-review.png`、`settings-music-review.png`、`home-weather-review.png`、`home-weather-detail-review.png`、`home-chat-review.png`、`home-chat-context-review.png`、`home-chat-conversation-review.png`、`home-chat-sessions-review.png`、`home-chat-reader-review.png`。图中测试歌曲、假模型回复和同步失败提示来自验收数据。
 - 真实Open-Meteo请求：Beijing搜索返回有效候选，北京坐标天气请求成功。
 
 ## 未验证/后续
