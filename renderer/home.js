@@ -451,8 +451,10 @@
     if (!applyMusicLibrary(result)) setText($('music-settings-status'), '音乐删除失败'); else setText($('music-settings-status'), '已从音乐库移除');
   });
   void refreshMusicLibrary();
-  let history = [], requestId = '', sequence = 0, pendingTurn = null;
+  const ChatContext = window.NotchChatContext;
+  let history = [], requestId = '', sequence = 0, pendingTurn = null, selectedSources = [], contextCatalog = [], contextType = 'all';
   const messages = $('home-chat-messages'), chatInput = $('home-chat-input'), chatEmpty = $('home-chat-empty'), chatForm = $('home-chat-form');
+  const contextPicker = $('home-chat-context-picker'), contextSearch = $('home-chat-context-search'), contextList = $('home-chat-context-list'), contextChips = $('home-chat-context-chips');
   const chatIcons = {
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>',
     retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg>',
@@ -465,13 +467,64 @@
     model_not_found: '当前模型不可用，请检查模型名称。', invalid_endpoint: '服务地址不安全或不可用。', network_error: '无法连接内容模型。',
     invalid_response: '服务返回了无法使用的内容。', response_too_large: '回复超过大小限制，未保留为成功结果。', stream_incomplete: '连接提前中断，回复不完整。',
     invalid_stream: '服务返回的数据流损坏。', output_truncated: '回复达到模型输出上限，内容不完整。', content_filtered: '回复被服务过滤。', unsupported_finish_reason: '模型未正常结束生成。',
+    invalid_chat_sources: '所选参考资料无效，请重新选择。', input_too_long: '问题与参考资料超过 12000 字符，请移除资料或缩短问题。',
   };
+  function selectedSource(key) { return selectedSources.find((source) => ChatContext.sourceKey(source) === key); }
+  function collectChatSources() {
+    return ChatContext.catalog([
+      ...(window.NotchNotes?.chatContexts?.() || []),
+      ...(window.NotchWorkspace?.chatContexts?.() || []),
+      ...(window.NotchTodo?.chatContexts?.() || []),
+      ...(window.NotchClipboard?.chatContexts?.() || []),
+    ]);
+  }
+  function chatInputLength(sources = selectedSources, text = chatInput.value) { return ChatContext.messageContent(text, sources).length; }
   function chatControls(busy) {
-    chatForm.dataset.busy = String(busy); $('home-chat-send').hidden = busy; $('home-chat-stop').hidden = !busy;
+    chatForm.dataset.busy = String(busy); $('home-chat-send').hidden = busy; $('home-chat-stop').hidden = !busy; resizeChatInput();
   }
   function resizeChatInput() {
     chatInput.style.height = 'auto'; chatInput.style.height = `${Math.min(132, Math.max(40, chatInput.scrollHeight))}px`;
-    setText($('home-chat-count'), `${chatInput.value.length} / 12000`);
+    const length = chatInputLength(), wasOverLimit = chatForm.dataset.overLimit === 'true', overLimit = length > 12000;
+    setText($('home-chat-count'), `${length} / 12000${selectedSources.length ? ` · ${selectedSources.length} 份资料` : ''}`);
+    $('home-chat-send').disabled = !chatInput.value.trim() || overLimit;
+    chatForm.dataset.overLimit = String(overLimit);
+    if (!requestId && overLimit) setText($('home-chat-status'), '问题与参考资料超过 12000 字符，请移除资料或缩短问题');
+    else if (!requestId && wasOverLimit && !overLimit) setText($('home-chat-status'), selectedSources.length ? `将随本条消息发送 ${selectedSources.length} 份资料` : '不读取工作区 · Enter 发送，Shift + Enter 换行');
+  }
+  function renderContextChips() {
+    contextChips.replaceChildren();
+    selectedSources.forEach((source) => {
+      const button = document.createElement('button'); button.type = 'button'; button.dataset.removeChatSource = ChatContext.sourceKey(source); button.title = `移除${ChatContext.SOURCE_LABELS[source.sourceType]}：${source.sourceTitle}`;
+      const label = document.createElement('span'); label.textContent = `${ChatContext.SOURCE_LABELS[source.sourceType]} · ${source.sourceTitle}`;
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); icon.setAttribute('viewBox', '0 0 24 24'); icon.setAttribute('fill', 'none'); icon.setAttribute('stroke', 'currentColor'); icon.setAttribute('stroke-width', '2'); icon.setAttribute('aria-hidden', 'true');
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', 'm7 7 10 10M17 7 7 17'); icon.append(path); button.append(label, icon); contextChips.append(button);
+    });
+    contextChips.hidden = selectedSources.length === 0; resizeChatInput();
+  }
+  function renderContextPicker() {
+    const rows = ChatContext.catalog(contextCatalog, contextSearch.value, contextType);
+    contextList.replaceChildren();
+    rows.slice(0, 100).forEach((source) => {
+      const key = ChatContext.sourceKey(source), active = Boolean(selectedSource(key));
+      const candidate = active ? selectedSources.filter((item) => ChatContext.sourceKey(item) !== key) : [...selectedSources, source];
+      const fits = source.text.length <= 12000 && chatInputLength(candidate) <= 12000;
+      const atLimit = !active && selectedSources.length >= ChatContext.MAX_SOURCES;
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'home-chat-context-row'; button.dataset.chatSource = key; button.setAttribute('role', 'option'); button.setAttribute('aria-selected', String(active));
+      button.disabled = atLimit || (!active && !fits);
+      const copy = document.createElement('span'); const title = document.createElement('strong'); title.textContent = source.sourceTitle;
+      const detail = document.createElement('small'); detail.textContent = source.detail || source.text.replace(/\s+/g, ' ').slice(0, 90); copy.append(title, detail);
+      const kind = document.createElement('i'); kind.textContent = atLimit ? '已达上限' : !active && !fits ? '超过上限' : ChatContext.SOURCE_LABELS[source.sourceType]; button.append(copy, kind); contextList.append(button);
+    });
+    if (!rows.length) { const emptyState = document.createElement('p'); emptyState.className = 'home-chat-context-empty'; emptyState.textContent = contextSearch.value ? '没有匹配的文字资料' : '当前没有可添加的文字资料'; contextList.append(emptyState); }
+    setText($('home-chat-context-result'), `${rows.length} 项资料${rows.length > 100 ? ' · 显示前 100 项' : ''}`);
+    setText($('home-chat-context-selected'), `已选择 ${selectedSources.length} / ${ChatContext.MAX_SOURCES}`);
+  }
+  function closeContextPicker({ focus = false } = {}) {
+    contextPicker.hidden = true; $('home-chat-context-add').setAttribute('aria-expanded', 'false'); if (focus) chatInput.focus();
+  }
+  function openContextPicker() {
+    contextCatalog = collectChatSources(); contextType = 'all'; contextSearch.value = ''; document.querySelectorAll('[data-chat-context-type]').forEach((button) => button.setAttribute('aria-selected', String(button.dataset.chatContextType === 'all')));
+    renderContextPicker(); contextPicker.hidden = false; $('home-chat-context-add').setAttribute('aria-expanded', 'true'); contextSearch.focus();
   }
   function actionButton(icon, label, handler) {
     const button = document.createElement('button'); button.type = 'button'; button.innerHTML = chatIcons[icon]; button.setAttribute('aria-label', label); button.title = label; button.addEventListener('click', handler); return button;
@@ -479,7 +532,7 @@
   function renderChatText(container, text) {
     if (window.NotchMarkdown?.render) window.NotchMarkdown.render(container, text); else container.textContent = text;
   }
-  function message(role, text, state = 'complete') {
+  function message(role, text, state = 'complete', sources = []) {
     chatEmpty.hidden = true;
     const article = document.createElement('article'); article.className = 'home-chat-message'; article.dataset.role = role; article.dataset.state = state;
     const body = document.createElement('div'); body.className = 'home-chat-message-body';
@@ -487,7 +540,14 @@
       const head = document.createElement('div'); head.className = 'home-chat-message-head';
       const mark = document.createElement('i'); mark.textContent = 'AI'; const label = document.createElement('span'); label.textContent = state === 'streaming' ? '正在回复' : 'AI 助手'; head.append(mark, label);
       renderChatText(body, text); article.append(head, body);
-    } else { body.textContent = text; article.append(body); }
+    } else {
+      body.textContent = text; article.append(body);
+      if (sources.length) {
+        const badges = document.createElement('div'); badges.className = 'home-chat-message-sources';
+        sources.forEach((source) => { const badge = document.createElement('span'); badge.textContent = `${ChatContext.SOURCE_LABELS[source.sourceType]} · ${source.sourceTitle}`; badge.title = badge.textContent; badges.append(badge); });
+        article.append(badges);
+      }
+    }
     messages.append(article); return article;
   }
   function setTurnState(turn, state, detail) {
@@ -505,7 +565,7 @@
     if (turn.answer) actions.append(actionButton('copy', '复制回复', async () => {
       try { await api?.writeClipboard?.({ text: turn.answer }); setText($('home-chat-status'), '回复已复制'); } catch { setText($('home-chat-status'), '复制失败'); }
     }));
-    actions.append(actionButton('retry', complete ? '重新生成' : '重试', () => void submitChat(turn.prompt, { user: turn.user, context: turn.context, versionOf: turn })));
+    actions.append(actionButton('retry', complete ? '重新生成' : '重试', () => void submitChat(turn.prompt, { user: turn.user, context: turn.context, sources: turn.sources, versionOf: turn })));
     if (complete) {
       const save = actionButton('save', '保存为笔记', async () => {
         save.disabled = true;
@@ -524,9 +584,9 @@
     }
     turn.reply.append(actions);
   }
-  function contextFor(text, source = history) {
+  function contextFor(currentContent, source = history) {
     const context = source.slice(-12);
-    while (context.length && context.reduce((sum, item) => sum + item.content.length, text.length) > 12000) context.splice(0, 2);
+    while (context.length && context.reduce((sum, item) => sum + item.content.length, currentContent.length) > 12000) context.splice(0, 2);
     return context;
   }
   function cancelChat() {
@@ -538,7 +598,7 @@
     addTurnActions(turn, false); chatControls(false); setText($('home-chat-status'), '已停止，可重试本轮'); chatInput.focus();
   }
   function resetChat() {
-    cancelChat(); history = []; messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; resizeChatInput(); setText($('home-chat-status'), '已开始新的临时对话'); chatInput.focus();
+    cancelChat(); history = []; selectedSources = []; closeContextPicker(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); setText($('home-chat-status'), '已开始新的临时对话'); chatInput.focus();
   }
   async function refreshChatModel() {
     const config = await api?.getTranscriptionConfig?.().catch(() => null);
@@ -550,17 +610,19 @@
   async function submitChat(rawText, options = {}) {
     if (requestId) return;
     const text = String(rawText || '').trim(); if (!text) return;
-    if (text.length > 12000) { setText($('home-chat-status'), '单次输入最多 12000 字符'); return; }
-    const context = contextFor(text, options.context || history);
-    const user = options.user || message('user', text);
+    const sources = ChatContext.normalizeSources(options.sources === undefined ? selectedSources : options.sources);
+    const historyContent = ChatContext.messageContent(text, sources);
+    if (historyContent.length > 12000) { setText($('home-chat-status'), '问题与参考资料超过 12000 字符，请移除资料或缩短问题'); return; }
+    const context = contextFor(historyContent, options.context || history);
+    const user = options.user || message('user', text, 'complete', sources);
     const reply = message('assistant', '正在思考…', 'streaming');
     if (options.versionOf) { options.versionOf.reply.dataset.version = 'previous'; const oldLabel = options.versionOf.reply.querySelector('.home-chat-message-head span'); if (oldLabel) oldLabel.textContent = 'AI 助手 · 上一版本'; reply.querySelector('.home-chat-message-head span').textContent = 'AI 助手 · 新版本'; }
-    const turn = { prompt: text, context, user, reply, answer: '', savedNote: null, isVersion: Boolean(options.versionOf) };
+    const turn = { prompt: text, context, sources, historyContent, user, reply, answer: '', savedNote: null, isVersion: Boolean(options.versionOf) };
     pendingTurn = turn; messages.scrollTop = messages.scrollHeight;
-    if (!options.user) { chatInput.value = ''; resizeChatInput(); }
+    if (!options.user) { chatInput.value = ''; selectedSources = []; closeContextPicker(); renderContextChips(); }
     const seq = ++sequence, id = `home-chat-${Date.now()}-${seq}`; requestId = id; chatControls(true);
-    setText($('home-chat-status'), context.length < history.length ? `使用最近 ${context.length / 2} 轮上下文生成` : context.length ? `使用最近 ${context.length / 2} 轮上下文生成` : '正在生成，可随时停止');
-    const result = await api?.runAI?.({ requestId: id, action: 'chat', interactive: true, context: { sourceType: 'manual', text }, history: context, referenceTime: new Date().toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }).catch(() => null);
+    setText($('home-chat-status'), context.length ? `使用最近 ${context.length / 2} 轮${sources.length ? `及 ${sources.length} 份资料` : ''}生成` : sources.length ? `使用 ${sources.length} 份所选资料生成` : '正在生成，可随时停止');
+    const result = await api?.runAI?.({ requestId: id, action: 'chat', interactive: true, context: { sourceType: 'manual', text, sources }, history: context, referenceTime: new Date().toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }).catch(() => null);
     if (seq !== sequence || id !== requestId) return;
     requestId = ''; pendingTurn = null; chatControls(false);
     if (!result?.ok) {
@@ -568,16 +630,48 @@
       const detail = chatErrors[result?.error] || '生成失败，请重试。'; setTurnState(turn, 'error', detail); addTurnActions(turn, false); setText($('home-chat-status'), '本轮未计入上下文，可重试'); chatInput.focus(); return;
     }
     turn.answer = String(result.text || ''); renderChatText(reply.querySelector('.home-chat-message-body'), turn.answer); setTurnState(turn, 'complete', ''); addTurnActions(turn, true);
-    history = [...context, { role: 'user', content: text }, { role: 'assistant', content: turn.answer }].slice(-12);
+    history = [...context, { role: 'user', content: historyContent }, { role: 'assistant', content: turn.answer }].slice(-12);
     while (messages.querySelectorAll('.home-chat-message').length > 18) messages.querySelector('.home-chat-message')?.remove();
-    setText($('home-chat-status'), `回复完成 · 后续将使用最近 ${history.length / 2} 轮`); chatInput.focus();
+    const reusableTurns = contextFor('', history).length / 2;
+    setText($('home-chat-status'), reusableTurns ? `回复完成 · 后续将使用最近 ${reusableTurns} 轮` : '回复完成 · 本轮内容过长，不加入下一轮上下文'); chatInput.focus();
   }
   $('home-chat-open').addEventListener('click', () => { changeView('chat'); void refreshChatModel(); chatInput.focus(); });
-  $('home-chat-close').addEventListener('click', () => { cancelChat(); changeView('dashboard'); $('home-chat-open').focus(); });
+  $('home-chat-close').addEventListener('click', () => { cancelChat(); closeContextPicker(); changeView('dashboard'); $('home-chat-open').focus(); });
   $('home-chat-stop').addEventListener('click', cancelChat); $('home-chat-new').addEventListener('click', resetChat); $('home-chat-model').addEventListener('click', openAISettings);
+  $('home-chat-context-add').addEventListener('click', () => { if (contextPicker.hidden) openContextPicker(); else closeContextPicker({ focus: true }); });
+  $('home-chat-context-close').addEventListener('click', () => closeContextPicker({ focus: true }));
+  contextSearch.addEventListener('input', renderContextPicker);
+  document.querySelectorAll('[data-chat-context-type]').forEach((button) => button.addEventListener('click', () => {
+    contextType = button.dataset.chatContextType; document.querySelectorAll('[data-chat-context-type]').forEach((item) => item.setAttribute('aria-selected', String(item === button))); renderContextPicker();
+  }));
+  contextList.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-chat-source]'); if (!button || button.disabled) return;
+    const key = button.dataset.chatSource, active = selectedSource(key);
+    if (active) selectedSources = selectedSources.filter((source) => ChatContext.sourceKey(source) !== key);
+    else {
+      const source = contextCatalog.find((item) => ChatContext.sourceKey(item) === key); if (!source) return;
+      const candidate = ChatContext.normalizeSources([...selectedSources, source]);
+      if (candidate.length === selectedSources.length || chatInputLength(candidate) > 12000) { setText($('home-chat-status'), '最多选择 3 份资料，且资料与问题合计不能超过 12000 字符'); return; }
+      selectedSources = candidate;
+    }
+    renderContextChips(); renderContextPicker(); if (!requestId) setText($('home-chat-status'), selectedSources.length ? `将随本条消息发送 ${selectedSources.length} 份资料` : '未选择参考资料'); requestAnimationFrame(() => contextList.querySelector(`[data-chat-source="${CSS.escape(key)}"]`)?.focus({ preventScroll: true }));
+  });
+  const contextTabs = [...document.querySelectorAll('[data-chat-context-type]')];
+  contextTabs.forEach((button, index) => button.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const targetIndex = event.key === 'Home' ? 0 : event.key === 'End' ? contextTabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + contextTabs.length) % contextTabs.length;
+    contextTabs[targetIndex].focus(); contextTabs[targetIndex].click();
+  }));
+  contextChips.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-remove-chat-source]'); if (!button) return;
+    selectedSources = selectedSources.filter((source) => ChatContext.sourceKey(source) !== button.dataset.removeChatSource); renderContextChips(); if (!contextPicker.hidden) renderContextPicker(); if (!requestId) setText($('home-chat-status'), selectedSources.length ? `将随本条消息发送 ${selectedSources.length} 份资料` : '未选择参考资料'); chatInput.focus();
+  });
+  contextPicker.addEventListener('keydown', (event) => { if (event.key === 'Escape') { event.preventDefault(); closeContextPicker({ focus: true }); } });
+  document.addEventListener('pointerdown', (event) => { if (!contextPicker.hidden && !contextPicker.contains(event.target) && !$('home-chat-context-add').contains(event.target)) closeContextPicker(); });
   document.querySelectorAll('[data-home-chat-prompt]').forEach((button) => button.addEventListener('click', () => { chatInput.value = button.dataset.homeChatPrompt || ''; resizeChatInput(); chatInput.focus(); chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length); }));
   chatForm.addEventListener('submit', (event) => { event.preventDefault(); void submitChat(chatInput.value); });
-  chatInput.addEventListener('input', resizeChatInput);
+  chatInput.addEventListener('input', () => { resizeChatInput(); if (!contextPicker.hidden) renderContextPicker(); });
   chatInput.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); chatForm.requestSubmit(); } });
   messages.addEventListener('click', async (event) => {
     const codeCopy = event.target.closest('[data-markdown-copy]');
@@ -593,7 +687,7 @@
   });
   resizeChatInput(); void refreshChatModel();
   window.addEventListener('notch:ai-settings-changed', refreshChatModel);
-  api?.onWorkspaceChanged?.(() => { cancelChat(); history = []; messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; resizeChatInput(); ++weatherEpoch; });
+  api?.onWorkspaceChanged?.(() => { cancelChat(); history = []; selectedSources = []; closeContextPicker(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); ++weatherEpoch; });
   function tick() {
     if (!visible()) return;
     refreshLists();

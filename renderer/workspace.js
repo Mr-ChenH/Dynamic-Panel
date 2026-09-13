@@ -3193,6 +3193,27 @@
       const recording = recordings.find((item) => item.id === id && !item.isDraft);
       return recording ? { sourceType: 'recording', sourceId: recording.id, sourceTitle: recording.title, text: recording.transcript, createdAt: recording.createdAt } : null;
     },
+    chatContexts() {
+      const links = linkGroups.flatMap((group) => (group.links || []).map((link) => ({
+        sourceType: 'link',
+        sourceId: link.id,
+        sourceTitle: link.title || link.url,
+        sourceRevision: String(link.updatedAt || link.createdAt || ''),
+        text: `URL: ${link.url}\n网页标题: ${link.title || ''}`,
+        detail: group.name || '未分组',
+        updatedAt: link.updatedAt || link.createdAt || 0,
+      })));
+      const recordingRows = recordings.filter((recording) => !recording.isDraft && recording.transcript.trim()).map((recording) => ({
+        sourceType: 'recording',
+        sourceId: recording.id,
+        sourceTitle: recording.title,
+        sourceRevision: String(recording.updatedAt || recording.createdAt || ''),
+        text: recording.transcript,
+        detail: recording.category || '未分类',
+        updatedAt: recording.updatedAt || recording.createdAt || 0,
+      }));
+      return [...recordingRows, ...links];
+    },
     async applyAIName(source, titleValue, categoryValue) {
       const title = String(titleValue || '').trim().slice(0, 80);
       const category = String(categoryValue || '').trim().slice(0, source.sourceType === 'link' ? 14 : 24);

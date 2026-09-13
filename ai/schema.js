@@ -1,5 +1,7 @@
 'use strict';
 
+const ChatContext = require('../renderer/chat-context');
+
 const ACTIONS = new Set([
   'chat',
   'summarize',
@@ -72,10 +74,30 @@ function validateRequest(payload) {
   };
   if (action === 'chat') {
     if (payload.interactive !== true) return { ok: false, error: 'interactive_required' };
+    const rawSources = context.sources === undefined ? [] : context.sources;
+    if (!Array.isArray(rawSources) || rawSources.length > ChatContext.MAX_SOURCES) return { ok: false, error: 'invalid_chat_sources' };
+    const sources = [];
+    const sourceKeys = new Set();
+    for (const item of rawSources) {
+      if (!item || typeof item !== 'object' || Array.isArray(item) || !ChatContext.SOURCE_TYPES.has(item.sourceType)) return { ok: false, error: 'invalid_chat_sources' };
+      const source = ChatContext.normalizeSource({
+        sourceType: item.sourceType,
+        sourceId: cleanLine(item.sourceId, 100),
+        sourceTitle: cleanLine(item.sourceTitle, 160),
+        sourceRevision: cleanLine(item.sourceRevision, 128),
+        text: cleanText(item.text, MAX_INPUT_LENGTH + 1),
+      });
+      const key = ChatContext.sourceKey(source);
+      if (!source || source.text.length > MAX_INPUT_LENGTH || sourceKeys.has(key)) return { ok: false, error: 'invalid_chat_sources' };
+      sourceKeys.add(key);
+      sources.push(source);
+    }
+    request.context.sources = sources.map(({ sourceType: type, sourceId, sourceTitle, sourceRevision, text: sourceText }) => ({ sourceType: type, sourceId, sourceTitle, sourceRevision, text: sourceText }));
     const history = payload.history === undefined ? [] : payload.history;
     if (!Array.isArray(history) || history.length > 12 || history.length % 2 !== 0) return { ok: false, error: 'invalid_history' };
     request.history = [];
-    let length = text.length;
+    let length = ChatContext.messageContent(text, sources).length;
+    if (length > MAX_INPUT_LENGTH) return { ok: false, error: 'input_too_long', limit: MAX_INPUT_LENGTH };
     for (let index = 0; index < history.length; index += 1) {
       const message = history[index];
       if (!message || message.role !== (index % 2 ? 'assistant' : 'user') || typeof message.content !== 'string') return { ok: false, error: 'invalid_history' };

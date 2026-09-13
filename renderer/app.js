@@ -1193,6 +1193,15 @@ window.NotchTodo = {
   setTimeScope: (scope) => setTodoTimeScope(scope),
   getScopeCounts: () => ({ ...window.NotchDomain.todoTimeScopeCounts(allTodoItems()) }),
   snapshot: () => Object.fromEntries(PRIORITIES.map((priority) => [priority, (data[priority] || []).map((todo) => ({ ...todo }))])),
+  chatContexts: () => PRIORITIES.flatMap((priority) => (data[priority] || []).map((todo) => ({
+    sourceType: 'todo',
+    sourceId: todo.id,
+    sourceTitle: todo.text,
+    sourceRevision: String(todo.updatedAt || todo.createdAt || ''),
+    text: [`状态：${todo.done ? '已完成' : '未完成'}`, `责任领域：${todoCategoryNames[priority] || priority}`, todo.deadline ? `截止时间：${todo.deadline}` : '截止时间：未设置'].join('\n'),
+    detail: `${todoCategoryNames[priority] || priority} · ${todo.done ? '已完成' : '未完成'}`,
+    updatedAt: todo.updatedAt || todo.createdAt || 0,
+  }))),
   async applyAIBatch(candidates) {
     const applied = window.NotchAIDomain?.createTodoBatch(data, candidates, () => generateId(), Date.now());
     if (!applied?.ok) return applied || { ok: false, error: 'invalid_candidates' };
@@ -3285,6 +3294,23 @@ window.NotchNotes = {
     return true;
   },
   list: () => loadNoteArchive().map((note) => ({ ...note })),
+  chatContexts: () => {
+    flushNotesEditorSave();
+    const categories = loadNoteCategories();
+    return loadNoteArchive().filter((note) => note.content.trim()).map((note) => {
+      const category = categories.find((item) => item.id === note.categoryId);
+      const tag = category?.tags?.find((item) => item.id === note.tagId);
+      return {
+        sourceType: 'note',
+        sourceId: note.id,
+        sourceTitle: noteArchiveTitle(note),
+        sourceRevision: String(note.updatedAt || note.createdAt || ''),
+        text: note.content,
+        detail: [category?.name || '未分类', tag?.name].filter(Boolean).join(' · '),
+        updatedAt: note.updatedAt || note.createdAt || 0,
+      };
+    });
+  },
 };
 
 noteSaveButton?.addEventListener('click', () => {
@@ -4882,6 +4908,18 @@ if (window.notchAPI && typeof window.notchAPI.onNewClipEntry === 'function') {
     addClipEntry(raw);
   });
 }
+
+window.NotchClipboard = Object.freeze({
+  chatContexts: () => clipHistory.filter((entry) => entry.type !== 'image' && entry.text?.trim()).map((entry) => ({
+    sourceType: 'clipboard',
+    sourceId: entry.id,
+    sourceTitle: entry.type === 'url' ? '剪贴板链接' : String(entry.text).replace(/\s+/g, ' ').trim().slice(0, 48),
+    sourceRevision: String(entry.timestamp || ''),
+    text: entry.text,
+    detail: new Date(entry.timestamp).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    updatedAt: entry.timestamp || 0,
+  })),
+});
 
 renderAll();
 renderClipList(); // 首屏确保 clip-list DOM 就绪时渲染一次（幂等）
