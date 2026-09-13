@@ -34,6 +34,14 @@ async function main() {
   try {
     await window.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
     diagnostic('Renderer test: page loaded');
+    // Retired widgets stay hidden in production; the legacy layout suite mounts them only in this isolated test.
+    await window.webContents.executeJavaScript(`(() => {
+      document.getElementById('home-dashboard').hidden = true;
+      const bento = document.getElementById('home-bento');
+      bento.hidden = false; bento.inert = false; bento.removeAttribute('aria-hidden');
+      const settings = document.querySelector('.settings-home-modules-card');
+      if (settings) settings.inert = false;
+    })()`);
     const freshProfileClipboardState = await window.webContents.executeJavaScript(`
       (() => ({
         history: localStorage.getItem('notch-clip-history'),
@@ -50,10 +58,11 @@ async function main() {
     const clipboardTimelineAudit = await window.webContents.executeJavaScript(`
       (() => {
         const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
         const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 21, 15);
         clipHistory = [
-          { id: 'today-text', type: 'text', text: '今日文字', imagePath: null, timestamp: now.getTime() - 120000 },
-          { id: 'today-image', type: 'image', text: null, imagePath: 'clipboard-images/today.png', timestamp: now.getTime() - 3600000 },
+          { id: 'today-text', type: 'text', text: '今日文字', imagePath: null, timestamp: Math.max(todayStart, now.getTime() - 120000) },
+          { id: 'today-image', type: 'image', text: null, imagePath: 'clipboard-images/today.png', timestamp: Math.max(todayStart, now.getTime() - 3600000) },
           { id: 'yesterday-url', type: 'url', text: 'https://example.com', imagePath: null, timestamp: yesterday.getTime() },
         ];
         clipDataVersion += 1;

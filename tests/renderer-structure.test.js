@@ -11,6 +11,7 @@ const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'work
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
+const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'settings.js'), 'utf8');
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
@@ -154,15 +155,16 @@ test('homepage visibility has one storage key, exact validation, and lifecycle e
   assert.match(appJs, /new Set\(homeTiles\.map\(\(tile\) => tile\.dataset\.homeModule\)\)/);
 });
 
-test('settings exposes exactly one switch for every homepage widget', () => {
+test('retired homepage widgets keep migration data but have no user-facing entry', () => {
   const switches = [...html.matchAll(/data-settings-home-module="([^"]+)"/g)]
     .map((match) => match[1]);
   assert.deepEqual(switches, [
     'music', 'pomodoro', 'recorder', 'windows', 'note', 'commands',
   ]);
-  assert.match(workspaceJs, /isRecordingActive/);
-  assert.match(workspaceJs, /recording_active/);
-  assert.match(workspaceJs, /at_least_one_required/);
+  assert.doesNotMatch(html, /id="home-view-toggle"/);
+  assert.match(html, /id="home-bento"[^>]*aria-hidden="true"[^>]*hidden[^>]*inert/);
+  assert.doesNotMatch(settingsJs, /\{id:'home',title:'首页组件'/);
+  assert.match(settingsJs, /retiredHomeCard\.hidden=true/);
 });
 
 test('settings exposes every panel tab as a possible default opening page', () => {

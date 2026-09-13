@@ -1,6 +1,7 @@
 'use strict';
 
 const ACTIONS = new Set([
+  'chat',
   'summarize',
   'shorten',
   'translate',
@@ -10,7 +11,7 @@ const ACTIONS = new Set([
   'nameRecording',
   'nameLink',
 ]);
-const TEXT_ACTIONS = new Set(['summarize', 'shorten', 'translate']);
+const TEXT_ACTIONS = new Set(['chat', 'summarize', 'shorten', 'translate']);
 const SOURCE_TYPES = new Set(['manual', 'note', 'recording', 'link']);
 const CATEGORY_IDS = new Set(['P0', 'P1', 'P2', 'P3']);
 const MAX_INPUT_LENGTH = 12000;
@@ -69,6 +70,22 @@ function validateRequest(payload) {
     interactive: payload.interactive === true,
     categories: normalizeCategories(payload.categories),
   };
+  if (action === 'chat') {
+    if (payload.interactive !== true) return { ok: false, error: 'interactive_required' };
+    const history = payload.history === undefined ? [] : payload.history;
+    if (!Array.isArray(history) || history.length > 12 || history.length % 2 !== 0) return { ok: false, error: 'invalid_history' };
+    request.history = [];
+    let length = text.length;
+    for (let index = 0; index < history.length; index += 1) {
+      const message = history[index];
+      if (!message || message.role !== (index % 2 ? 'assistant' : 'user') || typeof message.content !== 'string') return { ok: false, error: 'invalid_history' };
+      const content = cleanText(message.content, MAX_INPUT_LENGTH + 1);
+      if (!content) return { ok: false, error: 'invalid_history' };
+      length += content.length;
+      if (length > MAX_INPUT_LENGTH) return { ok: false, error: 'input_too_long', limit: MAX_INPUT_LENGTH };
+      request.history.push({ role: message.role, content });
+    }
+  }
   if (Buffer.byteLength(JSON.stringify(request)) > MAX_REQUEST_BYTES) return { ok: false, error: 'request_too_large' };
   return { ok: true, value: request };
 }

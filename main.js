@@ -2613,6 +2613,13 @@ async function sendSodaShortcut(action) {
   }
 }
 
+const homeWeather = require('./home-services').createWeatherService();
+const homeMedia = require('./home-media');
+ipcMain.handle('home:weather-search', (event, query) => homeWeather.search(query));
+ipcMain.handle('home:weather', (event, location) => homeWeather.weather(location));
+ipcMain.handle('home:media-status', () => homeMedia.getMediaStatus());
+ipcMain.handle('home:media-control', (event, action) => homeMedia.controlMedia(action));
+
 ipcMain.handle('music:status', async () => {
   const installed = fs.existsSync(SODA_MUSIC_APP);
   const running = installed ? await sodaMusicRunning() : false;

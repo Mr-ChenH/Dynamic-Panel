@@ -761,6 +761,7 @@
   const recordingCount = document.getElementById('recording-count');
   const recordingBulkDelete = document.getElementById('recording-bulk-delete');
   const aiSettingsRoot = document.querySelector('.settings-api-card');
+  const aiProviderConfigBody = document.querySelector('.ai-provider-config-scroll');
   const transcriptionSettingsSave = document.getElementById('transcription-settings-save');
   const aiProviderTranscription = document.getElementById('ai-provider-transcription');
   const aiContentProviderList = document.getElementById('ai-content-provider-list');
@@ -2737,7 +2738,7 @@
   }
 
   async function refreshWindows(force = false) {
-    if (!window.NotchHome?.isVisible?.('windows')) return;
+    if (document.getElementById('home-bento')?.hidden || !window.NotchHome?.isVisible?.('windows')) return;
     if (windowsLoading || !window.notchAPI || (!force && (!workspaceExpanded || workspaceTab !== 'home'))) return;
     windowsLoading = true;
     renderWindows();
@@ -2849,6 +2850,7 @@
     if (restored && workspaceExpanded && workspaceTab === 'home') refreshWindows(true);
   });
   document.addEventListener('notch:recording-state-changed', renderHomeModuleSettings);
+  document.addEventListener('notch:home-view-changed', () => refreshWindows());
 
   // ============ 本地汽水音乐 ============
   const homeMusic = document.getElementById('home-music');

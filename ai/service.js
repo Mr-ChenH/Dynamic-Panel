@@ -171,7 +171,7 @@ function buildProviderRequest(config, request, prompt) {
         max_tokens: maxTokens,
         stream: TEXT_ACTIONS.has(request.action),
         system: prompt.system,
-        messages: [{ role: 'user', content: prompt.user }],
+        messages: [...(prompt.history || []), { role: 'user', content: prompt.user }],
       },
       read: readAnthropicPayload,
     };
@@ -185,7 +185,7 @@ function buildProviderRequest(config, request, prompt) {
       max_tokens: maxTokens,
       ...(TEXT_ACTIONS.has(request.action) ? { stream: true, stream_options: { include_usage: true } } : { response_format: { type: 'json_object' } }),
       ...(config.providerId === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
-      messages: [{ role: 'system', content: prompt.system }, { role: 'user', content: prompt.user }],
+      messages: [{ role: 'system', content: prompt.system }, ...(prompt.history || []), { role: 'user', content: prompt.user }],
     },
     read: (response, onDelta) => readProviderPayload(response, onDelta, { requireDoneMarker: provider.requireDoneMarker === true }),
   };

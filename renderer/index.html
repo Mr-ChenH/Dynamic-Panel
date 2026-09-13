@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="module-layout.css" />
     <link rel="stylesheet" href="links.css" />
     <link rel="stylesheet" href="ai.css" />
+    <link rel="stylesheet" href="home.css" />
   </head>
   <body>
     <div id="app" class="collapsed">
@@ -117,7 +118,40 @@
 
         <div class="panels" id="panels">
           <section id="tab-home" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-home" aria-hidden="true" inert>
-            <div class="home-bento" id="home-bento" aria-label="可长按拖动调整的首页布局">
+            <div class="home-switchbar"><strong>我的工作台</strong><span>从这里开始，接着上次继续</span></div>
+            <div id="home-dashboard" class="home-dashboard">
+              <section class="home-card home-today"><header><h2>今日重点</h2><button type="button" data-home-nav="todo">全部待办 ↗</button></header><p class="home-hint">今天到期与逾期事项</p><div id="home-today-list" class="home-rows"></div></section>
+              <section class="home-card home-resume"><header><h2>继续工作</h2><button type="button" data-home-nav="notes">笔记库 ↗</button></header><p class="home-hint">最近编辑的笔记</p><div id="home-recent-list" class="home-rows"></div></section>
+              <section class="home-card home-capture"><header><h2>快速收集</h2><button type="button" data-home-nav="recordings">录音 ↗</button></header><textarea id="home-capture-input" maxlength="12000" placeholder="先记下来，稍后整理。文字、链接或一个想法…" aria-label="快速收集内容"></textarea><footer><span id="home-capture-status" role="status">保存为一篇独立笔记</span><button type="button" id="home-capture-save">保存笔记</button></footer></section>
+              <section class="home-card home-weather" data-weather-state="empty">
+                <header><div><h2 id="home-weather-location">天气</h2><span id="home-weather-updated" class="home-hint">手动选择城市</span></div><div class="home-weather-actions"><button type="button" id="home-weather-details" aria-label="查看详细预报" title="查看详细预报"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="m9 16 2 2 4-4"/></svg></button><button type="button" id="home-weather-change" aria-label="切换城市" title="切换城市"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg></button><button type="button" id="home-weather-refresh" aria-label="刷新天气" title="刷新天气"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg></button><button type="button" id="home-weather-clear" aria-label="清除城市" title="清除城市"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></header>
+                <form id="home-weather-form"><input id="home-weather-city" maxlength="80" placeholder="输入城市，例如北京" aria-label="天气城市"/><button type="submit">查找</button></form>
+                <div id="home-weather-results"></div>
+                <div id="home-weather-empty" role="status">选择城市后查看当前天气和未来趋势，不获取定位。</div>
+                <div id="home-weather-overview" hidden>
+                  <div class="home-weather-current"><span id="home-weather-icon" class="weather-condition-icon" aria-hidden="true"></span><strong id="home-weather-temperature">--°</strong><div><b id="home-weather-condition">--</b><span id="home-weather-range">最高 --° · 最低 --°</span></div></div>
+                  <div id="home-weather-metrics" class="home-weather-metrics"></div>
+                  <p id="home-weather-insight" class="weather-insight"></p>
+                </div>
+              </section>
+              <section class="home-card home-media"><header><h2>音乐控制</h2><button type="button" id="home-media-refresh">刷新</button></header><strong id="home-media-title">打开音乐应用开始播放</strong><p id="home-media-artist" class="home-hint">控制系统当前播放会话</p><div class="home-media-controls"><button type="button" data-home-media="previous" disabled>上一首</button><button type="button" data-home-media="toggle" disabled>播放 / 暂停</button><button type="button" data-home-media="next" disabled>下一首</button></div><p id="home-media-status" class="home-hint" role="status"></p></section>
+              <section class="home-card home-ai-entry"><header><h2>AI 助手</h2></header><p>讨论想法、解释问题、帮你组织下一步。</p><button type="button" id="home-chat-open">开始对话 ↗</button><small>使用设置中的默认内容模型；仅发送对话内容</small></section>
+            </div>
+            <section id="home-weather-detail" class="home-weather-detail" hidden aria-label="详细天气预报">
+              <header><div><h2 id="home-weather-detail-location">天气</h2><span id="home-weather-detail-updated">尚未更新</span></div><div><button type="button" id="home-weather-detail-refresh">刷新</button><button type="button" id="home-weather-detail-close">返回工作台</button></div></header>
+              <div class="home-weather-detail-scroll">
+                <section class="weather-detail-hero"><span id="home-weather-detail-icon" class="weather-condition-icon" aria-hidden="true"></span><div><strong id="home-weather-detail-temperature">--°</strong><p id="home-weather-detail-condition">--</p><span id="home-weather-detail-summary">体感 --° · 最高 --° · 最低 --°</span></div><div id="home-weather-detail-metrics" class="weather-detail-metrics"></div></section>
+                <section class="weather-detail-section weather-detail-hourly"><header><div><h3>未来 12 小时</h3><span class="weather-chart-legend"><i data-series="temperature"></i>温度<i data-series="rain"></i>降雨</span></div><span id="home-weather-hourly-summary"></span></header><div id="home-weather-detail-hours" class="weather-detail-hours" aria-label="未来 12 小时温度和降雨趋势"></div></section>
+                <section class="weather-detail-section weather-detail-days"><header><h3>7 天预报</h3><span id="home-weather-weekly-summary"></span></header><div id="home-weather-detail-days"></div></section>
+              </div>
+              <footer><span>天气数据由 Open-Meteo 提供</span><button type="button" id="home-weather-detail-source">查看数据来源</button></footer>
+            </section>
+            <section id="home-chat" class="home-chat" hidden aria-label="AI 对话">
+              <header><div><h2>AI 对话</h2><span>仅本次会话 · 不自动读取工作区</span></div><div><button type="button" id="home-chat-clear">清空</button><button type="button" id="home-chat-close">返回工作台</button></div></header>
+              <div id="home-chat-messages" aria-label="对话记录"><p class="home-hint">你想讨论什么？可以直接提问。</p></div>
+              <form id="home-chat-form"><textarea id="home-chat-input" maxlength="12000" placeholder="输入问题，Ctrl / ⌘ + Enter 发送" aria-label="对话消息"></textarea><footer><span id="home-chat-status" role="status">对话不会自动保存到笔记</span><button type="button" id="home-chat-stop" hidden>停止</button><button type="submit" id="home-chat-send">发送</button></footer></form>
+            </section>
+            <div class="home-bento" id="home-bento" aria-hidden="true" hidden inert>
               <!-- 本地汽水音乐控制 -->
               <section class="tile home-music" id="home-music" data-home-module="music" data-widget-size="medium" aria-label="汽水音乐播放器">
                 <canvas class="module-effect-canvas" id="music-color-bends" aria-hidden="true"></canvas>
@@ -676,6 +710,7 @@
     <script src="ai.js"></script>
     <script src="launcher.js"></script>
     <script src="settings.js"></script>
+    <script src="home.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

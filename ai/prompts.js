@@ -5,6 +5,13 @@ const PROMPT_VERSION = 1;
 function actionPrompt(request) {
   const categories = Object.entries(request.categories).map(([id, name]) => `${id}=${name}`).join('，');
   const shared = `参考时间：${request.referenceTime}\n时区：${request.timeZone}`;
+  if (request.action === 'chat') {
+    return {
+      system: '你是个人工作台中的对话助手。清晰回答用户的问题；不确定时说明不确定性。你没有联网、文件读取或执行工具，不能声称已查询实时信息或完成本地操作。仅依据对话提供帮助。',
+      user: request.context.text,
+      history: request.history || [],
+    };
+  }
   if (request.action === 'summarize') {
     return { system: '你是中文资料整理助手。只总结输入中明确出现的事实，不增加建议或事实。保留重要数字、否定、限制和决定。直接返回 Markdown 文本。', user: request.context.text };
   }

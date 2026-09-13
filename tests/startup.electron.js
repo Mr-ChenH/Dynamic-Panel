@@ -519,7 +519,7 @@ app.on('web-contents-created', (_event, contents) => {
         }
         const noteTyping = await contents.executeJavaScript(`(async()=>{
           await window.NotchPanel.navigate({tab:'notes'});
-          await new Promise(resolve=>setTimeout(resolve,100));
+          await new Promise(resolve=>setTimeout(resolve,400));
           const editor=document.getElementById('notes-editor');
           editor.focus();editor.setSelectionRange(0,0);
           const before=editor.getBoundingClientRect().top;
@@ -531,7 +531,61 @@ app.on('web-contents-created', (_event, contents) => {
         assert.equal(noteTyping.before,noteTyping.during,JSON.stringify(noteTyping));
         assert.equal(noteTyping.during,noteTyping.after,JSON.stringify(noteTyping));
         assert.equal(noteTyping.same,true);assert.equal(noteTyping.focused,true);assert.equal(noteTyping.caret,0);
-        console.log('Production workspace, note attachment and launcher checks passed');
+        for (const channel of ['home:weather-search','home:weather','home:media-status','home:media-control']) require('electron').ipcMain.removeHandler(channel);
+        require('electron').ipcMain.handle('home:weather-search',()=>({ok:true,locations:[{name:'北京',country:'中国',latitude:39,longitude:116}]}));
+        require('electron').ipcMain.handle('home:weather',()=>({ok:true,temperature:22,apparentTemperature:21,humidity:58,precipitation:0,windSpeed:11,windDirection:45,isDay:true,code:0,high:25,low:16,sunrise:'2026-09-12T05:50',sunset:'2026-09-12T18:20',hours:Array.from({length:12},(_,index)=>({time:`2026-09-12T${String(index+10).padStart(2,'0')}:00`,temperature:22+index/2,code:index>7?2:0,precipitationProbability:index*3,isDay:index<8})),days:Array.from({length:7},(_,index)=>({date:`2026-09-${String(index+12).padStart(2,'0')}`,code:index>3?2:0,high:25+index,low:16+index,precipitationProbability:index*5,sunrise:'2026-09-12T05:50',sunset:'2026-09-12T18:20'})),updatedAt:Date.now()}));
+        require('electron').ipcMain.handle('home:media-status',()=>({ok:true,title:'测试歌曲',artist:'测试歌手',playing:true,canPlayPause:true,canPrevious:true,canNext:true}));
+        require('electron').ipcMain.handle('home:media-control',()=>({ok:true}));
+        const homeAudit=await contents.executeJavaScript(`(async()=>{
+          await window.NotchPanel.navigate({tab:'home'});
+          const pause=()=>new Promise(resolve=>setTimeout(resolve,120));
+          const capture=document.getElementById('home-capture-input');capture.value='首页快速收集测试';capture.dispatchEvent(new Event('input',{bubbles:true}));
+          document.getElementById('home-capture-save').click();await pause();
+          const saved=window.NotchNotes.list().some(note=>note.content==='首页快速收集测试')&&capture.value==='';
+          document.getElementById('home-weather-city').value='北京';document.getElementById('home-weather-form').requestSubmit();await pause();
+          document.querySelector('#home-weather-results button').click();await pause();
+          const weather=document.getElementById('home-weather-temperature').textContent==='22°'&&document.querySelectorAll('#home-weather-metrics>div').length===4&&document.getElementById('home-weather-metrics').textContent.includes('6h 降雨');
+          document.getElementById('home-weather-details').click();await pause();
+          const weatherDetail=!!(!document.getElementById('home-weather-detail').hidden
+            &&document.querySelectorAll('#home-weather-detail-hours .weather-hour').length===12
+            &&document.querySelectorAll('#home-weather-detail-hours .weather-chart-point').length===12
+            &&document.querySelectorAll('#home-weather-detail-hours .weather-chart-rain').length===11
+            &&document.querySelectorAll('#home-weather-detail-days .weather-day').length===7
+            &&document.querySelector('#home-weather-detail-days .weather-day.is-today .weather-temperature-now'));
+          document.getElementById('home-weather-detail-close').click();
+          document.getElementById('home-weather-clear').click();
+          const cleared=!localStorage.getItem('notch-home-weather-v1');
+          document.getElementById('home-media-refresh').click();await pause();
+          const media=document.getElementById('home-media-title').textContent==='测试歌曲';
+          document.getElementById('home-chat-open').click();const input=document.getElementById('home-chat-input');input.value='你好';document.getElementById('home-chat-form').requestSubmit();await pause();
+          const chatted=document.querySelector('#home-chat-messages [data-role="assistant"] p')?.textContent==='整理后的内容';
+          input.value='流式测试';document.getElementById('home-chat-form').requestSubmit();document.getElementById('home-chat-stop').click();await pause();
+          const cancelled=document.querySelectorAll('#home-chat-messages [data-role="assistant"]').length===1&&input.value==='流式测试';
+          document.getElementById('home-chat-clear').click();const clearChat=document.getElementById('home-chat-messages').children.length===0;
+          document.getElementById('home-chat-close').click();
+          const classicRemoved=!document.getElementById('home-view-toggle')&&document.getElementById('home-bento').hidden&&document.getElementById('home-bento').inert;
+          const dashboard=document.getElementById('home-dashboard');let fits=dashboard.scrollWidth<=dashboard.clientWidth+1;
+          dashboard.style.width='720px';
+          fits=fits&&dashboard.scrollWidth<=dashboard.clientWidth+1&&[...dashboard.children].every(card=>card.scrollWidth<=card.clientWidth+1);
+          dashboard.style.width='';
+          return {saved,weather,weatherDetail,cleared,media,chatted,cancelled,clearChat,classicRemoved,fits};
+        })()`);
+        assert.deepEqual(homeAudit,{saved:true,weather:true,weatherDetail:true,cleared:true,media:true,chatted:true,cancelled:true,clearChat:true,classicRemoved:true,fits:true});
+        await contents.executeJavaScript(`document.getElementById('home-weather-city').value='北京';document.getElementById('home-weather-form').requestSubmit()`);
+        await new Promise(resolve=>setTimeout(resolve,100));
+        await contents.executeJavaScript(`document.querySelector('#home-weather-results button').click()`);
+        await new Promise(resolve=>setTimeout(resolve,150));
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/home-weather-review.png'),(await contents.capturePage()).toPNG());
+        await contents.executeJavaScript(`document.getElementById('home-weather-details').click()`);
+        await new Promise(resolve=>setTimeout(resolve,100));
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/home-weather-detail-review.png'),(await contents.capturePage()).toPNG());
+        await contents.executeJavaScript(`document.getElementById('home-weather-detail-close').click()`);
+        await new Promise(resolve=>setTimeout(resolve,100));
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/home-workbench-review.png'),(await contents.capturePage()).toPNG());
+        await contents.executeJavaScript(`document.getElementById('home-chat-open').click()`);
+        await new Promise(resolve=>setTimeout(resolve,100));
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/home-chat-review.png'),(await contents.capturePage()).toPNG());
+        console.log('Production workspace, note attachment, home workbench and launcher checks passed');
         app.quit();
       } catch (error) {
         const stage = await contents.executeJavaScript('window.__startupTestStage || "unknown"').catch(() => 'renderer-unavailable');

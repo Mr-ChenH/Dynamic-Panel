@@ -31,6 +31,8 @@
     "files": [
       "main.js",
       "main-services.js",
+      "home-services.js",
+      "home-media.js",
       "platform.js",
       "launcher/**/*.js",
       "ai/**/*.js",

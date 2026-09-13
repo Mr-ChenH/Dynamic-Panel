@@ -3260,12 +3260,15 @@ window.NotchNotes = {
     renderNotesLibrary();
     return { ok: true, workspaceSynced: await syncWorkspaceSnapshot() };
   },
-  async saveGenerated(title, content) {
+  async saveCaptured(content) {
+    return window.NotchNotes.saveGenerated('', content, '');
+  },
+  async saveGenerated(title, content, titleSource = 'model') {
     flushNotesEditorSave();
     const notes = loadNoteArchive();
     if (notes.length >= 200) return { ok: false, error: 'capacity' };
     const now = Date.now();
-    const note = { id: generateId(), title: String(title || '').slice(0, 80), titleSource: 'model', categoryId: '', tagId: '', content: String(content || ''), createdAt: now, updatedAt: now };
+    const note = { id: generateId(), title: String(title || '').slice(0, 80), titleSource, categoryId: '', tagId: '', content: String(content || ''), createdAt: now, updatedAt: now };
     try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify([note, ...notes])); }
     catch (error) { return { ok: false, error: 'save_failed' }; }
     renderNotesLibrary();
@@ -3275,6 +3278,9 @@ window.NotchNotes = {
   select: (noteId) => {
     if (!loadNoteArchive().some((note) => note.id === noteId)) return false;
     selectedNoteId = noteId;
+    if (notesSearch) notesSearch.value = '';
+    if (notesCategoryFilter) notesCategoryFilter.value = '';
+    if (notesTagFilter) notesTagFilter.value = '';
     renderNotesLibrary();
     return true;
   },
