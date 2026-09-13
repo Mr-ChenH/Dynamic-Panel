@@ -452,14 +452,22 @@
   });
   void refreshMusicLibrary();
   const ChatContext = window.NotchChatContext;
+  const ChatSessions = window.NotchChatSessions;
   let history = [], requestId = '', sequence = 0, pendingTurn = null, selectedSources = [], contextCatalog = [], contextType = 'all';
+  let conversationRecords = [], savedSessions = ChatSessions.parseSessions(localStorage.getItem(ChatSessions.STORAGE_KEY));
+  let currentSessionId = '', currentSessionTitle = '', currentSessionCreatedAt = 0, sessionDirty = false, editingSessionId = '', confirmDeleteSessionId = '';
   const messages = $('home-chat-messages'), chatInput = $('home-chat-input'), chatEmpty = $('home-chat-empty'), chatForm = $('home-chat-form');
   const contextPicker = $('home-chat-context-picker'), contextSearch = $('home-chat-context-search'), contextList = $('home-chat-context-list'), contextChips = $('home-chat-context-chips');
+  const sessionPanel = $('home-chat-session-panel'), sessionSearch = $('home-chat-session-search'), sessionList = $('home-chat-session-list');
   const chatIcons = {
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>',
     retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg>',
     save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h8V5M8 20v-6h8v6"/></svg>',
     undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 7-5 5 5 5"/><path d="M20 17a7 7 0 0 0-7-7H4"/></svg>',
+    edit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>',
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>',
+    close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>',
   };
   const chatErrors = {
     not_configured: '尚未配置内容模型，请先完成 AI 设置。', service_busy: 'AI 正在处理其他请求，请稍后重试。', authentication_failed: '模型凭据验证失败，请检查设置。',
@@ -469,6 +477,150 @@
     invalid_stream: '服务返回的数据流损坏。', output_truncated: '回复达到模型输出上限，内容不完整。', content_filtered: '回复被服务过滤。', unsupported_finish_reason: '模型未正常结束生成。',
     invalid_chat_sources: '所选参考资料无效，请重新选择。', input_too_long: '问题与参考资料超过 12000 字符，请移除资料或缩短问题。',
   };
+  function settledRecords() { return conversationRecords.filter((record) => ['complete', 'stopped', 'error'].includes(record.state)); }
+  function defaultSessionTitle() {
+    return String(settledRecords()[0]?.prompt || '已保存对话').split('\n').map((line) => line.trim()).find(Boolean)?.slice(0, 48) || '已保存对话';
+  }
+  function sessionSnapshot(id, title, createdAt, updatedAt) {
+    return {
+      id,
+      title,
+      createdAt,
+      updatedAt,
+      records: settledRecords().map((record) => ({
+        id: record.id,
+        groupId: record.groupId,
+        prompt: record.prompt,
+        sources: record.sources,
+        context: record.context,
+        answer: record.answer,
+        state: record.state,
+        detail: record.detail || '',
+        createdAt: record.createdAt,
+      })),
+      history,
+    };
+  }
+  function sessionError(error) {
+    return error === 'record_limit' ? '此对话已达到 30 个回复上限'
+      : error === 'session_limit' ? '当前工作区已达到 30 个会话上限'
+        : error === 'session_too_large' ? '此对话超过 512000 字符，未保存新更改'
+          : error === 'storage_limit' ? '对话历史超过 2000000 字符，请删除旧会话后重试'
+            : '对话保存失败';
+  }
+  function updateSessionHeader() {
+    setText($('home-chat-title'), currentSessionId ? currentSessionTitle : '临时对话');
+    const state = $('home-chat-session-state');
+    const dot = document.createElement('i'); dot.setAttribute('aria-hidden', 'true');
+    state.replaceChildren(dot, document.createTextNode(currentSessionId ? (sessionDirty ? '未保存更改' : '已保存到当前工作区') : '仅本次会话'));
+    state.dataset.saved = String(Boolean(currentSessionId) && !sessionDirty);
+    const save = $('home-chat-session-save');
+    save.dataset.saved = String(Boolean(currentSessionId) && !sessionDirty);
+    save.disabled = Boolean(requestId) || !settledRecords().length || (Boolean(currentSessionId) && !sessionDirty);
+    save.title = currentSessionId ? (sessionDirty ? '保存未同步的更改' : '对话已保存') : '保存到当前工作区';
+    save.setAttribute('aria-label', save.title);
+  }
+  function commitSessionStorage(result) {
+    if (!result?.ok) return result;
+    try {
+      if (result.next.length) localStorage.setItem(ChatSessions.STORAGE_KEY, result.serialized);
+      else localStorage.removeItem(ChatSessions.STORAGE_KEY);
+    } catch { return { ok: false, error: 'write_failed' }; }
+    savedSessions = result.next;
+    if (!sessionPanel.hidden) renderSessionPanel();
+    return result;
+  }
+  function syncSessionWorkspace(sessionId) {
+    if (typeof syncWorkspaceSnapshot !== 'function') return;
+    void syncWorkspaceSnapshot().then((synced) => {
+      if (!synced && currentSessionId === sessionId) setText($('home-chat-status'), '已保存在本机，当前工作区同步失败');
+    });
+  }
+  function persistCurrentSession({ create = false } = {}) {
+    const records = settledRecords();
+    if (!records.length) return { ok: false, error: 'empty_session' };
+    const now = Date.now();
+    const proposedId = currentSessionId || (create ? `chat-${now}-${++sequence}` : '');
+    if (!proposedId) return { ok: false, error: 'temporary_session' };
+    const proposedTitle = currentSessionTitle || defaultSessionTitle();
+    const result = commitSessionStorage(ChatSessions.upsertSession(savedSessions, sessionSnapshot(proposedId, proposedTitle, currentSessionCreatedAt || now, now)));
+    if (!result.ok) { sessionDirty = Boolean(currentSessionId); updateSessionHeader(); return result; }
+    currentSessionId = proposedId; currentSessionTitle = proposedTitle; currentSessionCreatedAt ||= now; sessionDirty = false;
+    updateSessionHeader(); syncSessionWorkspace(proposedId); return result;
+  }
+  function formatSessionTime(timestamp) {
+    const date = new Date(timestamp); const now = new Date();
+    return date.toDateString() === now.toDateString() ? date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : date.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+  }
+  function closeSessionPanel({ focus = false } = {}) {
+    sessionPanel.hidden = true; $('home-chat-sessions').setAttribute('aria-expanded', 'false'); editingSessionId = ''; confirmDeleteSessionId = ''; if (focus) chatInput.focus();
+  }
+  function applySessionRename(sessionId, title) {
+    const result = commitSessionStorage(ChatSessions.renameSession(savedSessions, sessionId, title, Date.now()));
+    if (!result.ok) { setText($('home-chat-status'), result.error === 'invalid_title' ? '会话标题不能为空' : '无法重命名会话'); return; }
+    if (currentSessionId === sessionId) { currentSessionTitle = result.next.find((session) => session.id === sessionId)?.title || currentSessionTitle; updateSessionHeader(); }
+    editingSessionId = ''; renderSessionPanel(); syncSessionWorkspace(sessionId); setText($('home-chat-status'), '会话已重命名');
+  }
+  function deleteSavedSession(sessionId) {
+    if (currentSessionId === sessionId && requestId) cancelChat();
+    const result = commitSessionStorage(ChatSessions.removeSession(savedSessions, sessionId));
+    if (!result.ok) { setText($('home-chat-status'), '无法删除会话'); return; }
+    if (currentSessionId === sessionId) resetChat({ keepSessionPanel: true, status: '已删除会话，并开始新的临时对话', force: true });
+    confirmDeleteSessionId = ''; renderSessionPanel(); syncSessionWorkspace(sessionId);
+  }
+  function renderSessionPanel() {
+    const rows = ChatSessions.searchSessions(savedSessions, sessionSearch.value);
+    sessionList.replaceChildren();
+    rows.forEach((session) => {
+      const row = document.createElement('div'); row.className = 'home-chat-session-row'; row.dataset.active = String(session.id === currentSessionId);
+      if (editingSessionId === session.id) {
+        const edit = document.createElement('form'); edit.className = 'home-chat-session-edit';
+        const input = document.createElement('input'); input.maxLength = 48; input.value = session.title; input.setAttribute('aria-label', '会话标题');
+        const confirm = actionButton('check', '确认重命名', () => {}); confirm.type = 'submit';
+        const cancel = actionButton('close', '取消重命名', () => { editingSessionId = ''; renderSessionPanel(); });
+        edit.addEventListener('submit', (event) => { event.preventDefault(); applySessionRename(session.id, input.value); }); edit.append(input, confirm, cancel); row.append(edit); sessionList.append(row); requestAnimationFrame(() => { input.focus(); input.select(); }); return;
+      }
+      const open = document.createElement('button'); open.type = 'button'; open.className = 'home-chat-session-open';
+      const title = document.createElement('strong'); title.textContent = session.title;
+      const detail = document.createElement('span'); detail.textContent = `${session.records.length} 个回复 · ${formatSessionTime(session.updatedAt)}`;
+      open.append(title, detail); open.addEventListener('click', () => openSavedSession(session.id));
+      const actions = document.createElement('div'); actions.className = 'home-chat-session-actions';
+      if (confirmDeleteSessionId === session.id) {
+        const cancel = actionButton('close', '取消删除', () => { confirmDeleteSessionId = ''; renderSessionPanel(); });
+        const remove = document.createElement('button'); remove.type = 'button'; remove.dataset.confirm = 'true'; remove.textContent = '确认删除'; remove.addEventListener('click', () => deleteSavedSession(session.id)); actions.append(cancel, remove);
+      } else {
+        actions.append(actionButton('edit', '重命名会话', () => { editingSessionId = session.id; confirmDeleteSessionId = ''; renderSessionPanel(); }), actionButton('trash', '删除会话', () => { confirmDeleteSessionId = session.id; editingSessionId = ''; renderSessionPanel(); }));
+      }
+      row.append(open, actions); sessionList.append(row);
+    });
+    if (!rows.length) { const empty = document.createElement('p'); empty.className = 'home-chat-session-empty'; empty.textContent = sessionSearch.value ? '没有匹配的对话' : '当前工作区还没有保存的对话'; sessionList.append(empty); }
+    setText($('home-chat-session-count'), `${savedSessions.length} / ${ChatSessions.MAX_SESSIONS} 个会话`);
+    $('home-chat-session-confirm-save').hidden = Boolean(currentSessionId) || !settledRecords().length || Boolean(requestId);
+  }
+  function openSessionPanel() {
+    closeContextPicker(); sessionSearch.value = ''; renderSessionPanel(); sessionPanel.hidden = false; $('home-chat-sessions').setAttribute('aria-expanded', 'true'); sessionSearch.focus();
+  }
+  function openSavedSession(sessionId) {
+    if (sessionId === currentSessionId) { closeSessionPanel({ focus: true }); return; }
+    if (requestId) cancelChat();
+    if (sessionDirty) { setText($('home-chat-status'), '当前会话有未保存更改，请先处理容量或存储问题'); return; }
+    const session = savedSessions.find((item) => item.id === sessionId); if (!session) return;
+    currentSessionId = session.id; currentSessionTitle = session.title; currentSessionCreatedAt = session.createdAt; sessionDirty = false;
+    history = session.history; conversationRecords = []; selectedSources = []; closeContextPicker(); closeSessionPanel(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = true; chatInput.value = ''; renderContextChips();
+    const users = new Map();
+    session.records.forEach((saved) => {
+      let user = users.get(saved.groupId);
+      if (!user) { user = message('user', saved.prompt, 'complete', saved.sources); users.set(saved.groupId, user); }
+      const reply = message('assistant', saved.answer, saved.state);
+      const turn = { ...saved, user, reply, savedNote: null, isVersion: session.records.filter((item) => item.groupId === saved.groupId).length > 1 };
+      setTurnState(turn, saved.state, saved.detail); addTurnActions(turn, saved.state === 'complete'); conversationRecords.push(turn);
+    });
+    for (const groupId of users.keys()) {
+      const versions = conversationRecords.filter((record) => record.groupId === groupId && record.state === 'complete');
+      if (versions.length > 1) versions.forEach((record, index) => { const label = record.reply.querySelector('.home-chat-message-head span'); if (label) label.textContent = index === versions.length - 1 ? 'AI 助手 · 新版本' : 'AI 助手 · 上一版本'; record.reply.dataset.version = index === versions.length - 1 ? 'current' : 'previous'; });
+    }
+    updateSessionHeader(); resizeChatInput(); messages.scrollTop = messages.scrollHeight; setText($('home-chat-status'), `已打开“${session.title}”`); chatInput.focus();
+  }
   function selectedSource(key) { return selectedSources.find((source) => ChatContext.sourceKey(source) === key); }
   function collectChatSources() {
     return ChatContext.catalog([
@@ -480,7 +632,7 @@
   }
   function chatInputLength(sources = selectedSources, text = chatInput.value) { return ChatContext.messageContent(text, sources).length; }
   function chatControls(busy) {
-    chatForm.dataset.busy = String(busy); $('home-chat-send').hidden = busy; $('home-chat-stop').hidden = !busy; resizeChatInput();
+    chatForm.dataset.busy = String(busy); $('home-chat-send').hidden = busy; $('home-chat-stop').hidden = !busy; resizeChatInput(); updateSessionHeader();
   }
   function resizeChatInput() {
     chatInput.style.height = 'auto'; chatInput.style.height = `${Math.min(132, Math.max(40, chatInput.scrollHeight))}px`;
@@ -551,7 +703,7 @@
     messages.append(article); return article;
   }
   function setTurnState(turn, state, detail) {
-    turn.reply.dataset.state = state;
+    turn.state = state; turn.detail = detail || ''; turn.reply.dataset.state = state;
     const label = turn.reply.querySelector('.home-chat-message-head span'); if (label) label.textContent = state === 'streaming' ? '正在回复' : state === 'complete' ? (turn.isVersion ? 'AI 助手 · 新版本' : 'AI 助手') : state === 'stopped' ? '已停止' : '生成失败';
     turn.reply.querySelector('.home-chat-message-state')?.remove();
     if (detail) { const note = document.createElement('p'); note.className = 'home-chat-message-state'; note.textContent = detail; turn.reply.append(note); }
@@ -595,10 +747,14 @@
     if (!turn.answer) turn.reply.querySelector('.home-chat-message-body').replaceChildren();
     else renderChatText(turn.reply.querySelector('.home-chat-message-body'), turn.answer);
     setTurnState(turn, 'stopped', turn.answer ? '生成已停止，以上内容不计入后续上下文。' : '生成已停止，本轮未计入后续上下文。');
-    addTurnActions(turn, false); chatControls(false); setText($('home-chat-status'), '已停止，可重试本轮'); chatInput.focus();
+    addTurnActions(turn, false); chatControls(false);
+    const saved = currentSessionId ? persistCurrentSession() : { ok: true };
+    setText($('home-chat-status'), saved.ok ? '已停止，可重试本轮' : sessionError(saved.error)); chatInput.focus();
   }
-  function resetChat() {
-    cancelChat(); history = []; selectedSources = []; closeContextPicker(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); setText($('home-chat-status'), '已开始新的临时对话'); chatInput.focus();
+  function resetChat({ keepSessionPanel = false, status = '已开始新的临时对话', force = false } = {}) {
+    cancelChat();
+    if (sessionDirty && !force) { setText($('home-chat-status'), '当前会话有未保存更改，请先处理容量或存储问题'); return false; }
+    history = []; conversationRecords = []; currentSessionId = ''; currentSessionTitle = ''; currentSessionCreatedAt = 0; sessionDirty = false; selectedSources = []; closeContextPicker(); if (!keepSessionPanel) closeSessionPanel(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); updateSessionHeader(); setText($('home-chat-status'), status); chatInput.focus(); return true;
   }
   async function refreshChatModel() {
     const config = await api?.getTranscriptionConfig?.().catch(() => null);
@@ -610,6 +766,7 @@
   async function submitChat(rawText, options = {}) {
     if (requestId) return;
     const text = String(rawText || '').trim(); if (!text) return;
+    if (conversationRecords.length >= ChatSessions.MAX_RECORDS) { setText($('home-chat-status'), '此对话已达到 30 个回复上限，请新建对话'); return; }
     const sources = ChatContext.normalizeSources(options.sources === undefined ? selectedSources : options.sources);
     const historyContent = ChatContext.messageContent(text, sources);
     if (historyContent.length > 12000) { setText($('home-chat-status'), '问题与参考资料超过 12000 字符，请移除资料或缩短问题'); return; }
@@ -617,8 +774,9 @@
     const user = options.user || message('user', text, 'complete', sources);
     const reply = message('assistant', '正在思考…', 'streaming');
     if (options.versionOf) { options.versionOf.reply.dataset.version = 'previous'; const oldLabel = options.versionOf.reply.querySelector('.home-chat-message-head span'); if (oldLabel) oldLabel.textContent = 'AI 助手 · 上一版本'; reply.querySelector('.home-chat-message-head span').textContent = 'AI 助手 · 新版本'; }
-    const turn = { prompt: text, context, sources, historyContent, user, reply, answer: '', savedNote: null, isVersion: Boolean(options.versionOf) };
-    pendingTurn = turn; messages.scrollTop = messages.scrollHeight;
+    const createdAt = Date.now();
+    const turn = { id: `reply-${createdAt}-${++sequence}`, groupId: options.versionOf?.groupId || `turn-${createdAt}-${sequence}`, prompt: text, context, sources, historyContent, user, reply, answer: '', state: 'streaming', detail: '', createdAt, savedNote: null, isVersion: Boolean(options.versionOf) };
+    conversationRecords.push(turn); pendingTurn = turn; messages.scrollTop = messages.scrollHeight;
     if (!options.user) { chatInput.value = ''; selectedSources = []; closeContextPicker(); renderContextChips(); }
     const seq = ++sequence, id = `home-chat-${Date.now()}-${seq}`; requestId = id; chatControls(true);
     setText($('home-chat-status'), context.length ? `使用最近 ${context.length / 2} 轮${sources.length ? `及 ${sources.length} 份资料` : ''}生成` : sources.length ? `使用 ${sources.length} 份所选资料生成` : '正在生成，可随时停止');
@@ -627,18 +785,29 @@
     requestId = ''; pendingTurn = null; chatControls(false);
     if (!result?.ok) {
       if (turn.answer) renderChatText(reply.querySelector('.home-chat-message-body'), turn.answer); else reply.querySelector('.home-chat-message-body').replaceChildren();
-      const detail = chatErrors[result?.error] || '生成失败，请重试。'; setTurnState(turn, 'error', detail); addTurnActions(turn, false); setText($('home-chat-status'), '本轮未计入上下文，可重试'); chatInput.focus(); return;
+      const detail = chatErrors[result?.error] || '生成失败，请重试。'; setTurnState(turn, 'error', detail); addTurnActions(turn, false);
+      const saved = currentSessionId ? persistCurrentSession() : { ok: true }; setText($('home-chat-status'), saved.ok ? '本轮未计入上下文，可重试' : sessionError(saved.error)); chatInput.focus(); return;
     }
     turn.answer = String(result.text || ''); renderChatText(reply.querySelector('.home-chat-message-body'), turn.answer); setTurnState(turn, 'complete', ''); addTurnActions(turn, true);
     history = [...context, { role: 'user', content: historyContent }, { role: 'assistant', content: turn.answer }].slice(-12);
-    while (messages.querySelectorAll('.home-chat-message').length > 18) messages.querySelector('.home-chat-message')?.remove();
     const reusableTurns = contextFor('', history).length / 2;
-    setText($('home-chat-status'), reusableTurns ? `回复完成 · 后续将使用最近 ${reusableTurns} 轮` : '回复完成 · 本轮内容过长，不加入下一轮上下文'); chatInput.focus();
+    const saved = currentSessionId ? persistCurrentSession() : { ok: true };
+    setText($('home-chat-status'), !saved.ok ? sessionError(saved.error) : reusableTurns ? `回复完成 · 后续将使用最近 ${reusableTurns} 轮` : '回复完成 · 本轮内容过长，不加入下一轮上下文'); chatInput.focus();
   }
   $('home-chat-open').addEventListener('click', () => { changeView('chat'); void refreshChatModel(); chatInput.focus(); });
-  $('home-chat-close').addEventListener('click', () => { cancelChat(); closeContextPicker(); changeView('dashboard'); $('home-chat-open').focus(); });
-  $('home-chat-stop').addEventListener('click', cancelChat); $('home-chat-new').addEventListener('click', resetChat); $('home-chat-model').addEventListener('click', openAISettings);
-  $('home-chat-context-add').addEventListener('click', () => { if (contextPicker.hidden) openContextPicker(); else closeContextPicker({ focus: true }); });
+  $('home-chat-close').addEventListener('click', () => { cancelChat(); closeContextPicker(); closeSessionPanel(); changeView('dashboard'); $('home-chat-open').focus(); });
+  $('home-chat-stop').addEventListener('click', cancelChat); $('home-chat-new').addEventListener('click', () => resetChat()); $('home-chat-model').addEventListener('click', openAISettings);
+  $('home-chat-session-save').addEventListener('click', () => {
+    if (!currentSessionId) { openSessionPanel(); setText($('home-chat-status'), '确认保存范围后，将对话写入当前工作区'); $('home-chat-session-confirm-save').focus(); return; }
+    const result = persistCurrentSession(); setText($('home-chat-status'), result.ok ? '对话更改已保存' : sessionError(result.error));
+  });
+  $('home-chat-sessions').addEventListener('click', () => { if (sessionPanel.hidden) openSessionPanel(); else closeSessionPanel({ focus: true }); });
+  $('home-chat-session-close').addEventListener('click', () => closeSessionPanel({ focus: true }));
+  $('home-chat-session-confirm-save').addEventListener('click', () => { const result = persistCurrentSession({ create: true }); if (result.ok) { renderSessionPanel(); setText($('home-chat-status'), '对话及资料文字快照已保存到当前工作区'); } else setText($('home-chat-status'), sessionError(result.error)); });
+  $('home-chat-session-new').addEventListener('click', () => resetChat({ status: '已开始新的临时对话' }));
+  sessionSearch.addEventListener('input', renderSessionPanel);
+  sessionPanel.addEventListener('keydown', (event) => { if (event.key === 'Escape') { event.preventDefault(); closeSessionPanel({ focus: true }); } });
+  $('home-chat-context-add').addEventListener('click', () => { if (contextPicker.hidden) { closeSessionPanel(); openContextPicker(); } else closeContextPicker({ focus: true }); });
   $('home-chat-context-close').addEventListener('click', () => closeContextPicker({ focus: true }));
   contextSearch.addEventListener('input', renderContextPicker);
   document.querySelectorAll('[data-chat-context-type]').forEach((button) => button.addEventListener('click', () => {
@@ -685,9 +854,9 @@
     pendingTurn.reply.querySelector('.home-chat-message-body').textContent = pendingTurn.answer;
     if (follow) messages.scrollTop = messages.scrollHeight;
   });
-  resizeChatInput(); void refreshChatModel();
+  resizeChatInput(); updateSessionHeader(); void refreshChatModel();
   window.addEventListener('notch:ai-settings-changed', refreshChatModel);
-  api?.onWorkspaceChanged?.(() => { cancelChat(); history = []; selectedSources = []; closeContextPicker(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); ++weatherEpoch; });
+  api?.onWorkspaceChanged?.(() => { cancelChat(); history = []; conversationRecords = []; savedSessions = []; currentSessionId = ''; currentSessionTitle = ''; currentSessionCreatedAt = 0; sessionDirty = false; selectedSources = []; closeContextPicker(); closeSessionPanel(); messages.replaceChildren(chatEmpty); chatEmpty.hidden = false; chatInput.value = ''; renderContextChips(); updateSessionHeader(); ++weatherEpoch; });
   function tick() {
     if (!visible()) return;
     refreshLists();

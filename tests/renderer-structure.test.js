@@ -15,6 +15,7 @@ const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'setti
 const homeJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home.js'), 'utf8');
 const markdownJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'markdown.js'), 'utf8');
 const chatContextJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-context.js'), 'utf8');
+const chatSessionsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-sessions.js'), 'utf8');
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
@@ -184,6 +185,10 @@ test('home chat exposes temporary-session state, recovery controls and safe mark
   assert.match(html, /id="home-chat-provider"/);
   assert.match(html, /id="home-chat-model-name"/);
   assert.match(html, /id="home-chat-new"[^>]*aria-label="新建对话"/);
+  assert.match(html, /id="home-chat-session-save"[^>]*aria-label="保存到当前工作区"/);
+  assert.match(html, /id="home-chat-sessions"[^>]*aria-controls="home-chat-session-panel"/);
+  assert.match(html, /id="home-chat-session-panel"[^>]*role="dialog"/);
+  assert.match(html, /id="home-chat-session-confirm-save"[^>]*hidden/);
   assert.match(html, /id="home-chat-context-picker"[^>]*role="dialog"/);
   assert.match(html, /id="home-chat-context-add"[^>]*aria-expanded="false"/);
   assert.match(html, /data-chat-context-type="note"/);
@@ -192,8 +197,13 @@ test('home chat exposes temporary-session state, recovery controls and safe mark
   assert.match(html, /data-chat-context-type="link"/);
   assert.match(html, /data-chat-context-type="clipboard"/);
   assert.match(html, /script src="chat-context\.js"/);
+  assert.match(html, /script src="chat-sessions\.js"/);
   assert.match(html, /script src="markdown\.js"/);
   assert.match(chatContextJs, /MAX_SOURCES = 3/);
+  assert.match(chatSessionsJs, /STORAGE_KEY = 'notch-ai-chat-sessions-v1'/);
+  assert.match(chatSessionsJs, /MAX_SESSIONS = 30/);
+  assert.match(chatSessionsJs, /MAX_SESSION_CHARS = 512000/);
+  assert.match(chatSessionsJs, /MAX_TOTAL_CHARS = 2000000/);
   assert.match(chatContextJs, /用户显式选择的本地参考资料/);
   assert.match(markdownJs, /window\.NotchMarkdown = \{ render \}/);
   assert.match(markdownJs, /code\.textContent = codeText/);
@@ -207,6 +217,10 @@ test('home chat exposes temporary-session state, recovery controls and safe mark
   assert.match(homeJs, /NotchTodo\?\.chatContexts/);
   assert.match(homeJs, /NotchClipboard\?\.chatContexts/);
   assert.match(homeJs, /context: \{ sourceType: 'manual', text, sources \}/);
+  assert.match(homeJs, /persistCurrentSession\(\{ create: true \}\)/);
+  assert.match(homeJs, /ChatSessions\.searchSessions/);
+  assert.match(homeJs, /ChatSessions\.renameSession/);
+  assert.match(homeJs, /ChatSessions\.removeSession/);
   assert.doesNotMatch(homeJs, /pendingReply\?\.remove|pendingUser\?\.remove/);
 });
 
