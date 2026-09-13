@@ -12,6 +12,7 @@ const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effect
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'settings.js'), 'utf8');
+const homeJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home.js'), 'utf8');
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
@@ -174,6 +175,20 @@ test('settings exposes every panel tab as a possible default opening page', () =
     'home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings',
   ]);
   assert.match(workspaceJs, /setDefaultTab/);
+});
+
+test('home music is app-owned and configures local or public HTTPS sources', () => {
+  assert.match(html, /id="home-music-audio"/);
+  assert.match(html, /data-music-source="local"/);
+  assert.match(html, /data-music-source="network"/);
+  assert.match(html, /id="music-volume"[^>]*type="range"/);
+  assert.match(settingsJs, /id:'music'/);
+  for (const api of ['getHomeMusicLibrary', 'setHomeMusicMode', 'chooseHomeMusicFiles', 'addHomeMusicUrl', 'removeHomeMusicTrack', 'loadHomeMusicTrack']) assert.match(preloadJs, new RegExp(api));
+  for (const channel of ['home:music-library', 'home:music-mode', 'home:music-choose-files', 'home:music-add-network', 'home:music-remove', 'home:music-load']) assert.match(mainJs, new RegExp(channel));
+  assert.match(homeJs, /URL\.createObjectURL/);
+  assert.doesNotMatch(preloadJs, /getHomeMedia|controlHomeMedia|getMusicStatus|controlMusic/);
+  assert.doesNotMatch(mainJs, /home:media-status|home:media-control|music:status|music:control|SODA_MUSIC/);
+  assert.doesNotMatch(workspaceJs, /getMusicStatus|controlMusic/);
 });
 
 test('AI providers configure directly inside the settings page', () => {

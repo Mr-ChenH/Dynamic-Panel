@@ -69,7 +69,7 @@
         "NSHighResolutionCapable": true,
         "CFBundleDisplayName": "TO-DO Panel",
         "NSMicrophoneUsageDescription": "TO-DO Panel 需要使用麦克风来录音并生成转写文本。",
-        "NSAppleEventsUsageDescription": "TO-DO Panel 需要控制「系统事件」来枚举并聚焦当前窗口、发送汽水音乐快捷键。"
+        "NSAppleEventsUsageDescription": "TO-DO Panel 需要控制「系统事件」来枚举并聚焦当前窗口。"
       }
     },
     "win": {

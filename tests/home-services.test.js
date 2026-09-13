@@ -1,7 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { createWeatherService } = require('../home-services');
-const { controlMedia } = require('../home-media');
+const { createMusicLibrary, resolvePublicAudioUrl } = require('../home-media');
 const { validateRequest, normalizeResponse } = require('../ai/schema');
 const { actionPrompt } = require('../ai/prompts');
 
@@ -56,8 +59,36 @@ test('weather failure distinguishes stale cache and bounds concurrent work', asy
   release({ results: [] }); await pending;
 });
 
-test('media rejects non-whitelisted commands without starting a process', async () => {
-  assert.equal((await controlMedia('toggle; whoami')).error, 'invalid_action');
+test('music library owns local and public HTTPS sources without exposing local paths', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-music-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, 'music-library.json');
+  const localTrack = path.join(directory, 'Focus track.mp3'); fs.writeFileSync(localTrack, 'local-audio');
+  let id = 0;
+  const library = createMusicLibrary({ filePath, uuid: () => `track-${++id}`, now: () => 10, lookup: async () => [{ address: '93.184.216.34', family: 4 }], download: async () => ({ bytes: Buffer.from('remote-audio'), mimeType: 'audio/mpeg' }) });
+  const local = await library.addLocal([localTrack]);
+  assert.equal(local.tracks[0].title, 'Focus track');
+  assert.equal(local.added, 1);
+  assert.equal((await library.addLocal([localTrack])).added, 0);
+  assert.equal(JSON.stringify(library.list()).includes(directory), false);
+  const network = await library.addNetwork({ url: 'https://media.example.com/audio/ambient.mp3', title: 'Ambient' });
+  assert.equal(network.mode, 'network');
+  assert.equal(network.added, true);
+  assert.equal(network.tracks.length, 2);
+  assert.equal((await library.addNetwork({ url: 'https://media.example.com/audio/ambient.mp3' })).added, false);
+  assert.equal((await library.load('track-1')).bytes.toString(), 'local-audio');
+  assert.equal((await library.load('track-2')).bytes.toString(), 'remote-audio');
+  assert.equal(library.setMode('shell').error, 'invalid_mode');
+  assert.equal(library.remove('track-1').tracks.length, 1);
+});
+
+test('network music rejects private hosts, credentials and unsupported URLs', async () => {
+  const privateLookup = async () => [{ address: '127.0.0.1', family: 4 }];
+  assert.equal(await resolvePublicAudioUrl('https://localhost/song.mp3', privateLookup), null);
+  assert.equal(await resolvePublicAudioUrl('https://user:pass@example.com/song.mp3', privateLookup), null);
+  assert.equal(await resolvePublicAudioUrl('http://example.com/song.mp3', privateLookup), null);
+  assert.equal(await resolvePublicAudioUrl('https://example.com/song.mp3', privateLookup), null);
+  assert.equal(await resolvePublicAudioUrl('https://example.com/song.mp3', async () => [{ address: '203.0.113.10', family: 4 }]), null);
 });
 
 test('chat preserves real roles and rejects system injection, oversized and unpaired history', () => {

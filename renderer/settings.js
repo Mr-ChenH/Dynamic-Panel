@@ -3,6 +3,7 @@
   if(!page)return;
   const groups=[
     {id:'general',title:'通用',description:'快捷键、启动与本地数据',selector:'.settings-device-card',icon:'M4 7h16 M4 17h16 M9 4v6 M15 14v6'},
+    {id:'music',title:'音乐',description:'本地与网络播放源',selector:'.settings-music-card',icon:'M9 18V5l10-2v13 M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6 M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6'},
     {id:'launcher',title:'搜索与启动器',description:'搜索来源、快捷键与本地扩展',selector:'.settings-launcher-card',icon:'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M15 15l6 6'},
     {id:'features',title:'显示功能',description:'选择工作区中的功能入口',selector:'.settings-features-card',icon:'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z'},
     {id:'api',title:'AI 与转写',description:'管理智能命名和语音转写服务',selector:'.settings-api-card',icon:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z'},

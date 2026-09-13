@@ -14,8 +14,12 @@
 - https://www.makeuseof.com/apple-weather-app-colored-bars-explained/ ：逐日温度条使用整个预报周期的最低到最高温作为共同标尺；今天额外用圆点标记当前温度在当天区间中的位置。
 - https://9to5google.com/2023/10/19/google-weather-pixel-redesign/ ：Google Weather 将 Now、小时轮播和 10 天预报合并为单一信息流，并把近期降雨提醒放在小时趋势之前。
 - https://weathergraph.app/ 与 https://www.meteomatics.com/en/weather-app/ ：面向决策的天气产品在同一时间轴组合温度曲线和降雨柱，帮助用户识别升降温与降雨窗口，而不是逐格比较数字。
-- https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager ：系统已接入 SMTC 的媒体会话。
+- 曾评估 Windows SMTC 与 macOS Music/Spotify 控制，但该方案依赖外部播放器会话和平台权限，已按后续需求移除。
+- https://support.apple.com/guide/music/use-music-miniplayer-mus71d7dcfce/mac ：Apple Music MiniPlayer 以封面、歌曲元数据、只读进度和居中的基础控制构成紧凑播放界面；应用内播放器沿用其信息层级，不接入系统 Music 会话。
+- https://support.spotify.com/us/article/now-playing/ 与 https://developer.spotify.com/documentation/design ：Spotify Now Playing 保持标题清晰可读，播放键为主要动作；应用内播放器借鉴其控制层级，不接入 Spotify 账号或专有 SDK。
 
 检索：Open Meteo API free non commercial attribution geocoding api forecast；Windows GlobalSystemMediaTransportControlsSessionManager TryTogglePlayPauseAsync；Apple Weather current conditions hourly forecast precipitation wind humidity；Apple Support next 12 hours weather forecast。
+
+音乐来源结论：本地文件由系统文件选择器授权后保存绝对路径；网络来源首版仅接受公开 HTTPS 音频直链。主进程校验 DNS 解析结果、固定已验证公网地址、拒绝重定向并限制下载大小，渲染层只播放主进程返回的字节 Blob。
 
 执行方式：尝试Paseo（配置不兼容）及Herdr（父会话未开启控制）均不可用，改由当前代理顺序实施，不修改全局环境。

@@ -21,6 +21,14 @@ fs.mkdirSync(path.join(profile, 'launcher/extensions'), { recursive: true });
 fs.cpSync(path.join(__dirname, '../examples/launcher/local-tools'), path.join(profile, 'launcher/extensions', extensionFixture.id), { recursive: true });
 const confirmationFixture={schemaVersion:1,id:'confirmation-test',name:'Confirmation test',version:'1.0.0',description:'Test confirmation policy',author:'Tests',permissions:['clipboard','writeFiles'],commands:[{id:'confirm',title:'Confirmation action',description:'Requires confirmation',mode:'declarative',action:{type:'copy-text',text:'CONFIRMED'}}]};
 fs.writeFileSync(path.join(profile, 'launcher/registry.json'), JSON.stringify({ [extensionFixture.id]: { manifest: extensionFixture, enabled: true }, [confirmationFixture.id]:{manifest:confirmationFixture,enabled:true} }));
+function silentWav(seconds = 5) {
+  const sampleRate = 8000, dataSize = sampleRate * seconds;
+  const buffer = Buffer.alloc(44 + dataSize, 128);
+  buffer.write('RIFF', 0); buffer.writeUInt32LE(36 + dataSize, 4); buffer.write('WAVEfmt ', 8);
+  buffer.writeUInt32LE(16, 16); buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24); buffer.writeUInt32LE(sampleRate, 28); buffer.writeUInt16LE(1, 32); buffer.writeUInt16LE(8, 34);
+  buffer.write('data', 36); buffer.writeUInt32LE(dataSize, 40); return buffer;
+}
 const errors = [];
 setTimeout(() => { console.error('Production startup timed out', errors); app.exit(1); }, 25000);
 app.on('web-contents-created', (_event, contents) => {
@@ -313,7 +321,7 @@ app.on('web-contents-created', (_event, contents) => {
         const settingsLayout=await contents.executeJavaScript(`(async()=>{
           const page=document.getElementById('settings-page'),content=page.querySelector('.settings-content');
           const previous={width:page.style.width,height:page.style.height};
-          let accessible=true,onePane=true,noOverflow=true;
+          let accessible=true,onePane=true,noOverflow=true;const overflowDetails=[];
           for(const width of [1100,640]){
             page.style.width=width+'px';page.style.height='340px';
             for(const button of page.querySelectorAll('[data-settings-category]')){
@@ -323,7 +331,8 @@ app.on('web-contents-created', (_event, contents) => {
                 while(document.getElementById('launcher-manager').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));
               }
               const panes=[...content.querySelectorAll('.settings-card')].filter(card=>!card.hidden);
-              onePane=onePane&&panes.length===1;noOverflow=noOverflow&&content.scrollWidth<=content.clientWidth+1;
+              onePane=onePane&&panes.length===1;
+              if(content.scrollWidth>content.clientWidth+1){noOverflow=false;const bounds=content.getBoundingClientRect();overflowDetails.push({width,category:button.dataset.settingsCategory,contentWidth:content.clientWidth,scrollWidth:content.scrollWidth,elements:[...panes[0].querySelectorAll('*')].filter(element=>{const rect=element.getBoundingClientRect();return rect.right>bounds.right+1||rect.left<bounds.left-1;}).slice(0,8).map(element=>({tag:element.tagName,id:element.id,className:element.className,right:Math.round(element.getBoundingClientRect().right),boundRight:Math.round(bounds.right)}))});}
               const controls=[...panes[0].querySelectorAll('button,select,input')].filter(control=>control.getClientRects().length&&getComputedStyle(control).visibility!=='hidden');
               for(const control of controls){
                 control.scrollIntoView({block:'nearest'});
@@ -357,16 +366,20 @@ app.on('web-contents-created', (_event, contents) => {
           const customSelected=document.querySelector('[data-ai-provider="custom-openai"]').getAttribute('aria-selected')==='true';
           document.getElementById('ai-provider-transcription').click();
           const serviceSelectionReady=!document.getElementById('ai-service-panel-transcription').hidden&&document.getElementById('ai-service-panel-content').hidden&&document.getElementById('ai-content-settings-secondary').hidden&&!!document.getElementById('transcription-provider-test')&&!!document.getElementById('transcription-provider-remove');
+          const volume=document.getElementById('music-volume');const musicVolumeDefault=volume.value==='80'&&document.getElementById('music-volume-value').textContent==='80%'&&Math.abs(document.getElementById('home-music-audio').volume-.8)<.001;
+          volume.value='35';volume.dispatchEvent(new Event('input',{bubbles:true}));const musicVolumeControl=Math.abs(document.getElementById('home-music-audio').volume-.35)<.001&&localStorage.getItem('notch-home-music-volume-v1')==='35';volume.value='80';volume.dispatchEvent(new Event('input',{bubbles:true}));
           page.querySelector('[data-settings-category="general"]').click();content.scrollTop=0;
-          return {accessible,onePane,noOverflow,directLayout,splitLayout,scrollable,apiReachable,diagnosticsReady,providerOptions,providerButtons,modelEditorReady,customEndpointVisible,customSelected,serviceSelectionReady};
+          return {accessible,onePane,noOverflow,overflowDetails,directLayout,splitLayout,scrollable,apiReachable,diagnosticsReady,providerOptions,providerButtons,modelEditorReady,customEndpointVisible,customSelected,serviceSelectionReady,musicVolumeDefault,musicVolumeControl};
         })()`);
-        assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,directLayout:true,splitLayout:true,scrollable:true,apiReachable:true,diagnosticsReady:true,providerOptions:11,providerButtons:11,modelEditorReady:true,customEndpointVisible:true,customSelected:true,serviceSelectionReady:true});
+        assert.deepEqual(settingsLayout,{accessible:true,onePane:true,noOverflow:true,overflowDetails:[],directLayout:true,splitLayout:true,scrollable:true,apiReachable:true,diagnosticsReady:true,providerOptions:11,providerButtons:11,modelEditorReady:true,customEndpointVisible:true,customSelected:true,serviceSelectionReady:true,musicVolumeDefault:true,musicVolumeControl:true});
         const recordingSettingsJump=await contents.executeJavaScript(`(async()=>{await window.NotchPanel.navigate({tab:'recordings'});document.getElementById('recording-configure').click();await new Promise(resolve=>setTimeout(resolve,100));return {settingsVisible:document.querySelector('[data-tab="settings"]').getAttribute('aria-selected')==='true',apiSelected:document.querySelector('[data-settings-category="api"]').getAttribute('aria-selected')==='true',transcriptionSelected:document.getElementById('ai-provider-transcription').getAttribute('aria-selected')==='true',modalAbsent:!document.getElementById('transcription-settings-backdrop')};})()`);
         assert.deepEqual(recordingSettingsJump,{settingsVisible:true,apiSelected:true,transcriptionSelected:true,modalAbsent:true});
         await contents.executeJavaScript(`window.NotchSettings.select('api');document.querySelector('[data-ai-provider="kimi"]').click();document.getElementById('llm-model-add').click();const models=[...document.querySelectorAll('[data-ai-model-name]')];models[1].value='moonshot-v1-8k';models[1].dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-ai-model-active="1"]').click();document.querySelector('.ai-model-settings').scrollIntoView({block:'start'});`);await new Promise(resolve=>setTimeout(resolve,150));
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/ai-settings-review.png'),(await contents.capturePage()).toPNG());
         await contents.executeJavaScript(`window.NotchSettings.select('launcher')`);await new Promise(resolve=>setTimeout(resolve,350));
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-launcher-review.png'),(await contents.capturePage()).toPNG());
+        await contents.executeJavaScript(`window.NotchSettings.select('music')`);await new Promise(resolve=>setTimeout(resolve,150));
+        fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-music-review.png'),(await contents.capturePage()).toPNG());
         await contents.executeJavaScript(`window.NotchSettings.select('general')`);await new Promise(resolve=>setTimeout(resolve,250));
         fs.writeFileSync(path.join(__dirname,'../dist.noindex/settings-review.png'),(await contents.capturePage()).toPNG());
         await contents.executeJavaScript("window.__startupTestStage='ai-no-config'");
@@ -531,11 +544,17 @@ app.on('web-contents-created', (_event, contents) => {
         assert.equal(noteTyping.before,noteTyping.during,JSON.stringify(noteTyping));
         assert.equal(noteTyping.during,noteTyping.after,JSON.stringify(noteTyping));
         assert.equal(noteTyping.same,true);assert.equal(noteTyping.focused,true);assert.equal(noteTyping.caret,0);
-        for (const channel of ['home:weather-search','home:weather','home:media-status','home:media-control']) require('electron').ipcMain.removeHandler(channel);
+        const homeChannels=['home:weather-search','home:weather','home:music-library','home:music-mode','home:music-choose-files','home:music-add-network','home:music-remove','home:music-load'];
+        for (const channel of homeChannels) require('electron').ipcMain.removeHandler(channel);
         require('electron').ipcMain.handle('home:weather-search',()=>({ok:true,locations:[{name:'北京',country:'中国',latitude:39,longitude:116}]}));
         require('electron').ipcMain.handle('home:weather',()=>({ok:true,temperature:22,apparentTemperature:21,humidity:58,precipitation:0,windSpeed:11,windDirection:45,isDay:true,code:0,high:25,low:16,sunrise:'2026-09-12T05:50',sunset:'2026-09-12T18:20',hours:Array.from({length:12},(_,index)=>({time:`2026-09-12T${String(index+10).padStart(2,'0')}:00`,temperature:22+index/2,code:index>7?2:0,precipitationProbability:index*3,isDay:index<8})),days:Array.from({length:7},(_,index)=>({date:`2026-09-${String(index+12).padStart(2,'0')}`,code:index>3?2:0,high:25+index,low:16+index,precipitationProbability:index*5,sunrise:'2026-09-12T05:50',sunset:'2026-09-12T18:20'})),updatedAt:Date.now()}));
-        require('electron').ipcMain.handle('home:media-status',()=>({ok:true,title:'测试歌曲',artist:'测试歌手',playing:true,canPlayPause:true,canPrevious:true,canNext:true}));
-        require('electron').ipcMain.handle('home:media-control',()=>({ok:true}));
+        let testMusicLibrary={ok:true,mode:'local',tracks:[{id:'test-track',kind:'local',title:'测试歌曲',detail:'test.wav',mimeType:'audio/wav'}]};
+        require('electron').ipcMain.handle('home:music-library',()=>testMusicLibrary);
+        require('electron').ipcMain.handle('home:music-mode',(_event,mode)=>(testMusicLibrary={...testMusicLibrary,mode}));
+        require('electron').ipcMain.handle('home:music-choose-files',()=>testMusicLibrary);
+        require('electron').ipcMain.handle('home:music-add-network',()=>testMusicLibrary);
+        require('electron').ipcMain.handle('home:music-remove',()=>testMusicLibrary);
+        require('electron').ipcMain.handle('home:music-load',()=>({ok:true,bytes:silentWav(),mimeType:'audio/wav'}));
         const homeAudit=await contents.executeJavaScript(`(async()=>{
           await window.NotchPanel.navigate({tab:'home'});
           const pause=()=>new Promise(resolve=>setTimeout(resolve,120));
@@ -555,8 +574,13 @@ app.on('web-contents-created', (_event, contents) => {
           document.getElementById('home-weather-detail-close').click();
           document.getElementById('home-weather-clear').click();
           const cleared=!localStorage.getItem('notch-home-weather-v1');
-          document.getElementById('home-media-refresh').click();await pause();
-          const media=document.getElementById('home-media-title').textContent==='测试歌曲';
+          document.getElementById('home-media-refresh').click();await pause();document.querySelector('[data-home-media="toggle"]').click();await new Promise(resolve=>setTimeout(resolve,300));
+          const media=document.getElementById('home-media-title').textContent==='测试歌曲'
+            &&document.getElementById('home-media-source').textContent.includes('本地音乐')
+            &&document.getElementById('home-media-album').textContent==='test.wav'
+            &&!document.getElementById('home-media-progress').hidden
+            &&document.querySelector('.home-media').dataset.mediaPlaying==='true'
+            &&document.querySelector('[data-home-media="toggle"]').getAttribute('aria-label')==='暂停';
           document.getElementById('home-chat-open').click();const input=document.getElementById('home-chat-input');input.value='你好';document.getElementById('home-chat-form').requestSubmit();await pause();
           const chatted=document.querySelector('#home-chat-messages [data-role="assistant"] p')?.textContent==='整理后的内容';
           input.value='流式测试';document.getElementById('home-chat-form').requestSubmit();document.getElementById('home-chat-stop').click();await pause();

@@ -66,8 +66,6 @@ const {
   screenRecordingProbePolicy,
   taskNotificationWindowPolicy,
   updateFeaturePreference,
-  controlSodaMusic,
-  sodaShortcutSpec,
   selectTranscriptionSettings,
   createWorkspacePersistenceGate,
   hoverSpacePollingPolicy,
@@ -240,7 +238,6 @@ const APP_SETTINGS_FILE = 'app-settings.json';
 const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
 const WORKSPACE_DATA_FILE = 'workspace.json';
 const workspacePersistenceGate = createWorkspacePersistenceGate();
-const SODA_MUSIC_APP = '/Applications/汽水音乐.app';
 const TRANSCRIPTION_MODEL = 'qwen3-asr-flash-realtime';
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
 const TRANSCRIPTION_FINISH_TIMEOUT_MS = 7000;
@@ -273,7 +270,6 @@ let hideWhenCollapsed = false;
 let isQuitting = false;
 let mediaPermissionRequests = 0;
 let transientSystemInteractionRequests = 0;
-let sodaMusicPlaying = false;
 const mediaPermissionCoordinator = createForegroundMediaPermissionCoordinator();
 
 let notificationWindow = null;
@@ -2553,103 +2549,23 @@ ipcMain.handle('credentials:copy', async (event, payload) => {
   return true;
 });
 
-function sodaMusicRunning() {
-  return new Promise((resolve) => {
-    execFile('/usr/bin/pgrep', ['-f', '^/Applications/汽水音乐\\.app/Contents/MacOS/汽水音乐$'], { timeout: 1500 }, (error) => resolve(!error));
-  });
-}
-
-function launchSodaMusic() {
-  return new Promise((resolve) => {
-    const cleanEnvironment = { ...process.env };
-    delete cleanEnvironment.ELECTRON_RUN_AS_NODE;
-    cleanEnvironment.XPC_SERVICE_NAME = '0';
-    execFile(
-      '/usr/bin/open',
-      [SODA_MUSIC_APP],
-      { timeout: 4000, env: cleanEnvironment },
-      (error) => resolve(!error)
-    );
-  });
-}
-
-const SODA_SHORTCUT_JXA = `
-function run(argv) {
-  const keyCode = Number(argv[0]);
-  const usesCommand = String(argv[1] || '') === '1';
-  const dismissOverlays = String(argv[2] || '') === '1';
-  const processes = Application('System Events').applicationProcesses.whose({ bundleIdentifier: 'com.soda.music' })();
-  if (!processes.length) return 'missing';
-  processes[0].frontmost = true;
-  delay(0.35);
-  const systemEvents = Application('System Events');
-  if (!Number.isFinite(keyCode)) return 'invalid';
-  if (dismissOverlays) {
-    systemEvents.keyCode(53);
-    delay(0.15);
-  }
-  if (usesCommand) systemEvents.keyCode(keyCode, { using: 'command down' });
-  else systemEvents.keyCode(keyCode);
-  return 'ok';
-}`;
-
-async function sendSodaShortcut(action) {
-  if (process.platform !== 'darwin') return { ok: false, error: 'unsupported' };
-  if (!systemPreferences.isTrustedAccessibilityClient(true)) {
-    return { ok: false, error: 'accessibility_permission_required' };
-  }
-  const shortcut = sodaShortcutSpec(action);
-  if (!shortcut) return { ok: false, error: 'invalid_action' };
-  try {
-    const result = await runJxa(SODA_SHORTCUT_JXA, [
-      shortcut.keyCode,
-      shortcut.command ? '1' : '0',
-      shortcut.dismissOverlays ? '1' : '0',
-    ]);
-    return result === 'ok' ? { ok: true } : { ok: false, error: 'soda_control_failed' };
-  } catch (error) {
-    console.warn('[music] failed to send Soda Music shortcut', error && error.message || error);
-    return { ok: false, error: 'soda_control_failed' };
-  }
-}
-
 const homeWeather = require('./home-services').createWeatherService();
-const homeMedia = require('./home-media');
+const homeMusic = require('./home-media').createMusicLibrary({ filePath: getJsonSettingsPath('music-library.json') });
 ipcMain.handle('home:weather-search', (event, query) => homeWeather.search(query));
 ipcMain.handle('home:weather', (event, location) => homeWeather.weather(location));
-ipcMain.handle('home:media-status', () => homeMedia.getMediaStatus());
-ipcMain.handle('home:media-control', (event, action) => homeMedia.controlMedia(action));
-
-ipcMain.handle('music:status', async () => {
-  const installed = fs.existsSync(SODA_MUSIC_APP);
-  const running = installed ? await sodaMusicRunning() : false;
-  if (!running) sodaMusicPlaying = false;
-  return {
-    installed,
-    running,
-    sessionActive: running,
-    playing: running && sodaMusicPlaying,
-    title: '',
-    artist: '',
-    icon: installed ? await readSystemAppIconNow(SODA_MUSIC_APP) : null,
-  };
+ipcMain.handle('home:music-library', () => homeMusic.list());
+ipcMain.handle('home:music-mode', (event, mode) => homeMusic.setMode(mode));
+ipcMain.handle('home:music-choose-files', async () => {
+  const choice = await showOwnedOpenDialog({
+    title: '添加本地音乐', properties: ['openFile', 'multiSelections'],
+    filters: [{ name: '音频文件', extensions: ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'flac', 'webm'] }],
+  });
+  if (choice.canceled || !choice.filePaths.length) return { ok: false, error: 'cancelled' };
+  return homeMusic.addLocal(choice.filePaths);
 });
-
-ipcMain.handle('music:control', async (event, action) => {
-  if (process.platform !== 'darwin') return { ok: false, error: 'unsupported' };
-  if (!fs.existsSync(SODA_MUSIC_APP)) return { ok: false, error: 'not_installed' };
-  const result = await controlSodaMusic(action, {
-    isRunning: sodaMusicRunning,
-    launch: launchSodaMusic,
-    sendShortcut: sendSodaShortcut,
-  }, sodaMusicPlaying);
-  if (result && result.ok) sodaMusicPlaying = result.playing;
-  if (result && result.ok && mainWindow && !mainWindow.isDestroyed() && currentMode === 'expanded') {
-    if (!mainWindow.isVisible()) mainWindow.show();
-    mainWindow.focus();
-  }
-  return result;
-});
+ipcMain.handle('home:music-add-network', (event, payload) => homeMusic.addNetwork(payload));
+ipcMain.handle('home:music-remove', (event, trackId) => homeMusic.remove(trackId));
+ipcMain.handle('home:music-load', (event, trackId) => homeMusic.load(trackId));
 
 // ============ 百炼实时语音转写 ============
 function getTranscriptionSettingsPath() {

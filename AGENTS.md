@@ -41,7 +41,7 @@
 ## 当前产品约束
 
 - 双平台：macOS 13+ arm64 与 Windows 10/11 x64 共用代码及版本。Windows 使用 `npm run build:win` 生成 NSIS EXE；发布必须两个平台检查通过后汇总至同一 Release。
-- Windows：折叠态为 200 × 38 DIP，贴工作区顶部居中并避开任务栏；隐藏当前窗口和汽水音乐组件，但不修改用户保存的显隐偏好；剪贴板只复制，提醒点击关闭。
+- Windows：折叠态为 200 × 38 DIP，贴工作区顶部居中并避开任务栏；隐藏当前窗口和已退役的汽水音乐组件，但不修改用户保存的显隐偏好；剪贴板只复制，提醒点击关闭。
 - 便携媒体路径：LocalStorage / workspace.json 中新写入的录音、剪贴板图片与笔记图片使用 `/` 分隔的相对路径，系统加密密钥不保证跨电脑迁移。
 
 - 折叠态：宽 200px，高度等于当前屏幕菜单栏高度，不得超出物理刘海
@@ -50,6 +50,7 @@
 - 剪贴板：默认关闭（`DEFAULT_FEATURES.clip = false`），可在菜单栏「显示功能」中启用。历史记录由主进程轮询采集，不再占用任何全局快捷键（见 `clipboardServicePolicy`）
 - 链接：只允许公开 http/https；主进程抓取标题时必须阻止本机、内网与不安全重定向
 - 录制：音频写入 `userData/recordings/`，转写与元数据保存在 LocalStorage；可选百炼 Qwen3-ASR 实时转写，API Key 必须经 `safeStorage` 加密或环境变量读取
+- 音乐：首页使用应用内 `<audio>` 播放器，不调用系统媒体会话；曲目清单保存在 `userData/music-library.json`。本地来源仅经文件选择器导入，网络来源仅允许经主进程校验和有界下载的公开 HTTPS 音频直链
 - 当前窗口：通过 macOS 辅助功能枚举和聚焦，使用系统应用图标；同应用多窗口编号；隐藏项保存在 LocalStorage；聚焦 IPC 只接受最近扫描缓存中的窗口 ID
 - 笔记：独立笔记页可直接新建、搜索、重命名、自动保存、Markdown 编辑/预览和删除；图片支持粘贴、拖入与文件选择，统一转为 PNG 写入 `workspace/note-images/<noteId>/`，正文只保存 `/` 分隔的相对引用。单图原始输入不超过 20 MB、最长边压到 2400px；删除笔记时删除其专属附件目录
 - 启动器：复用主窗口 launcher 模式，默认 Cmd/Ctrl+Space，可在顶栏搜索或设置中进入；收藏/别名/usage 使用 `notch-launcher-*-v1`，原有数据结构保持不变。扩展安装、启用与快捷键仅本机保存；进程扩展启用 Node 文件权限，仅直接读自身代码、读写专属 storagePath，禁止子进程/原生插件/Worker；网络无系统级隔离，仍只安装可信代码，不称为 OS 沙箱。专属数据可逐个导出/导入，代码与授权不得自动迁移。跨应用焦点适配位于 `launcher/focus.js`，使用 koffi 调用本机 API。运行代码在 `launcher/`、界面在 `renderer/launcher.js`，详见 `docs/launcher-extension-development.md`。

@@ -2852,79 +2852,6 @@
   document.addEventListener('notch:recording-state-changed', renderHomeModuleSettings);
   document.addEventListener('notch:home-view-changed', () => refreshWindows());
 
-  // ============ 本地汽水音乐 ============
-  const homeMusic = document.getElementById('home-music');
-  const musicArtwork = document.getElementById('music-artwork');
-  const musicTitle = document.getElementById('music-title');
-  const musicStatus = document.getElementById('music-status');
-  const musicPlayToggle = document.getElementById('music-play-toggle');
-  let musicPlaying = false;
-
-  function renderMusicPlaybackState() {
-    if (!homeMusic || !musicPlayToggle) return;
-    homeMusic.classList.toggle('music-playing', musicPlaying);
-    musicPlayToggle.dataset.musicAction = musicPlaying ? 'pause' : 'play';
-    musicPlayToggle.setAttribute('aria-label', musicPlaying ? '暂停' : '播放');
-    musicPlayToggle.innerHTML = musicPlaying
-      ? '<svg viewBox="0 0 24 24"><path d="M8 7h3v10H8zM14 7h3v10h-3z" /></svg>'
-      : '<svg viewBox="0 0 24 24"><path d="m9 7 8 5-8 5z" /></svg>';
-  }
-
-  async function refreshMusicStatus() {
-    if (!homeMusic || !window.notchAPI || typeof window.notchAPI.getMusicStatus !== 'function') return;
-    let status;
-    try { status = await window.notchAPI.getMusicStatus(); } catch (error) { status = null; }
-    homeMusic.classList.toggle('music-running', Boolean(status && status.running));
-    if (status && typeof status.playing === 'boolean') {
-      musicPlaying = status.playing;
-      renderMusicPlaybackState();
-    }
-    if (status && status.icon && musicArtwork) {
-      musicArtwork.replaceChildren();
-      const image = document.createElement('img');
-      image.src = status.icon;
-      image.alt = '';
-      musicArtwork.appendChild(image);
-    }
-    if (musicTitle) musicTitle.textContent = status && status.installed ? '汽水音乐' : '未安装汽水音乐';
-    if (musicStatus) musicStatus.textContent = status && status.running ? (musicPlaying ? '正在播放' : '已连接') : status && status.installed ? '轻触即播' : '需要本地客户端';
-  }
-
-  homeMusic?.addEventListener('click', async (event) => {
-    if (event.target.closest('[data-widget-size-cycle]') || !window.notchAPI) return;
-    const control = event.target.closest('[data-music-action]') || musicPlayToggle;
-    if (!control) return;
-    event.stopPropagation();
-    control.disabled = true;
-    const action = control.dataset.musicAction;
-    let result;
-    try { result = await window.notchAPI.controlMusic(action); } catch (error) { result = { ok: false }; }
-    control.disabled = false;
-    if (!result || !result.ok) {
-      const needsSession = result && ['no_active_session', 'soda_session_inactive'].includes(result.error);
-      const needsPermission = result && result.error === 'accessibility_permission_required';
-      if (musicStatus) musicStatus.textContent = result && result.error === 'not_installed'
-        ? '需要本地客户端'
-        : needsPermission ? '需要辅助功能权限'
-          : needsSession ? '请先点播放' : '控制暂不可用';
-      if (typeof showStatusToast === 'function') {
-        showStatusToast(result && result.error === 'not_installed'
-          ? '未安装汽水音乐'
-          : needsPermission ? '请在系统设置中允许 TO-DO Panel 使用辅助功能'
-            : needsSession ? '请先点击播放，再使用切歌控制' : '汽水音乐控制暂不可用');
-      }
-    } else {
-      if (typeof result.playing === 'boolean') musicPlaying = result.playing;
-      else if (action === 'play') musicPlaying = true;
-      else if (action === 'pause') musicPlaying = false;
-      renderMusicPlaybackState();
-      if (musicStatus) musicStatus.textContent = action === 'next' ? '下一首' : action === 'previous' ? '上一首' : musicPlaying ? '正在播放' : '已暂停';
-    }
-    setTimeout(refreshMusicStatus, 500);
-  });
-
-  renderMusicPlaybackState();
-
   // ============ 本机加密密钥库 ============
   const credentialService = document.getElementById('credential-service');
   const credentialAccount = document.getElementById('credential-account');
@@ -3237,7 +3164,6 @@
   updateRecordingUi();
   loadTranscriptionConfig();
   refreshSettingsPanel();
-  refreshMusicStatus();
   loadCredentials();
 
   window.NotchWorkspace = {
