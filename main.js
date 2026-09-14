@@ -2556,6 +2556,15 @@ ipcMain.handle('home:weather-search', (event, query) => homeWeather.search(query
 ipcMain.handle('home:weather', (event, location) => homeWeather.weather(location));
 ipcMain.handle('home:music-library', () => homeMusic.list());
 ipcMain.handle('home:music-mode', (event, mode) => homeMusic.setMode(mode));
+ipcMain.handle('home:music-select-playlist', (event, payload) => homeMusic.selectPlaylist(payload));
+ipcMain.handle('home:music-refresh-source', (event, sourceId) => homeMusic.refreshSource(sourceId));
+ipcMain.handle('home:music-add-source', (event, payload) => homeMusic.addCatalogSource(payload));
+ipcMain.handle('home:music-remove-source', (event, sourceId) => homeMusic.removeCatalogSource(sourceId));
+ipcMain.handle('home:music-browse-categories', (event, payload) => homeMusic.browseOnlineCategories(payload));
+ipcMain.handle('home:music-search-playlists', (event, payload) => homeMusic.browseOnlineSearch(payload));
+ipcMain.handle('home:music-browse-category', (event, payload) => homeMusic.browseOnlineCategory(payload));
+ipcMain.handle('home:music-browse-recommend', (event, payload) => homeMusic.browseOnlineRecommend(payload));
+ipcMain.handle('home:music-select-online-playlist', (event, payload) => homeMusic.browseOnlinePlaylist(payload));
 ipcMain.handle('home:music-choose-files', async () => {
   const choice = await showOwnedOpenDialog({
     title: '添加本地音乐', properties: ['openFile', 'multiSelections'],
@@ -2572,6 +2581,7 @@ ipcMain.handle('home:music-choose-folder', async () => {
 ipcMain.handle('home:music-add-network', (event, payload) => homeMusic.addNetwork(payload));
 ipcMain.handle('home:music-remove', (event, trackId) => homeMusic.remove(trackId));
 ipcMain.handle('home:music-load', (event, trackId) => homeMusic.load(trackId));
+ipcMain.handle('home:music-cover', (event, trackId) => homeMusic.loadCover(trackId));
 
 // ============ 百炼实时语音转写 ============
 function getTranscriptionSettingsPath() {

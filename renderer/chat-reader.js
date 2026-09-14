@@ -28,8 +28,11 @@
     const result = [];
     let fenced = false;
     for (const line of sourceText(value).split('\n')) {
-      if (/^\s*```/.test(line)) { fenced = !fenced; continue; }
-      if (fenced) continue;
+      if (fenced) {
+        if (/^\s*```\s*$/.test(line)) fenced = false;
+        continue;
+      }
+      if (/^\s*```\s*[\w.+-]*\s*$/.test(line)) { fenced = true; continue; }
       const match = line.match(/^\s{0,3}(#{1,4})\s+(.+)$/);
       if (!match) continue;
       const title = plainHeading(match[2]);

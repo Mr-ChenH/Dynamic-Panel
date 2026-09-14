@@ -1,10 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 const { createWeatherService } = require('../home-services');
-const { createMusicLibrary, resolvePublicAudioUrl } = require('../home-media');
+const { createMusicLibrary, normalizeLibrary, normalizeMusicDlBaseUrl, requestLoopbackCatalog, resolvePublicAudioUrl } = require('../home-media');
 const { validateRequest, normalizeResponse } = require('../ai/schema');
 const { actionPrompt } = require('../ai/prompts');
 
@@ -73,13 +74,16 @@ test('music library owns local and public HTTPS sources without exposing local p
   assert.equal(JSON.stringify(library.list()).includes(directory), false);
   const network = await library.addNetwork({ url: 'https://media.example.com/audio/ambient.mp3', title: 'Ambient' });
   assert.equal(network.mode, 'network');
+  assert.equal(network.playlistId, 'network');
   assert.equal(network.added, true);
-  assert.equal(network.tracks.length, 2);
+  assert.equal(network.tracks.length, 1);
+  assert.equal(network.totalTracks, 2);
   assert.equal((await library.addNetwork({ url: 'https://media.example.com/audio/ambient.mp3' })).added, false);
   assert.equal((await library.load('track-1')).bytes.toString(), 'local-audio');
   assert.equal((await library.load('track-2')).bytes.toString(), 'remote-audio');
   assert.equal(library.setMode('shell').error, 'invalid_mode');
-  assert.equal(library.remove('track-1').tracks.length, 1);
+  assert.equal(library.setMode('local').tracks.length, 1);
+  assert.equal(library.remove('track-1').tracks.length, 0);
 });
 
 test('music folders import nested audio once and ignore unsupported files and symbolic links', async (t) => {
@@ -115,6 +119,114 @@ test('network music rejects private hosts, credentials and unsupported URLs', as
   assert.equal(await resolvePublicAudioUrl('http://example.com/song.mp3', privateLookup), null);
   assert.equal(await resolvePublicAudioUrl('https://example.com/song.mp3', privateLookup), null);
   assert.equal(await resolvePublicAudioUrl('https://example.com/song.mp3', async () => [{ address: '203.0.113.10', family: 4 }]), null);
+});
+
+test('music library migrates v1 data and switches go-music-dl playlists through a loopback adapter', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-music-catalog-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, 'music-library.json');
+  fs.writeFileSync(filePath, JSON.stringify({ schemaVersion: 1, mode: 'network', tracks: [] }));
+  assert.deepEqual(normalizeLibrary(JSON.parse(fs.readFileSync(filePath))).activePlaylistId, 'network');
+  assert.equal(normalizeMusicDlBaseUrl('http://localhost:8080/music/'), 'http://127.0.0.1:8080/music');
+  for (const invalid of ['https://localhost:8080/music', 'http://example.com/music', 'http://user:pass@localhost/music']) assert.equal(normalizeMusicDlBaseUrl(invalid), null);
+
+  const calls = [];
+  const catalogRequest = async (baseUrl, route, options) => {
+    calls.push({ baseUrl, route, responseType: options.responseType });
+    if (route === '/healthz') return { app: 'go-music-dl', status: 'ok' };
+    if (route === '/api/playlist/sources') return { sources: [{ id: 'netease', name: '网易云音乐', search: true, categories: true }] };
+    if (route === '/api/playlist/categories?source=netease') return { categories: [{ id: '华语', name: '华语', group: '语种', hot: true }] };
+    if (route.startsWith('/api/playlist/search?source=netease')) return { playlists: [{ id: 'online-1', name: '平台精选', source: 'netease', cover: '//img.example.test/playlist.jpg', track_count: 3 }] };
+    if (route.startsWith('/api/playlist/category?source=netease')) return { playlists: [{ id: 'online-2', name: '华语新歌', source: 'netease', track_count: 2 }] };
+    if (route === '/api/playlist/songs?source=netease&id=online-1') return { songs: [{ id: 'online-song', source: 'netease', name: '在线歌曲', artist: '在线歌手', duration: 210 }] };
+    if (route.startsWith('/collections?')) return [
+      { id: 11, name: '晨间歌单', source: 'netease', cover: 'https://img.example.test/playlist.jpg', track_count: 2 },
+      { id: 22, name: '夜间歌单', source: 'qq', track_count: 1 },
+    ];
+    if (route === '/collections/11/songs') return [
+      { id: 'song-a', source: 'netease', name: '第一首', artist: '歌手甲', album: '专辑甲', duration: 180, cover: 'https://img.example.test/song-a.jpg', extra: { quality: '320k' } },
+      { id: '', source: 'netease', name: '无效歌曲' },
+    ];
+    if (route === '/collections/22/songs') return [{ id: 'song-b', source: 'qq', name: '第二首', artist: '歌手乙', duration: 200 }];
+    if (route.startsWith('/download?')) return { bytes: Buffer.from('catalog-audio'), mimeType: 'audio/mpeg' };
+    if (route.startsWith('/cover_proxy?')) return { bytes: Buffer.from('cover-image'), mimeType: 'image/jpeg' };
+    throw Error(`unexpected route: ${route}`);
+  };
+  const library = createMusicLibrary({ filePath, uuid: () => 'catalog-source', now: () => 123, catalogRequest });
+  assert.equal(library.list().schemaVersion, 2);
+  assert.equal(JSON.parse(fs.readFileSync(filePath, 'utf8')).schemaVersion, 2);
+  const added = await library.addCatalogSource({ name: '桌面聚合音乐', baseUrl: 'http://localhost:8080/music/' });
+  assert.equal(added.ok, true);
+  assert.equal(added.sourceId, 'catalog-catalog-source');
+  assert.equal(added.playlistId, '11');
+  assert.equal(added.sources.length, 2);
+  assert.deepEqual(added.playlists.map((item) => item.title), ['晨间歌单', '夜间歌单']);
+  assert.deepEqual(added.tracks.map((item) => [item.title, item.artist, item.provider, item.hasCover]), [['第一首', '歌手甲', 'netease', true]]);
+  const cover = await library.loadCover(added.tracks[0].id);
+  assert.equal(cover.ok, true);
+  assert.equal(cover.bytes.toString(), 'cover-image');
+  assert.equal(cover.mimeType, 'image/jpeg');
+  const playlistCover = await library.loadCover({ sourceId: 'catalog-catalog-source', playlistId: '11' });
+  assert.equal(playlistCover.ok, true);
+  assert.equal(playlistCover.bytes.toString(), 'cover-image');
+  assert.equal(JSON.stringify(added).includes('https://img.example.test/song-a.jpg'), false);
+  assert.equal(JSON.stringify(added).includes('quality'), false);
+
+  const categories = await library.browseOnlineCategories({ sourceId: 'catalog-catalog-source', platform: 'netease' });
+  assert.equal(categories.browser.activePlatform, 'netease');
+  assert.equal(categories.browser.categories[0].name, '华语');
+  const onlineSearch = await library.browseOnlineSearch({ sourceId: 'catalog-catalog-source', platform: 'netease', keyword: '精选' });
+  assert.equal(onlineSearch.browser.onlinePlaylists[0].title, '平台精选');
+  assert.equal(onlineSearch.playlists[0].title, '晨间歌单', 'online results do not replace my playlists');
+  const online = await library.browseOnlinePlaylist({ sourceId: 'catalog-catalog-source', platform: 'netease', playlistId: 'online-1', title: '平台精选' });
+  assert.equal(online.playlistId, 'online-netease-online-1');
+  assert.equal(online.playlists[0].title, '平台精选');
+  assert.equal(online.tracks[0].title, '在线歌曲');
+  assert.equal(online.tracks[0].provider, 'netease');
+  assert.equal(online.tracks[0].hasCover, true);
+
+  const switched = await library.selectPlaylist({ sourceId: 'catalog-catalog-source', playlistId: '22' });
+  assert.equal(switched.playlistId, '22');
+  assert.equal(switched.tracks[0].title, '第二首');
+  const loaded = await library.load(switched.tracks[0].id);
+  assert.equal(loaded.bytes.toString(), 'catalog-audio');
+  const downloadCall = calls.find((item) => item.route.startsWith('/download?'));
+  const downloadUrl = new URL(`http://loopback${downloadCall.route}`);
+  assert.equal(downloadUrl.searchParams.get('id'), 'song-b');
+  assert.equal(downloadUrl.searchParams.get('source'), 'qq');
+  assert.equal(downloadUrl.searchParams.get('stream'), '1');
+
+  const restored = createMusicLibrary({ filePath, catalogRequest }).list();
+  assert.equal(restored.sourceId, 'catalog-catalog-source');
+  assert.equal(restored.playlistId, '22');
+  assert.equal(restored.tracks[0].title, '第二首');
+  assert.equal(library.removeCatalogSource('catalog-catalog-source').sourceId, 'built-in');
+});
+
+test('go-music-dl requests stay on loopback and preserve the configured base path', async (t) => {
+  const paths = [];
+  const server = http.createServer((request, response) => {
+    paths.push(request.url);
+    if (request.url === '/music/healthz') {
+      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ app: 'go-music-dl', status: 'ok' })); return;
+    }
+    if (request.url === '/music/cover_proxy') {
+      response.setHeader('Content-Type', 'image/jpeg'); response.end('cover'); return;
+    }
+    response.statusCode = 302; response.setHeader('Location', 'http://example.com'); response.end();
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const address = server.address();
+  const health = await requestLoopbackCatalog(`http://localhost:${address.port}/music`, '/healthz');
+  assert.equal(health.status, 'ok');
+  assert.deepEqual(paths, ['/music/healthz']);
+  const image = await requestLoopbackCatalog(`http://127.0.0.1:${address.port}/music`, '/cover_proxy', { responseType: 'image', maxBytes: 32 });
+  assert.equal(image.mimeType, 'image/jpeg');
+  assert.equal(image.bytes.toString(), 'cover');
+  assert.deepEqual(paths, ['/music/healthz', '/music/cover_proxy']);
+  await assert.rejects(requestLoopbackCatalog(`http://127.0.0.1:${address.port}/music`, '/redirect'), /catalog_unavailable/);
+  await assert.rejects(requestLoopbackCatalog('http://example.com/music', '/healthz'), /invalid_catalog_url/);
 });
 
 test('chat preserves real roles and rejects system injection, oversized and unpaired history', () => {

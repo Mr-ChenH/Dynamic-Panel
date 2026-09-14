@@ -18,6 +18,11 @@ test('long answer outline ignores fenced code headings and normalizes markdown l
   ]);
   assert.equal(Reader.title('普通首行\n后续内容'), '普通首行');
   assert.equal(Reader.title('# **项目计划**\n正文'), '项目计划');
+
+  const trickyFence = Reader.headings('```md\n```not-a-close extra\n# 代码里的伪标题\n```\n# 正文标题');
+  assert.deepEqual(trickyFence, [{ level: 1, title: '正文标题' }]);
+  const malformedFence = Reader.headings('```md extra\n# 可见标题\n## 可见子标题');
+  assert.deepEqual(malformedFence, [{ level: 1, title: '可见标题' }, { level: 2, title: '可见子标题' }]);
 });
 
 test('todo extraction prefers an explicit bounded selection and never truncates', () => {
@@ -34,6 +39,8 @@ test('todo extraction prefers an explicit bounded selection and never truncates'
     scope: 'selection',
     length: 6,
   });
+  assert.equal(Reader.todoSource('  全文待办  ').text, '全文待办');
+  assert.equal(Reader.todoSource('  全文待办  ').scope, 'full');
   assert.equal(Reader.todoSource('正文', oversized).scope, 'selection');
   assert.equal(Reader.todoSource('正文', oversized).error, 'source_too_long');
   assert.equal(Reader.todoSource('  ').error, 'empty_source');

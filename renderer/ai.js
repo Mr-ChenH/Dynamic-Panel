@@ -25,6 +25,7 @@
   const applyMetadata = document.getElementById('ai-apply-metadata');
   const applyTodos = document.getElementById('ai-apply-todos');
   const closeButtons = [document.getElementById('ai-workspace-back'), document.getElementById('ai-workspace-close')];
+  let returnFocus = null;
   const actionNames = {
     summarize: '摘要文字', shorten: '精简文字', translate: '翻译文字',
     extractTodos: '从文字提取待办', organizeRecording: '整理录音',
@@ -154,6 +155,11 @@
   }
 
   function open(options = {}) {
+    if (root.hidden) {
+      const requested = options.returnFocus;
+      const active = requested instanceof HTMLElement ? requested : document.activeElement;
+      returnFocus = active instanceof HTMLElement && active !== document.body ? active : null;
+    }
     requestSequence += 1;
     const action = actionNames[options.action] ? options.action : 'summarize';
     const source = {
@@ -190,10 +196,13 @@
 
   async function close() {
     const closing = state;
+    const focusTarget = returnFocus;
+    returnFocus = null;
     requestSequence += 1;
     state = null;
     root.hidden = true;
     document.querySelectorAll('.panels, .topbar').forEach((node) => node.removeAttribute('inert'));
+    if (focusTarget?.isConnected && !focusTarget.closest('[inert]')) requestAnimationFrame(() => focusTarget.focus({ preventScroll: true }));
     if (closing?.requestId) await window.notchAPI?.cancelAI?.(closing.requestId).catch(() => {});
   }
 

@@ -796,6 +796,7 @@ if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
   window.notchAPI.onEscape(() => {
     if (window.NotchAI?.isOpen()) { window.NotchAI.close(); return; }
     if (window.NotchLauncher?.handleEscape()) return;
+    if (window.NotchChatReaderView?.handleEscape()) return;
     const el = document.activeElement;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
       el.blur();
