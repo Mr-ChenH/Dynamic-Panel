@@ -124,6 +124,15 @@ test('notes provide local-first creation, rich editing, and guarded image attach
   assert.doesNotMatch(appJs, /data:image\/[^;]+;base64[^\n]*localStorage/);
 });
 
+test('home recent notes show category and tag while keeping inactive scrolling unobtrusive', () => {
+  assert.match(html, /id="home-recent-summary"/);
+  assert.match(homeJs, /category\.tags\.find\(\(item\) => item\.id === note\.tagId\)/);
+  assert.match(homeJs, /className = 'home-note-tag'/);
+  assert.match(homeCss, /\.home-note-rows \{[^}]*scrollbar-color:\s*transparent transparent/);
+  assert.match(homeCss, /\.home-note-rows:hover, \.home-note-rows:focus-within/);
+  assert.match(homeCss, /\.home-note-rows:focus-within::-webkit-scrollbar-thumb/);
+});
+
 test('home and settings remove the mirror module completely', () => {
   assert.doesNotMatch(html, /home-mirror|mirror-stage|mirror-video|data-settings-home-module="mirror"/);
   assert.doesNotMatch(stylesCss, /home-mirror|mirror-stage|mirror-video|--home-mirror|镜子/);

@@ -48,6 +48,38 @@
     const small = document.createElement('small'); small.textContent = detail;
     button.append(strong, small); button.addEventListener('click', callback); return button;
   }
+  function notePreview(content) {
+    const preview = String(content || '')
+      .replace(/```[\s\S]*?```/g, '代码片段')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/[#>*_~`-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return preview ? preview.slice(0, 96) : '暂无正文内容';
+  }
+  function noteRow(note, category, tag) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'home-row home-note-row';
+    const head = document.createElement('span'); head.className = 'home-note-row-head';
+    const mark = document.createElement('span'); mark.className = 'home-note-mark'; mark.setAttribute('aria-hidden', 'true'); mark.textContent = '文';
+    const strong = document.createElement('strong'); strong.textContent = note.title || note.content?.split('\n')[0] || '未命名笔记';
+    const time = document.createElement('time');
+    const updatedAt = Number(note.updatedAt) || 0;
+    time.dateTime = updatedAt ? new Date(updatedAt).toISOString() : '';
+    time.textContent = updatedAt ? new Date(updatedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '刚刚';
+    head.append(mark, strong, time);
+    const preview = document.createElement('span'); preview.className = 'home-note-row-preview'; preview.textContent = notePreview(note.content);
+    const meta = document.createElement('span'); meta.className = 'home-note-row-meta';
+    const categoryLabel = document.createElement('span'); categoryLabel.className = 'home-note-category'; categoryLabel.textContent = category || '未分类';
+    meta.append(categoryLabel);
+    if (tag) {
+      const tagLabel = document.createElement('span'); tagLabel.className = 'home-note-tag'; tagLabel.textContent = tag;
+      meta.append(tagLabel);
+    }
+    button.append(head, preview, meta);
+    button.addEventListener('click', () => navigate({ tab: 'notes', id: note.id }));
+    return button;
+  }
   function empty(target, text) { const p = document.createElement('p'); p.className = 'home-hint'; p.textContent = text; target.append(p); }
   function refreshLists() {
     const notes = window.NotchNotes?.list?.() || [];
@@ -56,9 +88,13 @@
     if (next === signature) return;
     signature = next;
     const recent = $('home-recent-list'); recent.replaceChildren();
+    setText($('home-recent-summary'), notes.length
+      ? notes.length > 5 ? `最近编辑 ${Math.min(notes.length, 5)} 篇 · 共 ${notes.length} 篇` : `最近编辑 ${notes.length} 篇`
+      : '还没有笔记');
     notes.slice().sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5).forEach((note) => {
-      const category = Array.isArray(categories) ? categories.find((item) => item.id === note.categoryId)?.name : '';
-      recent.append(row(note.title || note.content?.split('\n')[0] || '未命名笔记', `${category || '未分类'} · ${new Date(note.updatedAt).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`, () => navigate({ tab: 'notes', id: note.id })));
+      const category = Array.isArray(categories) ? categories.find((item) => item.id === note.categoryId) : null;
+      const tag = Array.isArray(category?.tags) ? category.tags.find((item) => item.id === note.tagId)?.name : '';
+      recent.append(noteRow(note, category?.name, tag));
     });
     if (!recent.children.length) empty(recent, '保存第一篇笔记，稍后从这里继续');
     const today = $('home-today-list'); today.replaceChildren();
