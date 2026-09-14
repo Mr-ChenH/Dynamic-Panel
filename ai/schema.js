@@ -125,6 +125,14 @@ function parseObject(value) {
   }
 }
 
+function normalizeTags(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.map((item) => cleanLine(String(item || '').replace(/^#/, ''), 16))
+    .filter((tag) => tag && !seen.has(tag.toLocaleLowerCase()) && seen.add(tag.toLocaleLowerCase()))
+    .slice(0, 6);
+}
+
 function normalizeEvidence(value, sourceText) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const quote = cleanText(value.quote, 500);
@@ -154,7 +162,8 @@ function normalizeResponse(action, content, sourceText) {
   if (action === 'nameNote' || action === 'nameRecording' || action === 'nameLink') {
     const title = cleanLine(parsed.title, action === 'nameLink' ? 80 : 48);
     const category = cleanLine(parsed.category, action === 'nameLink' ? 14 : 24);
-    return title ? { ok: true, kind: 'metadata', title, category } : { ok: false, error: 'invalid_response' };
+    const tags = action === 'nameLink' ? normalizeTags(parsed.tags) : [];
+    return title ? { ok: true, kind: 'metadata', title, category, tags } : { ok: false, error: 'invalid_response' };
   }
   const rawTodos = Array.isArray(parsed.todos) ? parsed.todos : [];
   if (rawTodos.length > MAX_TODOS) return { ok: false, error: 'too_many_todos' };

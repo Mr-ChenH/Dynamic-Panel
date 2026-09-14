@@ -58,6 +58,59 @@
     return matched ? matched[0] : '其他';
   }
 
+  function normalizeLinkTags(value, max = 8) {
+    const source = Array.isArray(value) ? value : String(value || '').split(/[，,\n]/);
+    const seen = new Set();
+    return source.map((item) => String(item || '').replace(/^#/, '').replace(/\s+/g, ' ').trim().slice(0, 24))
+      .filter((tag) => tag && !seen.has(tag.toLocaleLowerCase()) && seen.add(tag.toLocaleLowerCase()))
+      .slice(0, Math.max(1, Math.floor(Number(max) || 8)));
+  }
+
+  function parseLinkQuery(value) {
+    const filters = { tags: [], domains: [], groups: [], favorite: null, read: null, before: 0, after: 0 };
+    const terms = [];
+    const tokens = String(value || '').match(/(?:[^\s"]+:"[^"]*"|[^\s]+)/g) || [];
+    tokens.forEach((raw) => {
+      const token = raw.trim();
+      const separator = token.indexOf(':');
+      if (separator <= 0) { if (token) terms.push(token); return; }
+      const key = token.slice(0, separator).toLocaleLowerCase();
+      const item = token.slice(separator + 1).replace(/^\"|\"$/g, '').trim();
+      if (!item) { terms.push(token); return; }
+      if (key === 'tag') filters.tags.push(item.toLocaleLowerCase());
+      else if (key === 'domain') filters.domains.push(item.toLocaleLowerCase().replace(/^www\./, ''));
+      else if (key === 'in' || key === 'group' || key === 'collection') filters.groups.push(item.toLocaleLowerCase());
+      else if (key === 'is' && ['favorite', 'favourite', 'fav', 'starred'].includes(item.toLocaleLowerCase())) filters.favorite = true;
+      else if (key === 'is' && ['unread', 'later', 'to-read'].includes(item.toLocaleLowerCase())) filters.read = false;
+      else if (key === 'is' && ['read', 'done'].includes(item.toLocaleLowerCase())) filters.read = true;
+      else if (key === 'before' || key === 'after') {
+        const timestamp = Date.parse(item);
+        if (Number.isFinite(timestamp)) filters[key] = timestamp;
+        else terms.push(token);
+      } else terms.push(token);
+    });
+    return { terms, filters };
+  }
+
+  function linkMatchesQuery(link, group, query) {
+    const parsed = typeof query === 'string' ? parseLinkQuery(query) : query;
+    const item = link && typeof link === 'object' ? link : {};
+    const groupName = String(group && group.name || '').toLocaleLowerCase();
+    const tags = normalizeLinkTags(item.tags).map((tag) => tag.toLocaleLowerCase());
+    const haystack = `${groupName} ${item.title || ''} ${item.url || ''} ${item.description || ''} ${item.note || ''} ${tags.join(' ')}`.toLocaleLowerCase();
+    if (!parsed.terms.every((term) => haystack.includes(term.toLocaleLowerCase()))) return false;
+    if (parsed.filters.tags.some((tag) => !tags.includes(tag))) return false;
+    const hostname = linkHostname(item.url).replace(/^www\./, '');
+    if (parsed.filters.domains.some((domain) => hostname !== domain && !hostname.endsWith(`.${domain}`))) return false;
+    if (parsed.filters.groups.length && !parsed.filters.groups.some((groupFilter) => groupName.includes(groupFilter))) return false;
+    if (parsed.filters.favorite !== null && item.favorite !== parsed.filters.favorite) return false;
+    if (parsed.filters.read !== null && (item.read === true) !== parsed.filters.read) return false;
+    const createdAt = Number(item.createdAt) || 0;
+    if (parsed.filters.before && (!createdAt || createdAt >= parsed.filters.before)) return false;
+    if (parsed.filters.after && (!createdAt || createdAt <= parsed.filters.after)) return false;
+    return true;
+  }
+
   function addLinkToGroups(groups, link, category) {
     const source = Array.isArray(groups) ? groups : [];
     const groupName = String(category || '').trim() || '其他';
@@ -1177,6 +1230,9 @@
     classifyLink,
     addLinkToGroups,
     preferredLinkGroupId,
+    normalizeLinkTags,
+    parseLinkQuery,
+    linkMatchesQuery,
     moveLinkToGroup,
     moveLinkToPosition,
     renameGroup,

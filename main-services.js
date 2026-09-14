@@ -148,6 +148,10 @@ function extractPageTitle(html, fallback) {
   return cleanTitle(ogTitle || (titleMatch && titleMatch[1]) || fallback) || String(fallback || '未命名链接');
 }
 
+function extractPageDescription(html) {
+  return cleanTitle(extractMetaContent(html, 'og:description') || extractMetaContent(html, 'description')).slice(0, 500);
+}
+
 function extractFaviconHref(html) {
   const tags = String(html || '').match(/<link\b[^>]*>/gi) || [];
   for (const tag of tags) {
@@ -552,6 +556,7 @@ module.exports = {
   isPrivateAddress,
   decodeHtmlEntities,
   extractPageTitle,
+  extractPageDescription,
   extractFaviconHref,
   recordingExtension,
   normalizeWindowRows,

@@ -43,6 +43,9 @@ const {
   todoTimeScopeCounts,
   defaultTodoDeadlineForScope,
   preferredLinkGroupId,
+  normalizeLinkTags,
+  parseLinkQuery,
+  linkMatchesQuery,
   moveLinkToGroup,
   moveLinkToPosition,
   filterCredentials,
@@ -162,6 +165,17 @@ test('classifyLink maps familiar services and falls back to 其他', () => {
   assert.equal(classifyLink('https://www.feishu.cn/', '飞书'), '工作');
   assert.equal(classifyLink('https://www.bilibili.com/video/1', '视频'), '影音');
   assert.equal(classifyLink('https://example.com/', 'Example Domain'), '其他');
+});
+
+test('link queries support tags, domains, state and date operators', () => {
+  const query = parseLinkQuery('tag:"AI tools" domain:github.com is:unread in:开发 after:2025-01-01');
+  assert.deepEqual(query.filters, { tags: ['ai tools'], domains: ['github.com'], groups: ['开发'], favorite: null, read: false, before: 0, after: Date.parse('2025-01-01') });
+  assert.deepEqual(normalizeLinkTags([' AI ', 'ai', '#工具', '']), ['AI', '工具']);
+  const link = { url: 'https://github.com/openai/codex', title: 'Codex', tags: ['AI tools', '开发'], favorite: true, read: false, description: 'AI tools', createdAt: Date.parse('2025-02-01') };
+  assert.equal(linkMatchesQuery(link, { name: '开发' }, query), true);
+  assert.equal(linkMatchesQuery({ ...link, read: true }, { name: '开发' }, query), false);
+  assert.equal(linkMatchesQuery(link, { name: '其他' }, 'is:favorite domain:github.com'), true);
+  assert.equal(linkMatchesQuery(link, { name: '其他' }, 'tag:missing'), false);
 });
 
 test('addLinkToGroups reuses a matching group and creates a missing group', () => {

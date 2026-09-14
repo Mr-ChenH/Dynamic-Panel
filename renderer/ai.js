@@ -15,6 +15,8 @@
   const metadataResult = document.getElementById('ai-metadata-result');
   const metadataTitle = document.getElementById('ai-metadata-title');
   const metadataCategory = document.getElementById('ai-metadata-category');
+  const metadataTags = document.getElementById('ai-metadata-tags');
+  const metadataTagsLabel = document.getElementById('ai-metadata-tags-label');
   const todoResults = document.getElementById('ai-todo-results');
   const status = document.getElementById('ai-workspace-status');
   const generate = document.getElementById('ai-generate');
@@ -29,7 +31,7 @@
   const actionNames = {
     summarize: '摘要文字', shorten: '精简文字', translate: '翻译文字',
     extractTodos: '从文字提取待办', organizeRecording: '整理录音',
-    nameNote: '生成笔记标题', nameRecording: '生成录音名称', nameLink: '生成链接名称',
+    nameNote: '生成笔记标题', nameRecording: '生成录音名称', nameLink: '整理链接信息',
   };
   const errorMessages = {
     not_configured: '尚未配置内容整理服务，请前往“设置 → AI 与转写”。',
@@ -104,6 +106,8 @@
     metadataResult.hidden = true;
     metadataTitle.value = '';
     metadataCategory.value = '';
+    metadataTags.value = '';
+    metadataTagsLabel.hidden = true;
     applyMetadata.hidden = true;
     applyMetadata.disabled = false;
     applyMetadata.textContent = '采用名称';
@@ -300,7 +304,7 @@
       copy.hidden = false; saveNote.hidden = false;
       replaceSelection.hidden = !(state.source.sourceType === 'note' && state.source.selection && ['shorten', 'translate'].includes(state.action) && !/!\[[^\]]*\]\([^)]+\)/.test(state.source.text));
     } else if (result.kind === 'metadata') {
-      empty.hidden = true; metadataResult.hidden = false; metadataTitle.value = result.title; metadataCategory.maxLength = state.action === 'nameLink' ? 14 : 24; metadataCategory.value = result.category || ''; metadataCategory.closest('label').hidden = state.action === 'nameNote'; applyMetadata.hidden = false;
+      empty.hidden = true; metadataResult.hidden = false; metadataTitle.value = result.title; metadataCategory.maxLength = state.action === 'nameLink' ? 14 : 24; metadataCategory.value = result.category || ''; metadataCategory.closest('label').hidden = state.action === 'nameNote'; metadataTagsLabel.hidden = state.action !== 'nameLink'; metadataTags.value = Array.isArray(result.tags) ? result.tags.join(', ') : ''; applyMetadata.textContent = state.action === 'nameLink' ? '采用整理结果' : '采用名称'; applyMetadata.hidden = false;
     } else if (result.kind === 'todos') {
       renderTodos(result.todos);
     } else if (result.kind === 'recording') {
@@ -422,14 +426,14 @@
         : await window.NotchWorkspace?.undoAIName?.(state.metadataUndo);
       if (state !== session) return;
       if (!result?.ok) { setStatus('名称已被继续修改，无法自动撤销。', 'error'); return; }
-      state.metadataUndo = null; applyMetadata.textContent = '采用名称'; generate.disabled = false;
+      state.metadataUndo = null; applyMetadata.textContent = state.action === 'nameLink' ? '采用整理结果' : '采用名称'; generate.disabled = false;
       setStatus(result.workspaceSynced === false ? '已在本机撤销；工作区同步失败，将自动重试。' : '已撤销名称修改。', result.workspaceSynced === false ? 'error' : 'success');
       return;
     }
     if (!sourceStillCurrent()) { setStatus('来源已变化，未采用名称。请重新生成。', 'error'); return; }
     const result = state.source.sourceType === 'note'
       ? await window.NotchNotes?.applyAIName?.(state.source.sourceId, state.source.text, state.source.sourceTitle, metadataTitle.value)
-      : await window.NotchWorkspace?.applyAIName?.(state.source, metadataTitle.value, metadataCategory.value);
+      : await window.NotchWorkspace?.applyAIName?.(state.source, metadataTitle.value, metadataCategory.value, metadataTags.value);
     if (state !== session) return;
     if (!result?.ok) { setStatus(result?.error === 'source_changed' ? '名称或来源已经变化，未覆盖。' : '名称保存失败。', 'error'); return; }
     state.metadataUndo = result.undo; applyMetadata.textContent = '撤销采用'; generate.disabled = true;

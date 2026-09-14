@@ -6,6 +6,7 @@ const {
   parseNoteImageReference,
   isPrivateAddress,
   extractPageTitle,
+  extractPageDescription,
   extractFaviconHref,
   recordingExtension,
   normalizeWindowRows,
@@ -214,6 +215,12 @@ test('extractPageTitle prefers og:title and decodes HTML entities', () => {
   assert.equal(extractPageTitle(html, 'example.com'), 'OpenAI & Friends');
   assert.equal(extractPageTitle('<title>  Docs &mdash; Home  </title>', 'example.com'), 'Docs — Home');
   assert.equal(extractPageTitle('<html></html>', 'example.com'), 'example.com');
+});
+
+test('page metadata includes a bounded description for link organization', () => {
+  assert.equal(extractPageDescription('<meta name="description" content="  A useful guide &amp; notes  ">'), 'A useful guide & notes');
+  assert.equal(extractPageDescription('<meta property="og:description" content="Open graph summary">'), 'Open graph summary');
+  assert.equal(extractPageDescription('<meta name="description" content="">'), '');
 });
 
 test('favicon and smart material metadata are normalized safely', () => {

@@ -450,20 +450,42 @@
 
           <section id="tab-links" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-links" aria-hidden="true" inert>
             <div class="links-page">
-              <div class="links-toolbar">
-                <div class="link-add-wrap">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M9 12h6M12 9v6" /></svg>
-                  <input id="link-add" type="text" placeholder="粘贴网址并回车，自动读取标题与分类…" autocomplete="off" spellcheck="false" />
-                </div>
-                <button class="bulk-delete" id="link-bulk-delete" type="button" hidden>删除</button>
+              <div class="links-layout">
+                <aside class="links-sidebar" aria-label="链接库导航">
+                  <div class="links-sidebar-head"><span class="tile-label">资料导航</span><strong>链接库</strong></div>
+                  <nav class="links-sidebar-nav" aria-label="链接状态">
+                    <button type="button" class="active" data-links-sidebar-view="all"><span>全部链接</span><b id="links-sidebar-total">0</b></button>
+                    <button type="button" data-links-sidebar-view="unread"><span>未读</span><b id="links-sidebar-unread">0</b></button>
+                    <button type="button" data-links-sidebar-view="favorite"><span>收藏</span><b id="links-sidebar-favorite">0</b></button>
+                    <button type="button" data-links-sidebar-view="read"><span>已读</span><b id="links-sidebar-read">0</b></button>
+                  </nav>
+                  <div class="links-sidebar-section"><div class="links-sidebar-section-head"><span>分组</span><small>GROUPS</small></div><div class="links-sidebar-list" id="links-sidebar-groups"></div></div>
+                  <div class="links-sidebar-section"><div class="links-sidebar-section-head"><span>标签</span><small>TAGS</small></div><div class="links-sidebar-list" id="links-sidebar-tags"></div></div>
+                </aside>
+                <main class="links-main">
+                  <header class="links-page-head">
+                    <div class="links-page-title">
+                      <span class="tile-label">本地链接库</span>
+                      <div><h1>全部链接</h1><span class="links-page-subtitle" id="links-page-subtitle">本地资料</span></div>
+                    </div>
+                    <div class="links-page-stat"><strong id="links-result-count" role="status" aria-live="polite">0 / 0</strong><span>当前结果</span></div>
+                  </header>
+                  <div class="links-capture-bar">
+                    <div class="link-add-wrap">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 7 20l1.1-1.1"/></svg>
+                      <input id="link-add" type="text" placeholder="粘贴网址并回车，加入链接库" autocomplete="off" spellcheck="false" />
+                    </div>
+                    <button class="links-capture-submit" id="links-add-submit" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>收藏</span></button>
+                    <button class="bulk-delete" id="link-bulk-delete" type="button" hidden>删除</button>
+                  </div>
+                  <div class="links-browser-toolbar">
+                    <label class="links-search-wrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg><input id="links-search" type="search" placeholder="搜索标题、网址、描述或标签" aria-label="搜索已收藏链接" autocomplete="off" /></label>
+                    <div class="links-filter-group"><select id="links-view-filter" aria-label="筛选链接状态"><option value="all">全部状态</option><option value="unread">未读</option><option value="favorite">收藏</option><option value="read">已读</option></select><select id="links-group-filter" aria-label="筛选链接分组"><option value="">全部分组</option></select><select id="links-tag-filter" aria-label="筛选链接标签"><option value="">全部标签</option></select></div>
+                    <button id="links-collapse-all" type="button" class="workspace-button compact">全部折叠</button>
+                  </div>
+                  <div class="link-groups" id="link-groups"></div>
+                </main>
               </div>
-              <div class="links-browser-toolbar">
-                <input id="links-search" type="search" placeholder="搜索标题、网址或分组…" aria-label="搜索已收藏链接" autocomplete="off" />
-                <select id="links-group-filter" aria-label="筛选链接分组"><option value="">全部分组</option></select>
-                <span id="links-result-count" role="status" aria-live="polite"></span>
-                <button id="links-collapse-all" type="button" class="workspace-button compact">全部折叠</button>
-              </div>
-              <div class="link-groups" id="link-groups"></div>
             </div>
           </section>
 
@@ -623,7 +645,7 @@
                           <div class="ai-auto-settings">
                             <label><span>笔记自动命名</span><input id="ai-auto-name-notes" type="checkbox" /></label>
                             <label><span>录音自动命名与分类</span><input id="ai-auto-name-recordings" type="checkbox" /></label>
-                            <label><span>链接智能命名与分类</span><input id="ai-auto-organize-links" type="checkbox" /></label>
+                            <label><span>链接 AI 整理名称、分类与标签</span><input id="ai-auto-organize-links" type="checkbox" /></label>
                           </div>
                           <div class="api-settings-divider"><span>请求诊断</span><small>不记录正文、引用或密钥</small></div>
                           <div class="ai-diagnostics" id="ai-diagnostics"><p>暂无请求记录</p></div>
@@ -720,7 +742,7 @@
             <div><span class="tile-label" id="ai-workspace-source">手动输入</span><strong id="ai-workspace-title">AI 整理</strong></div>
             <button class="ai-icon-button" id="ai-workspace-close" type="button" aria-label="关闭"><span aria-hidden="true">×</span></button>
           </header>
-          <div class="ai-workspace-meta"><span id="ai-workspace-meta"></span><label>操作<select id="ai-action-select"><option value="summarize">摘要</option><option value="shorten">精简</option><option value="translate">翻译</option><option value="extractTodos">提取待办</option><option value="organizeRecording">整理录音</option><option value="nameNote" hidden>生成笔记标题</option><option value="nameRecording" hidden>生成录音名称</option><option value="nameLink" hidden>生成链接名称</option></select></label><label id="ai-language-label" hidden>目标语言<select id="ai-target-language"><option value="中文">中文</option><option value="English">English</option></select></label></div>
+          <div class="ai-workspace-meta"><span id="ai-workspace-meta"></span><label>操作<select id="ai-action-select"><option value="summarize">摘要</option><option value="shorten">精简</option><option value="translate">翻译</option><option value="extractTodos">提取待办</option><option value="organizeRecording">整理录音</option><option value="nameNote" hidden>生成笔记标题</option><option value="nameRecording" hidden>生成录音名称</option><option value="nameLink" hidden>整理链接信息</option></select></label><label id="ai-language-label" hidden>目标语言<select id="ai-target-language"><option value="中文">中文</option><option value="English">English</option></select></label></div>
           <main class="ai-workspace-body">
             <section class="ai-input-pane" id="ai-input-pane">
               <div class="ai-section-head"><strong>原文</strong><span id="ai-character-count">0 / 12000 字符</span></div>
@@ -729,7 +751,7 @@
             <section class="ai-result-pane" id="ai-result-pane" aria-live="polite">
               <div class="ai-empty-result" id="ai-empty-result"><strong>生成结果会显示在这里</strong><span>结果不会自动保存，你可以先检查和修改。</span></div>
               <textarea class="ai-text-result" id="ai-text-result" hidden aria-label="可编辑的生成结果"></textarea>
-              <section class="ai-metadata-result" id="ai-metadata-result" hidden><label>名称<input id="ai-metadata-title" maxlength="80" /></label><label>分类<input id="ai-metadata-category" maxlength="24" /></label></section>
+              <section class="ai-metadata-result" id="ai-metadata-result" hidden><label>名称<input id="ai-metadata-title" maxlength="80" /></label><label>分类<input id="ai-metadata-category" maxlength="24" /></label><label id="ai-metadata-tags-label" hidden>标签<input id="ai-metadata-tags" maxlength="180" placeholder="标签，用逗号分隔" /></label></section>
               <div class="ai-todo-results" id="ai-todo-results" hidden></div>
             </section>
           </main>

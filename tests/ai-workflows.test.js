@@ -106,6 +106,13 @@ test('AI recording response validates decisions and todos against source', () =>
   assert.equal(result.todos.length, 1);
 });
 
+test('AI link metadata accepts bounded unique tags', () => {
+  const result = normalizeResponse('nameLink', JSON.stringify({ title: '开发工具', category: '开发', tags: ['AI', '#AI', '代码', 'x'.repeat(30), '学习', '产品', '第七个'] }), 'URL: https://example.com\n网页标题: 工具');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.tags, ['AI', '代码', 'xxxxxxxxxxxxxxxx', '学习', '产品', '第七个']);
+  assert.match(actionPrompt(request({ action: 'nameLink', context: { sourceType: 'link', text: 'URL: https://example.com\n网页标题: 工具\n网页描述: 开发工具' } })).system, /标签/);
+});
+
 test('AI service runs through compatible provider and reports usage', async () => {
   let body, diagnostic;
   const events = [];

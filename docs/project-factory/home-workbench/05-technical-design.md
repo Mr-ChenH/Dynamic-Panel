@@ -5,6 +5,7 @@
 
 ## 文件与接口
 - renderer/home.js / home.css：独立首页控制器，局部更新列表，编辑框不随轮询重建。
+- renderer/workspace.js / domain.js：链接保留旧 `notch-link-groups` 结构并向记录追加描述、标签、收藏、已读、备注和时间戳；搜索支持普通关键词与 `tag:`、`domain:`、`is:`、`in:`、`before:`、`after:` 操作。
 - home-services.js：天气固定 HTTPS API 请求与缓存。home-media.js：以兼容迁移的 schema v2 持久化 `music-library.json`，管理本地/网络曲目、音乐源、歌单、当前队列、去重、路径与 URL 校验、有界读取/下载以及公开元数据映射。go-music-dl adapter 读取 `/healthz`、`/collections?include_imported=1`、`/collections/:id/songs`，并通过 `/api/playlist/sources`、`/api/playlist/categories`、`/api/playlist/recommend`、`/api/playlist/user`、`/api/playlist/search`、`/api/playlist/category`、`/api/playlist/songs` 浏览平台在线歌单和个人收藏夹，最后通过 `/download?stream=1` 取得音频。
 - preload.js / main.js：天气使用 `home:weather-search` / `home:weather`；音乐除原有 `home:music-library` / `home:music-mode` / `home:music-choose-files` / `home:music-add-network` / `home:music-remove` / `home:music-load` 外，增加 `home:music-select-playlist` / `home:music-refresh-source` / `home:music-add-source` / `home:music-remove-source` / `home:music-browse-categories` / `home:music-search-playlists` / `home:music-browse-category` / `home:music-browse-recommend` / `home:music-browse-user-playlists` / `home:music-select-online-playlist`。渲染层通过 `<audio>` 和 Blob URL 播放，不接触本地路径、网络直链或聚合源实际播放 URL。
 - `renderer/chat-context.js` / `renderer/chat-sessions.js` / `renderer/chat-reader.js` / `ai/schema.js` / `prompts.js` / `service.js`：共享资料规范、消息封装、工作区会话 schema，以及长回答资格、标题大纲和待办来源边界；chat 使用有界 role/content 历史，OpenAI 与 Anthropic 适配均传递真实角色消息。

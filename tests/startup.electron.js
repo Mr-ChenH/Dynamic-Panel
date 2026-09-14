@@ -10,7 +10,7 @@ if (process.platform === 'darwin') app.commandLine.appendSwitch('use-mock-keycha
 fs.writeFileSync(path.join(profile, 'transcription-settings.json'), JSON.stringify({ llmBaseUrl:'https://api.deepseek.com', llmModel:'deepseek-v4-flash' }));
 fs.writeFileSync(path.join(profile, 'workspace.json'), JSON.stringify({version:1, localStorage:{
   'notch-home-note':'Recovered workspace note',
-  'notch-link-groups':JSON.stringify([{id:'large-links',name:'Research',collapsed:false,links:Array.from({length:125},(_,i)=>({id:'large-link-'+i,title:'Research document '+i,url:'https://example.com/document/'+i,icon:''}))}]),
+  'notch-link-groups':JSON.stringify([{id:'large-links',name:'Research',collapsed:false,links:Array.from({length:125},(_,i)=>({id:'large-link-'+i,title:'Research document '+i,url:'https://example.com/document/'+i,description:i<5?'A concise research reference with implementation notes and practical examples.':'',tags:i<5?['Research',i%2?'Reading':'AI']:[],favorite:i%10===0,read:i%3===0,icon:''}))}]),
   'notch-launcher-favorites-v1': JSON.stringify(['command:migrated']),
   'notch-launcher-aliases-v1': JSON.stringify({ 'command:migrated': 'restored-alias' }),
   'notch-recordings':JSON.stringify([{id:'startup-recording',createdAt:1788709776699,durationMs:1558,transcript:'',audioPath:'recordings/retained.webm',mimeType:'audio/webm',title:'Saved recording',category:'未分类'}]),
@@ -478,7 +478,7 @@ app.on('web-contents-created', (_event, contents) => {
           const count=()=>document.querySelectorAll('#link-groups .link-item').length;
           const original=localStorage.getItem('notch-link-groups');
           const scroller=document.querySelector('.link-list');
-          const independentScroll=getComputedStyle(scroller).overflowY==='auto'&&getComputedStyle(scroller).overscrollBehaviorY==='contain';
+          const chainableScroll=getComputedStyle(scroller).overflowY==='auto'&&getComputedStyle(scroller).overscrollBehaviorY==='auto';
           const section=document.querySelector('.link-group'),outer=document.getElementById('link-groups');
           const top=section.getBoundingClientRect().top,outerScroll=outer.scrollTop;
           scroller.scrollTop=100;
@@ -493,9 +493,9 @@ app.on('web-contents-created', (_event, contents) => {
           document.getElementById('links-collapse-all').click();const folded=count();
           search.value='document 124';search.dispatchEvent(new Event('input'));const searchesFolded=count()===1;
           search.value='';search.dispatchEvent(new Event('input'));document.getElementById('links-collapse-all').click();
-          return {initial,loaded,filtered,targetFound,unchanged,empty,located,folded,searchesFolded,independentScroll,stationary};
+          return {initial,loaded,filtered,targetFound,unchanged,empty,located,folded,searchesFolded,chainableScroll,stationary};
         })()`);
-        assert.deepEqual(largeLinks,{initial:40,loaded:80,filtered:1,targetFound:true,unchanged:true,empty:true,located:true,folded:0,searchesFolded:true,independentScroll:true,stationary:true});
+        assert.deepEqual(largeLinks,{initial:40,loaded:80,filtered:1,targetFound:true,unchanged:true,empty:true,located:true,folded:0,searchesFolded:true,chainableScroll:true,stationary:true});
         const linkNaming=await contents.executeJavaScript(`(async()=>{const before=window.NotchWorkspace.linkContext('large-link-124');window.NotchAI.openLinkName('large-link-124');document.getElementById('ai-generate').click();let deadline=performance.now()+1500;while(document.getElementById('ai-metadata-result').hidden&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,20));const apply=document.getElementById('ai-apply-metadata');apply.click();await new Promise(resolve=>setTimeout(resolve,30));const actualTitle=window.NotchWorkspace.linkContext('large-link-124')?.sourceTitle,status=document.getElementById('ai-workspace-status').textContent;const named=actualTitle==='AI 生成名称';apply.click();await new Promise(resolve=>setTimeout(resolve,30));const restored=window.NotchWorkspace.linkContext('large-link-124')?.sourceTitle===before.sourceTitle;await window.NotchAI.close();return {named,restored,actualTitle,status};})()`);
         assert.equal(linkNaming.named,true,JSON.stringify(linkNaming));assert.equal(linkNaming.restored,true,JSON.stringify(linkNaming));
         const moduleLayouts=await contents.executeJavaScript(`(async()=>{
@@ -519,6 +519,17 @@ app.on('web-contents-created', (_event, contents) => {
             if(tab==='recordings'){
               const detail=panel.querySelector('.recording-detail');
               if(detail&&getComputedStyle(detail).overflowY!=='auto')failures.push('recordings:no-scroll');
+            }
+            if(tab==='links'){
+              const sidebar=panel.querySelector('.links-sidebar'),main=panel.querySelector('.links-main');
+              const sidebarBounds=sidebar.getBoundingClientRect(),mainBounds=main.getBoundingClientRect();
+              if(sidebarBounds.right>mainBounds.left+1)failures.push('links:pane-overlap');
+              const favorite=panel.querySelector('[data-links-sidebar-view="favorite"]');favorite.click();await new Promise(resolve=>requestAnimationFrame(resolve));
+              if(!favorite.classList.contains('active')||document.getElementById('links-result-count').textContent!=='13 / 125')failures.push('links:favorite-filter');
+              panel.querySelector('[data-links-sidebar-view="all"]').click();await new Promise(resolve=>requestAnimationFrame(resolve));
+              sidebar.scrollTop=0;panel.querySelector('[data-links-sidebar-group]').dispatchEvent(new WheelEvent('wheel',{deltaY:90,bubbles:true,cancelable:true}));
+              if(sidebar.scrollHeight>sidebar.clientHeight&&sidebar.scrollTop<=0)failures.push('links:sidebar-wheel');
+              const linkList=panel.querySelector('.link-list');if(linkList&&getComputedStyle(linkList).overscrollBehaviorY==='contain')failures.push('links:wheel-chain');
             }
             if(tab==='notes'){
               const actions=panel.querySelector('.notes-detail-actions');

@@ -50,6 +50,7 @@ const {
   parseNoteImageReference,
   isPrivateAddress,
   extractPageTitle,
+  extractPageDescription,
   recordingExtension,
   normalizeWindowRows,
   todoReminderState,
@@ -1968,11 +1969,11 @@ async function fetchFaviconDataUrl(pageUrl, html) {
   }
 }
 
-async function enrichLinkMetadata(url, title, ownerId = 'link-metadata') {
+async function enrichLinkMetadata(url, title, description = '', ownerId = 'link-metadata') {
   const settings = readStoredTranscriptionSettings();
   const config = resolveLlmConfig();
-  if (settings.autoOrganizeLinks !== true || !config.apiKey || !config.model || !aiModelService) return { title, category: '' };
-  const sourceText = `URL: ${url}\n网页标题: ${title}`;
+  if (settings.autoOrganizeLinks !== true || !config.apiKey || !config.model || !aiModelService) return { title, category: '', tags: [] };
+  const sourceText = `URL: ${url}\n网页标题: ${title}${description ? `\n网页描述: ${description}` : ''}`;
   const result = await aiModelService.run(ownerId, {
     requestId: `link-${crypto.randomUUID()}`,
     action: 'nameLink',
@@ -1981,7 +1982,7 @@ async function enrichLinkMetadata(url, title, ownerId = 'link-metadata') {
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     categories: {},
   });
-  return result?.ok ? { title: result.title || title, category: result.category || '' } : { title, category: '' };
+  return result?.ok ? { title: result.title || title, category: result.category || '', tags: Array.isArray(result.tags) ? result.tags : [] } : { title, category: '', tags: [] };
 }
 
 async function inspectLink(rawUrl, ownerId) {
@@ -2029,18 +2030,19 @@ async function inspectLink(rawUrl, ownerId) {
     const fallback = current.hostname.replace(/^www\./, '');
     if (!response.ok || (!contentType.includes('text/html') && !contentType.includes('xhtml'))) {
       const [smart, icon] = await Promise.all([
-        enrichLinkMetadata(current.toString(), fallback, ownerId),
+        enrichLinkMetadata(current.toString(), fallback, '', ownerId),
         fetchFaviconDataUrl(current.toString(), ''),
       ]);
-      return { ok: true, url: current.toString(), title: smart.title || '未命名', category: smart.category, icon };
+      return { ok: true, url: current.toString(), title: smart.title || '未命名', category: smart.category, description: '', tags: smart.tags || [], icon };
     }
     const html = await readResponseText(response);
     const pageTitle = extractPageTitle(html, fallback);
+    const description = extractPageDescription(html);
     const [smart, icon] = await Promise.all([
-      enrichLinkMetadata(current.toString(), pageTitle, ownerId),
+      enrichLinkMetadata(current.toString(), pageTitle, description, ownerId),
       fetchFaviconDataUrl(current.toString(), html),
     ]);
-    return { ok: true, url: current.toString(), title: smart.title, category: smart.category, icon };
+    return { ok: true, url: current.toString(), title: smart.title, category: smart.category, description, tags: smart.tags || [], icon };
   }
   return { ok: false, error: 'too_many_redirects' };
 }
