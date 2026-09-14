@@ -244,6 +244,61 @@ async function main() {
     assert.equal(notesWorkspaceAudit.deletedNoteId, notesWorkspaceAudit.noteId);
     assert.equal(notesWorkspaceAudit.remaining, 0);
 
+    window.setSize(1280, 700);
+    window.setAlwaysOnTop(true);
+    window.show();
+    window.focus();
+    window.webContents.focus();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await window.webContents.executeJavaScript(`
+      (async () => {
+        const appRoot = document.getElementById('app');
+        appRoot.classList.remove('collapsed');
+        appRoot.classList.add('expanded');
+        applyTabDom('notes');
+        document.getElementById('notes-new').click();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const editor = document.getElementById('notes-editor');
+        editor.value = '项目内容';
+        editor.setSelectionRange(0, 0);
+        editor.focus();
+        editor.focus = function focusForTest() { this.dataset.focusRequested = 'true'; };
+        return { exists: !!editor, hidden: editor.hidden, inert: editor.closest('.tab-panel')?.inert, active: document.activeElement?.id };
+      })()
+    `);
+    const noteTabResult = await window.webContents.executeJavaScript(`(() => {
+      const editor = document.getElementById('notes-editor');
+      const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      const dispatched = editor.dispatchEvent(event);
+      return { dispatched, defaultPrevented: event.defaultPrevented };
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const noteTabIndented = await window.webContents.executeJavaScript(`(() => {
+      const editor = document.getElementById('notes-editor');
+      return { value: editor.value, start: editor.selectionStart, end: editor.selectionEnd, focusRequested: editor.dataset.focusRequested === 'true' };
+    })()`);
+    assert.deepEqual(noteTabResult, { dispatched: false, defaultPrevented: true });
+    assert.deepEqual(noteTabIndented, { value: '  项目内容', start: 2, end: 2, focusRequested: true });
+    const noteShiftTabResult = await window.webContents.executeJavaScript(`(() => {
+      const editor = document.getElementById('notes-editor');
+      editor.dataset.focusRequested = '';
+      const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+      const dispatched = editor.dispatchEvent(event);
+      return { dispatched, defaultPrevented: event.defaultPrevented };
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const noteTabOutdented = await window.webContents.executeJavaScript(`(() => {
+      const editor = document.getElementById('notes-editor');
+      return { value: editor.value, start: editor.selectionStart, end: editor.selectionEnd, focusRequested: editor.dataset.focusRequested === 'true' };
+    })()`);
+    assert.deepEqual(noteShiftTabResult, { dispatched: false, defaultPrevented: true });
+    assert.deepEqual(noteTabOutdented, { value: '项目内容', start: 0, end: 0, focusRequested: true });
+    await window.webContents.executeJavaScript(`(() => {
+      const appRoot = document.getElementById('app');
+      appRoot.classList.remove('expanded');
+      appRoot.classList.add('collapsed');
+    })()`);
+
     await window.webContents.debugger.attach('1.3');
     await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
       features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],

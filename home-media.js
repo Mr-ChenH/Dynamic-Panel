@@ -491,9 +491,10 @@ function createMusicLibrary({ filePath, now = Date.now, uuid = crypto.randomUUID
   }
   async function fetchPlaylists(source) {
     const payload = await catalogRequest(source.baseUrl, '/collections?include_imported=1', { maxBytes: MAX_CATALOG_JSON_BYTES, timeout: 20000, responseType: 'json' });
-    if (!Array.isArray(payload)) throw Error('invalid_catalog_response');
+    const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.collections) ? payload.collections : null;
+    if (!rows) throw Error('invalid_catalog_response');
     const playlists = []; const ids = new Set();
-    for (const candidate of payload) {
+    for (const candidate of rows) {
       const playlist = normalizeCatalogPlaylist(candidate);
       if (!playlist || ids.has(playlist.id) || playlists.length >= MAX_CATALOG_PLAYLISTS) continue;
       ids.add(playlist.id); playlists.push(playlist);
@@ -568,6 +569,11 @@ function createMusicLibrary({ filePath, now = Date.now, uuid = crypto.randomUUID
     if (!Array.isArray(payload?.playlists)) throw Error('invalid_catalog_response');
     return payload.playlists.map((item) => normalizeCatalogPlaylist({ ...item, remoteId: item.id, id: `online-${platform}-${item.id}`, source: platform })).filter(Boolean).slice(0, 60);
   }
+  async function fetchOnlineUserPlaylists(source, platform) {
+    const payload = await catalogRequest(source.baseUrl, `/api/playlist/user?source=${encodeURIComponent(platform)}&page=1&limit=100`, { maxBytes: MAX_CATALOG_JSON_BYTES, timeout: 30000, responseType: 'json' });
+    if (!Array.isArray(payload?.playlists)) throw Error('invalid_catalog_response');
+    return payload.playlists.map((item) => normalizeCatalogPlaylist({ ...item, remoteId: item.id, id: `online-${platform}-${item.id}`, source: platform })).filter(Boolean).slice(0, 100);
+  }
   async function browseOnlinePlaylist(payload) {
     const library = read(); const source = library.sources.find((candidate) => candidate.id === boundedText(payload?.sourceId, 80));
     const platform = boundedText(payload?.platform, 40).toLowerCase(); const remoteId = boundedText(payload?.playlistId, 240);
@@ -613,6 +619,12 @@ function createMusicLibrary({ filePath, now = Date.now, uuid = crypto.randomUUID
     if (!source || !platform) return { ok: false, error: 'source_not_found' };
     try { source.activePlatform = platform; source.onlinePlaylists = await fetchOnlineRecommend(source, platform); source.activeView = 'mine'; return write(library) ? list() : { ok: false, error: 'save_failed' }; }
     catch (error) { return { ok: false, error: error?.message === 'invalid_catalog_response' ? error.message : 'recommended_playlists_unavailable' }; }
+  }
+  async function browseOnlineUserPlaylists(payload) {
+    const library = read(); const source = library.sources.find((candidate) => candidate.id === boundedText(payload?.sourceId, 80)); const platform = boundedText(payload?.platform, 40).toLowerCase();
+    if (!source || !platform) return { ok: false, error: 'source_not_found' };
+    try { source.activePlatform = platform; source.onlinePlaylists = await fetchOnlineUserPlaylists(source, platform); source.categories = []; source.activeView = 'mine'; return write(library) ? list() : { ok: false, error: 'save_failed' }; }
+    catch (error) { return { ok: false, error: error?.message === 'invalid_catalog_response' ? error.message : 'user_playlists_unavailable' }; }
   }
   async function selectPlaylist(payload) {
     const sourceId = boundedText(payload?.sourceId, 80);
@@ -734,7 +746,7 @@ function createMusicLibrary({ filePath, now = Date.now, uuid = crypto.randomUUID
       return { ok: false, error: known };
     }
   }
-  return { list, setMode, addLocal, addFolder, addNetwork, addCatalogSource, selectPlaylist, refreshSource, removeCatalogSource, browseOnlineCategories, browseOnlineSearch, browseOnlineCategory, browseOnlineRecommend, browseOnlinePlaylist, remove, load, loadCover };
+  return { list, setMode, addLocal, addFolder, addNetwork, addCatalogSource, selectPlaylist, refreshSource, removeCatalogSource, browseOnlineCategories, browseOnlineSearch, browseOnlineCategory, browseOnlineRecommend, browseOnlineUserPlaylists, browseOnlinePlaylist, remove, load, loadCover };
 }
 
 module.exports = {

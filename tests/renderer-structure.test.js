@@ -109,6 +109,8 @@ test('notes provide local-first creation, rich editing, and guarded image attach
   assert.match(appJs, /updateNoteTag/);
   assert.match(appJs, /removeNoteTag/);
   assert.match(appJs, /function renderNotesTaxonomy/);
+  assert.match(appJs, /function applyNoteTabIndentation/);
+  assert.match(appJs, /applyNoteTabIndentation\(editor, event\)/);
   assert.match(appJs, /notesTaxonomyTree\?\.addEventListener/);
   assert.match(appJs, /addEventListener\('paste'/);
   assert.match(appJs, /addEventListener\('drop'/);
@@ -252,6 +254,9 @@ test('home chat exposes temporary-session state, recovery controls and safe mark
 
 test('home music is app-owned and switches local, HTTPS and go-music-dl playlists', () => {
   assert.match(html, /id="home-music-audio"/);
+  assert.match(html, /data-home-media="shuffle"/);
+  assert.match(homeJs, /MUSIC_SHUFFLE_KEY/);
+  assert.match(homeJs, /shuffledMusicTrack/);
   assert.match(html, /id="home-media-cover"/);
   assert.match(html, /id="home-media-discover"/);
   assert.match(html, /id="home-media-discovery"/);
@@ -276,11 +281,12 @@ test('home music is app-owned and switches local, HTTPS and go-music-dl playlist
   assert.match(html, /id="music-local-add-folder"/);
   assert.match(html, /id="music-volume"[^>]*type="range"/);
   assert.match(settingsJs, /id:'music'/);
-  for (const api of ['getHomeMusicLibrary', 'setHomeMusicMode', 'selectHomeMusicPlaylist', 'refreshHomeMusicSource', 'addHomeMusicSource', 'removeHomeMusicSource', 'browseHomeMusicCategories', 'searchHomeMusicPlaylists', 'browseHomeMusicCategory', 'browseHomeMusicRecommend', 'selectHomeMusicOnlinePlaylist', 'loadHomeMusicCover', 'chooseHomeMusicFiles', 'chooseHomeMusicFolder', 'addHomeMusicUrl', 'removeHomeMusicTrack', 'loadHomeMusicTrack']) assert.match(preloadJs, new RegExp(api));
-  for (const channel of ['home:music-library', 'home:music-mode', 'home:music-select-playlist', 'home:music-refresh-source', 'home:music-add-source', 'home:music-remove-source', 'home:music-browse-categories', 'home:music-search-playlists', 'home:music-browse-category', 'home:music-browse-recommend', 'home:music-select-online-playlist', 'home:music-cover', 'home:music-choose-files', 'home:music-choose-folder', 'home:music-add-network', 'home:music-remove', 'home:music-load']) assert.match(mainJs, new RegExp(channel));
+  for (const api of ['getHomeMusicLibrary', 'setHomeMusicMode', 'selectHomeMusicPlaylist', 'refreshHomeMusicSource', 'addHomeMusicSource', 'removeHomeMusicSource', 'browseHomeMusicCategories', 'searchHomeMusicPlaylists', 'browseHomeMusicCategory', 'browseHomeMusicRecommend', 'browseHomeMusicUserPlaylists', 'selectHomeMusicOnlinePlaylist', 'loadHomeMusicCover', 'chooseHomeMusicFiles', 'chooseHomeMusicFolder', 'addHomeMusicUrl', 'removeHomeMusicTrack', 'loadHomeMusicTrack']) assert.match(preloadJs, new RegExp(api));
+  for (const channel of ['home:music-library', 'home:music-mode', 'home:music-select-playlist', 'home:music-refresh-source', 'home:music-add-source', 'home:music-remove-source', 'home:music-browse-categories', 'home:music-search-playlists', 'home:music-browse-category', 'home:music-browse-recommend', 'home:music-browse-user-playlists', 'home:music-select-online-playlist', 'home:music-cover', 'home:music-choose-files', 'home:music-choose-folder', 'home:music-add-network', 'home:music-remove', 'home:music-load']) assert.match(mainJs, new RegExp(channel));
   assert.match(homeJs, /URL\.createObjectURL/);
   assert.match(homeJs, /loadHomeMusicCover\?\.\(reference\)/);
   assert.match(homeJs, /browseHomeMusicCategories/);
+  assert.match(homeJs, /browseHomeMusicUserPlaylists/);
   assert.match(homeJs, /home-media-discovery/);
   assert.match(homeJs, /homeDiscoverySource/);
   assert.match(homeJs, /ensureHomeMusicCategories/);

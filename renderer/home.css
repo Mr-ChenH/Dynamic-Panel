@@ -182,6 +182,7 @@
 .home-media-controls { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .home-media-controls button { width: 32px; min-width: 32px; height: 32px; min-height: 32px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--text-2); }
 .home-media-controls button:hover:not(:disabled) { background: var(--surface-3); color: var(--text-1); }
+.home-media-controls button.is-active { background: rgba(239,146,121,.16); color: var(--media-secondary); }
 .home-media-controls button svg { width: 17px; height: 17px; }
 .home-media-controls .home-media-toggle { width: 40px; min-width: 40px; height: 40px; min-height: 40px; background: var(--media-accent); color: #151516; box-shadow: 0 4px 14px rgba(0,0,0,.24); }
 .home-media-controls .home-media-toggle:hover:not(:disabled) { background: var(--text-1); color: #151516; transform: scale(1.04); }

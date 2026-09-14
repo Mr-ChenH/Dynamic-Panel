@@ -7,12 +7,15 @@
   const LOCATION_KEY = 'notch-home-weather-v1';
   const DRAFT_KEY = 'notch-home-capture-v1';
   const MUSIC_DISCOVERY_FILTER_KEY = 'notch-home-music-discovery-filter-v1';
+  const MUSIC_SHUFFLE_KEY = 'notch-home-music-shuffle-v1';
   const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
   let signature = '', location = read(LOCATION_KEY, null), weatherEpoch = 0, weatherData = null;
   let lastWeather = 0;
   let musicLibrary = { sourceId: 'built-in', playlistId: 'local', sources: [], playlists: [], tracks: [] }, activeMusicId = localStorage.getItem('notch-home-music-track-v1') || '';
   let loadedMusicId = '', musicObjectUrl = '', musicLoadEpoch = 0, musicLoading = false, musicImporting = false, musicSelectionBusy = false;
+  let musicShuffle = localStorage.getItem(MUSIC_SHUFFLE_KEY) === 'true', musicShuffleKey = '', musicShuffleRemaining = [];
+  let musicPlaybackIntent = false, musicResumeAfterTabChange = false;
   let musicCatalogView = 'mine', homeMusicDiscoveryOpen = false, homeMusicDiscoverySourceId = '', homeMusicDiscoveryCategoryId = '', musicCoverTrackId = '', musicCoverObjectUrl = '', musicCoverEpoch = 0;
   const savedMusicDiscoveryFilter = read(MUSIC_DISCOVERY_FILTER_KEY, {});
   if (savedMusicDiscoveryFilter && typeof savedMusicDiscoveryFilter === 'object') {
@@ -399,6 +402,18 @@
     return artwork;
   }
   function musicQueue() { return musicLibrary.tracks; }
+  function musicQueueKey(queue) { return `${musicLibrary.sourceId}:${musicLibrary.playlistId}:${queue.map((track) => track.id).join(',')}`; }
+  function shuffledMusicTrack(current, queue) {
+    const key = musicQueueKey(queue);
+    if (musicShuffleKey !== key) { musicShuffleKey = key; musicShuffleRemaining = []; }
+    musicShuffleRemaining = musicShuffleRemaining.filter((id) => queue.some((track) => track.id === id) && id !== current?.id);
+    if (!musicShuffleRemaining.length) musicShuffleRemaining = queue.filter((track) => track.id !== current?.id).map((track) => track.id);
+    if (!musicShuffleRemaining.length) return current;
+    const index = Math.floor(Math.random() * musicShuffleRemaining.length);
+    const nextId = musicShuffleRemaining.splice(index, 1)[0];
+    return queue.find((track) => track.id === nextId) || current;
+  }
+  function resetMusicShuffle() { musicShuffleKey = ''; musicShuffleRemaining = []; }
   function activeMusicTrack() {
     const loaded = musicLibrary.tracks.find((track) => track.id === loadedMusicId);
     if (loaded) return loaded;
@@ -410,7 +425,7 @@
     else localStorage.removeItem('notch-home-music-track-v1');
   }
   function releaseMusicSource() {
-    ++musicLoadEpoch; musicLoading = false; musicAudio.pause(); musicAudio.removeAttribute('src'); musicAudio.load(); loadedMusicId = '';
+    ++musicLoadEpoch; musicLoading = false; musicResumeAfterTabChange = false; musicPlaybackIntent = false; musicAudio.pause(); musicAudio.removeAttribute('src'); musicAudio.load(); loadedMusicId = '';
     if (musicObjectUrl) URL.revokeObjectURL(musicObjectUrl); musicObjectUrl = '';
   }
   function fillMusicSelect(select, entries, selectedId, label = (entry) => entry.title || entry.name) {
@@ -432,7 +447,9 @@
     fillMusicSelect(platformSelect, Array.isArray(browser?.platformSources) ? browser.platformSources : [], browser?.activePlatform, (item) => item.name || item.id);
     const categorySelect = $('home-media-category-select'); categorySelect.replaceChildren();
     const all = document.createElement('option'); all.value = ''; all.textContent = '全部分类'; categorySelect.append(all);
-    if (browser?.platformSources?.find((item) => item.id === browser.activePlatform)?.recommend) { const option = document.createElement('option'); option.value = '__recommend__'; option.textContent = '每日推荐'; categorySelect.append(option); }
+    const platformCapability = browser?.platformSources?.find((item) => item.id === browser.activePlatform);
+    if (platformCapability?.recommend) { const option = document.createElement('option'); option.value = '__recommend__'; option.textContent = '每日推荐'; categorySelect.append(option); }
+    if (platformCapability?.userPlaylists) { const option = document.createElement('option'); option.value = '__user__'; option.textContent = '我的收藏夹'; categorySelect.append(option); }
     (browser?.categories || []).forEach((category) => { const option = document.createElement('option'); option.value = category.id; option.textContent = category.group ? `${category.group} · ${category.name}` : category.name; categorySelect.append(option); });
     if ([...categorySelect.options].some((option) => option.value === homeMusicDiscoveryCategoryId)) categorySelect.value = homeMusicDiscoveryCategoryId;
     else if (homeMusicDiscoveryCategoryId) saveMusicDiscoveryFilter(source?.id || '', '');
@@ -488,7 +505,9 @@
       const categories = Array.isArray(browser.categories) ? browser.categories : [];
       categorySelect.replaceChildren();
       const all = document.createElement('option'); all.value = ''; all.textContent = '全部分类'; categorySelect.append(all);
-      if (browser.platformSources?.find((platform) => platform.id === browser.activePlatform)?.recommend) { const option = document.createElement('option'); option.value = '__recommend__'; option.textContent = '每日推荐'; categorySelect.append(option); }
+      const platformCapability = browser.platformSources?.find((platform) => platform.id === browser.activePlatform);
+      if (platformCapability?.recommend) { const option = document.createElement('option'); option.value = '__recommend__'; option.textContent = '每日推荐'; categorySelect.append(option); }
+      if (platformCapability?.userPlaylists) { const option = document.createElement('option'); option.value = '__user__'; option.textContent = '我的收藏夹'; categorySelect.append(option); }
       categories.forEach((category) => { const option = document.createElement('option'); option.value = category.id; option.textContent = category.group ? `${category.group} · ${category.name}` : category.name; categorySelect.append(option); });
       categorySelect.disabled = musicSelectionBusy || !platformSelect?.value || categorySelect.options.length <= 1;
     }
@@ -554,6 +573,12 @@
     const toggleLabel = playing ? '暂停' : '播放'; toggle.setAttribute('aria-label', toggleLabel); toggle.title = toggleLabel; toggle.disabled = !track || musicLoading;
     document.querySelector('[data-home-media="previous"]').disabled = queue.length < 2 || musicLoading;
     document.querySelector('[data-home-media="next"]').disabled = queue.length < 2 || musicLoading;
+    const shuffle = document.querySelector('[data-home-media="shuffle"]');
+    shuffle.disabled = queue.length < 2 || musicLoading;
+    shuffle.setAttribute('aria-pressed', String(musicShuffle));
+    shuffle.setAttribute('aria-label', musicShuffle ? '关闭随机播放' : '开启随机播放');
+    shuffle.title = musicShuffle ? '关闭随机播放' : '开启随机播放';
+    shuffle.classList.toggle('is-active', musicShuffle);
     $('home-music-configure').hidden = Boolean(track || musicLibrary.sources.length > 1);
     if (musicLoading) setText($('home-media-status'), track?.kind === 'local' ? '正在读取本地音频…' : '正在获取音频…');
     else if (!track) setText($('home-media-status'), '当前歌单为空');
@@ -584,7 +609,7 @@
     const track = activeMusicTrack(); rememberActiveMusic(track); renderMusicNavigation(); renderMusicCard(); renderMusicSettings(); return true;
   }
   function musicError(result, fallback) {
-    const errors = { invalid_catalog_url: '仅支持本机 go-music-dl HTTP 地址', catalog_unavailable: '无法连接 go-music-dl 服务', invalid_catalog_response: '音乐源返回的数据无效', catalog_response_too_large: '音乐源返回的数据超过限制', playlist_unavailable: '当前歌单读取失败', playlist_search_unavailable: '在线歌单搜索失败', categories_unavailable: '平台分类读取失败', category_playlists_unavailable: '分类歌单读取失败', source_not_found: '音乐源不存在', invalid_playlist: '在线歌单参数无效', source_limit: '最多添加 8 个聚合音乐源' };
+    const errors = { invalid_catalog_url: '仅支持本机 go-music-dl HTTP 地址', catalog_unavailable: '无法连接 go-music-dl 服务', invalid_catalog_response: '音乐源返回的数据无效', catalog_response_too_large: '音乐源返回的数据超过限制', playlist_unavailable: '当前歌单读取失败', playlist_search_unavailable: '在线歌单搜索失败', categories_unavailable: '平台分类读取失败', category_playlists_unavailable: '分类歌单读取失败', recommended_playlists_unavailable: '每日推荐读取失败', user_playlists_unavailable: '在线收藏夹读取失败，请检查平台登录状态', source_not_found: '音乐源不存在', invalid_playlist: '在线歌单参数无效', source_limit: '最多添加 8 个聚合音乐源' };
     return errors[result?.error] || fallback;
   }
   function setMusicSelectionBusy(busy) {
@@ -596,14 +621,14 @@
     rememberActiveMusic(track); const epoch = ++musicLoadEpoch; musicLoading = true; renderMusicCard();
     const result = await api?.loadHomeMusicTrack?.(track.id).catch(() => null);
     if (epoch !== musicLoadEpoch) return;
-    if (!result?.ok) { musicLoading = false; renderMusicCard(); setText($('home-media-status'), result?.error === 'audio_too_large' ? '音频超过 128 MB 限制' : result?.error === 'unsupported_audio' ? '服务器返回的不是音频文件' : '音频读取失败'); return; }
+    if (!result?.ok) { releaseMusicSource(); renderMusicCard(); setText($('home-media-status'), result?.error === 'audio_too_large' ? '音频超过 128 MB 限制' : result?.error === 'unsupported_audio' ? '服务器返回的不是音频文件' : '音频读取失败，播放已停止'); return; }
     const raw = result.bytes?.data || result.bytes; const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw || []);
-    if (!bytes.length) { musicLoading = false; renderMusicCard(); setText($('home-media-status'), '音频内容为空'); return; }
+    if (!bytes.length) { releaseMusicSource(); renderMusicCard(); setText($('home-media-status'), '音频内容为空，播放已停止'); return; }
     releaseMusicSource(); const sourceEpoch = ++musicLoadEpoch; musicLoading = true;
     musicObjectUrl = URL.createObjectURL(new Blob([bytes], { type: result.mimeType || track.mimeType || 'application/octet-stream' }));
     loadedMusicId = track.id; musicAudio.src = musicObjectUrl; musicAudio.load(); musicLoading = false; renderMusicCard();
     if (autoplay && sourceEpoch === musicLoadEpoch) {
-      try { await musicAudio.play(); } catch { setText($('home-media-status'), '无法播放该音频格式'); }
+      try { await musicAudio.play(); } catch { releaseMusicSource(); setText($('home-media-status'), '无法播放该音频格式，播放已停止'); }
       renderMusicCard();
     }
   }
@@ -612,7 +637,7 @@
     setMusicSelectionBusy(true); setText($('music-settings-status'), '正在切换歌单…');
     const result = await api?.selectHomeMusicPlaylist?.({ sourceId, playlistId }).catch(() => null);
     setMusicSelectionBusy(false);
-    if (!applyMusicLibrary(result)) { renderMusicNavigation(); setText($('music-settings-status'), musicError(result, '歌单切换失败')); return; }
+    if (!applyMusicLibrary(result)) { releaseMusicSource(); renderMusicNavigation(); setText($('music-settings-status'), musicError(result, '歌单切换失败')); return; }
     void ensureMusicSettingsCategories();
     setText($('music-settings-status'), `已切换到 ${musicPlaylistLabel(activeMusicPlaylist(), activeMusicSource())}`);
     if (activeMusicTrack()) await loadMusicTrack(activeMusicTrack(), true);
@@ -630,7 +655,7 @@
     setMusicSelectionBusy(true); setText($('music-settings-status'), '正在读取在线歌单…');
     const result = await api?.selectHomeMusicOnlinePlaylist?.({ sourceId: dataset.sourceId || musicLibrary.sourceId, platform: dataset.platform, playlistId: dataset.playlistId, title: dataset.title || '在线歌单' }).catch(() => null);
     setMusicSelectionBusy(false); musicCatalogView = 'discover';
-    if (!applyMusicLibrary(result)) { renderMusicNavigation(); setText($('music-settings-status'), musicError(result, '在线歌单读取失败')); return; }
+    if (!applyMusicLibrary(result)) { releaseMusicSource(); renderMusicNavigation(); setText($('music-settings-status'), musicError(result, '在线歌单读取失败')); return; }
     setText($('music-settings-status'), `已打开在线歌单 ${activeMusicPlaylist()?.title || ''}`);
     if (activeMusicTrack()) await loadMusicTrack(activeMusicTrack(), true);
   }
@@ -640,12 +665,13 @@
     const request = initial || typeof api?.refreshHomeMusicSource !== 'function' ? api?.getHomeMusicLibrary : () => api.refreshHomeMusicSource(sourceId);
     const result = typeof request === 'function' ? await request().catch(() => null) : null;
     setMusicSelectionBusy(false);
-    if (!applyMusicLibrary(result)) { renderMusicNavigation(); setText($('home-media-status'), musicError(result, '音乐库读取失败')); }
+    if (!applyMusicLibrary(result)) { if (!initial) releaseMusicSource(); renderMusicNavigation(); setText($('home-media-status'), musicError(result, '音乐库读取失败')); }
     else if (!initial) setText($('music-settings-status'), activeMusicSource()?.type === 'music-dl' ? '歌单已刷新' : '音乐库已刷新');
   }
-  function moveMusic(direction, autoplay = !musicAudio.paused) {
+  function moveMusic(direction, autoplay = musicPlaybackIntent || !musicAudio.paused) {
     const track = activeMusicTrack(); const queue = musicQueue(); if (!track || queue.length < 2) return;
-    const index = queue.findIndex((item) => item.id === track.id); const next = queue[(index + direction + queue.length) % queue.length];
+    const index = queue.findIndex((item) => item.id === track.id);
+    const next = musicShuffle ? shuffledMusicTrack(track, queue) : queue[(index + direction + queue.length) % queue.length];
     if (autoplay) void loadMusicTrack(next, true); else { releaseMusicSource(); rememberActiveMusic(next); renderMusicCard(); }
   }
   async function openMusicSettings() { await navigate({ tab: 'settings' }); window.NotchSettings?.select('music'); }
@@ -665,16 +691,45 @@
   });
   document.querySelector('[data-home-media="previous"]').addEventListener('click', () => moveMusic(-1));
   document.querySelector('[data-home-media="next"]').addEventListener('click', () => moveMusic(1));
-  musicAudio.addEventListener('play', renderMusicCard); musicAudio.addEventListener('pause', renderMusicCard);
+  document.querySelector('[data-home-media="shuffle"]').addEventListener('click', () => {
+    musicShuffle = !musicShuffle;
+    localStorage.setItem(MUSIC_SHUFFLE_KEY, String(musicShuffle));
+    resetMusicShuffle();
+    renderMusicCard();
+  });
+  musicAudio.addEventListener('play', () => { musicPlaybackIntent = true; renderMusicCard(); });
+  musicAudio.addEventListener('pause', () => {
+    if (!musicResumeAfterTabChange) musicPlaybackIntent = false;
+    renderMusicCard();
+  });
   musicAudio.addEventListener('loadedmetadata', () => { renderMusicProgress(); renderMusicCard(); }); musicAudio.addEventListener('timeupdate', renderMusicProgress);
-  musicAudio.addEventListener('ended', () => { if (activeMusicTrack() && musicQueue().length > 1) moveMusic(1, true); else renderMusicCard(); });
-  musicAudio.addEventListener('error', () => { if (musicAudio.src) { renderMusicCard(); setText($('home-media-status'), '无法解码该音频格式'); } });
+  musicAudio.addEventListener('ended', () => { musicPlaybackIntent = false; if (activeMusicTrack() && musicQueue().length > 1) moveMusic(1, true); else renderMusicCard(); });
+  musicAudio.addEventListener('error', () => { if (musicAudio.src) { releaseMusicSource(); renderMusicCard(); setText($('home-media-status'), '无法解码该音频格式，播放已停止'); } });
+  document.addEventListener('notch:tabchange', (event) => {
+    if (event.detail?.tab === 'home' || musicAudio.paused || musicAudio.ended || !loadedMusicId) return;
+    musicResumeAfterTabChange = true;
+    const epoch = musicLoadEpoch;
+    setTimeout(async () => {
+      if (!musicResumeAfterTabChange || epoch !== musicLoadEpoch || musicAudio.ended) {
+        musicResumeAfterTabChange = false;
+        return;
+      }
+      if (!musicAudio.paused) {
+        musicResumeAfterTabChange = false;
+        return;
+      }
+      try { await musicAudio.play(); } catch {}
+      musicResumeAfterTabChange = false;
+      renderMusicCard();
+    }, 0);
+  });
   $('home-media-source-select').addEventListener('change', (event) => { saveMusicDiscoveryFilter(event.target.value, ''); renderHomeMusicDiscovery(); void ensureHomeMusicCategories(); });
   window.addEventListener('notch:settings-category-change', (event) => { if (event.detail?.id === 'music') void ensureMusicSettingsCategories(); });
   $('home-media-platform-select').addEventListener('change', (event) => { saveMusicDiscoveryFilter(homeDiscoverySource()?.id || '', ''); void browseMusicOnline('browseHomeMusicCategories', { sourceId: homeDiscoverySource()?.id, platform: event.target.value }, '已加载平台分类'); });
   $('home-media-category-select').addEventListener('change', (event) => {
     const sourceId = homeDiscoverySource()?.id; const platform = $('home-media-platform-select').value; const categoryId = event.target.value; saveMusicDiscoveryFilter(sourceId || '', categoryId);
     if (categoryId === '__recommend__') void browseMusicOnline('browseHomeMusicRecommend', { sourceId, platform }, '已加载每日推荐');
+    else if (categoryId === '__user__') void browseMusicOnline('browseHomeMusicUserPlaylists', { sourceId, platform }, '已加载我的收藏夹');
     else if (categoryId) void browseMusicOnline('browseHomeMusicCategory', { sourceId, platform, categoryId }, '已加载分类歌单');
     else void browseMusicOnline('browseHomeMusicCategories', { sourceId, platform }, '已加载平台分类');
   });
@@ -697,6 +752,7 @@
   $('music-category-select')?.addEventListener('change', (event) => {
     const platform = $('music-platform-select')?.value; const categoryId = event.target.value;
     if (categoryId === '__recommend__') void browseMusicOnline('browseHomeMusicRecommend', { sourceId: musicLibrary.sourceId, platform }, '已加载每日推荐');
+    else if (categoryId === '__user__') void browseMusicOnline('browseHomeMusicUserPlaylists', { sourceId: musicLibrary.sourceId, platform }, '已加载我的收藏夹');
     else if (categoryId) void browseMusicOnline('browseHomeMusicCategory', { sourceId: musicLibrary.sourceId, platform, categoryId }, '已加载分类歌单');
     else void browseMusicOnline('browseHomeMusicCategories', { sourceId: musicLibrary.sourceId, platform }, '已加载平台分类');
   });

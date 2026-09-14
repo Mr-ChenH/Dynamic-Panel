@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   searchHomeMusicPlaylists: (payload) => ipcRenderer.invoke('home:music-search-playlists', payload),
   browseHomeMusicCategory: (payload) => ipcRenderer.invoke('home:music-browse-category', payload),
   browseHomeMusicRecommend: (payload) => ipcRenderer.invoke('home:music-browse-recommend', payload),
+  browseHomeMusicUserPlaylists: (payload) => ipcRenderer.invoke('home:music-browse-user-playlists', payload),
   selectHomeMusicOnlinePlaylist: (payload) => ipcRenderer.invoke('home:music-select-online-playlist', payload),
   chooseHomeMusicFiles: () => ipcRenderer.invoke('home:music-choose-files'),
   chooseHomeMusicFolder: () => ipcRenderer.invoke('home:music-choose-folder'),

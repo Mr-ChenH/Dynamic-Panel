@@ -496,6 +496,68 @@
     return tabs[0] || 'home';
   }
 
+  function adjustNoteIndentation(value, selectionStart, selectionEnd, outdent = false) {
+    const source = String(value == null ? '' : value);
+    const start = Math.max(0, Math.min(source.length, Number(selectionStart) || 0));
+    const end = Math.max(start, Math.min(source.length, Number(selectionEnd) || 0));
+    const indent = '  ';
+
+    if (!outdent && start === end) {
+      return {
+        value: source.slice(0, start) + indent + source.slice(end),
+        replaceStart: start,
+        replaceEnd: end,
+        replacement: indent,
+        selectionStart: start + indent.length,
+        selectionEnd: start + indent.length,
+      };
+    }
+
+    const blockStart = source.lastIndexOf('\n', start - 1) + 1;
+    const effectiveEnd = end > start && source[end - 1] === '\n' ? end - 1 : end;
+    const nextBreak = source.indexOf('\n', effectiveEnd);
+    const blockEnd = nextBreak === -1 ? source.length : nextBreak;
+    const original = source.slice(blockStart, blockEnd);
+    const lines = original.split('\n');
+    const lineStarts = [];
+    let offset = blockStart;
+    lines.forEach((line) => {
+      lineStarts.push(offset);
+      offset += line.length + 1;
+    });
+
+    const removals = [];
+    const replacement = lines.map((line) => {
+      if (!outdent) return indent + line;
+      const removable = line.startsWith('\t') ? 1 : Math.min(indent.length, line.match(/^ */)[0].length);
+      removals.push(removable);
+      return line.slice(removable);
+    }).join('\n');
+
+    let nextStart;
+    let nextEnd;
+    if (!outdent) {
+      nextStart = start + indent.length;
+      nextEnd = end + indent.length * lines.length;
+    } else {
+      const removedBefore = (position) => lineStarts.reduce((total, lineStart, index) => {
+        if (position <= lineStart) return total;
+        return total + Math.min(removals[index], position - lineStart);
+      }, 0);
+      nextStart = Math.max(blockStart, start - removedBefore(start));
+      nextEnd = Math.max(nextStart, end - removedBefore(end));
+    }
+
+    return {
+      value: source.slice(0, blockStart) + replacement + source.slice(blockEnd),
+      replaceStart: blockStart,
+      replaceEnd: blockEnd,
+      replacement,
+      selectionStart: nextStart,
+      selectionEnd: nextEnd,
+    };
+  }
+
   function normalizeNoteArchive(value) {
     if (!Array.isArray(value)) return [];
     return value
@@ -1139,6 +1201,7 @@
     credentialRowAction,
     visiblePanelTabs,
     resolveDefaultPanelTab,
+    adjustNoteIndentation,
     normalizeNoteArchive,
     normalizeNoteCategoryName,
     normalizeNoteTags,

@@ -134,7 +134,8 @@ test('music library migrates v1 data and switches go-music-dl playlists through 
   const catalogRequest = async (baseUrl, route, options) => {
     calls.push({ baseUrl, route, responseType: options.responseType });
     if (route === '/healthz') return { app: 'go-music-dl', status: 'ok' };
-    if (route === '/api/playlist/sources') return { sources: [{ id: 'netease', name: '网易云音乐', search: true, categories: true }] };
+    if (route === '/api/playlist/sources') return { sources: [{ id: 'netease', name: '网易云音乐', search: true, categories: true, user_playlists: true }] };
+    if (route === '/api/playlist/user?source=netease&page=1&limit=100') return { playlists: [{ id: 'favorite-1', name: '我的收藏', source: 'netease', track_count: 4 }] };
     if (route === '/api/playlist/categories?source=netease') return { categories: [{ id: '华语', name: '华语', group: '语种', hot: true }] };
     if (route.startsWith('/api/playlist/search?source=netease')) return { playlists: [{ id: 'online-1', name: '平台精选', source: 'netease', cover: '//img.example.test/playlist.jpg', track_count: 3 }] };
     if (route.startsWith('/api/playlist/category?source=netease')) return { playlists: [{ id: 'online-2', name: '华语新歌', source: 'netease', track_count: 2 }] };
@@ -175,6 +176,9 @@ test('music library migrates v1 data and switches go-music-dl playlists through 
   const categories = await library.browseOnlineCategories({ sourceId: 'catalog-catalog-source', platform: 'netease' });
   assert.equal(categories.browser.activePlatform, 'netease');
   assert.equal(categories.browser.categories[0].name, '华语');
+  const onlineFavorites = await library.browseOnlineUserPlaylists({ sourceId: 'catalog-catalog-source', platform: 'netease' });
+  assert.equal(onlineFavorites.browser.onlinePlaylists[0].title, '我的收藏');
+  assert.equal(onlineFavorites.browser.onlinePlaylists[0].remoteId, 'favorite-1');
   const onlineSearch = await library.browseOnlineSearch({ sourceId: 'catalog-catalog-source', platform: 'netease', keyword: '精选' });
   assert.equal(onlineSearch.browser.onlinePlaylists[0].title, '平台精选');
   assert.equal(onlineSearch.playlists[0].title, '晨间歌单', 'online results do not replace my playlists');

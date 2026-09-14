@@ -2564,6 +2564,7 @@ ipcMain.handle('home:music-browse-categories', (event, payload) => homeMusic.bro
 ipcMain.handle('home:music-search-playlists', (event, payload) => homeMusic.browseOnlineSearch(payload));
 ipcMain.handle('home:music-browse-category', (event, payload) => homeMusic.browseOnlineCategory(payload));
 ipcMain.handle('home:music-browse-recommend', (event, payload) => homeMusic.browseOnlineRecommend(payload));
+ipcMain.handle('home:music-browse-user-playlists', (event, payload) => homeMusic.browseOnlineUserPlaylists(payload));
 ipcMain.handle('home:music-select-online-playlist', (event, payload) => homeMusic.browseOnlinePlaylist(payload));
 ipcMain.handle('home:music-choose-files', async () => {
   const choice = await showOwnedOpenDialog({

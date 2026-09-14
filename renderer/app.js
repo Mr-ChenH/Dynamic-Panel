@@ -2301,6 +2301,34 @@ function setNoteMode(mode, focusTarget = true) {
   });
 }
 
+function applyNoteTabIndentation(editor, event) {
+  if (
+    !editor ||
+    event.key !== 'Tab' ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    event.isComposing ||
+    noteComposing
+  ) {
+    return false;
+  }
+  event.preventDefault();
+  const change = window.NotchDomain.adjustNoteIndentation(
+    editor.value,
+    editor.selectionStart,
+    editor.selectionEnd,
+    event.shiftKey
+  );
+  if (change.value === editor.value) return true;
+  const direction = editor.selectionDirection;
+  editor.setRangeText(change.replacement, change.replaceStart, change.replaceEnd, 'end');
+  editor.focus({ preventScroll: true });
+  editor.setSelectionRange(change.selectionStart, change.selectionEnd, direction);
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+}
+
 function continueNoteList(event) {
   if (
     !noteInput ||
@@ -2398,6 +2426,7 @@ if (noteInput) {
     noteComposing = false;
   });
   noteInput.addEventListener('keydown', (event) => {
+    if (applyNoteTabIndentation(noteInput, event)) return;
     if (continueNoteList(event)) return;
     if (!(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
     const key = event.key.toLowerCase();
@@ -3682,6 +3711,7 @@ notesDetail?.addEventListener('click', async (event) => {
 notesDetail?.addEventListener('keydown', (event) => {
   const editor = event.target.closest('#notes-editor');
   if (!editor) return;
+  if (applyNoteTabIndentation(editor, event)) return;
   if (continueNotesEditorList(editor, event)) return;
   if (!(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
   const key = event.key.toLowerCase();

@@ -50,6 +50,7 @@ const {
   visiblePanelTabs,
   resolveDefaultPanelTab,
   settingsSummary,
+  adjustNoteIndentation,
   normalizeNoteArchive,
   normalizeNoteCategoryName,
   normalizeNoteTags,
@@ -560,6 +561,33 @@ test('settings summary combines safe API status with local device settings', () 
   assert.doesNotMatch(JSON.stringify(settingsSummary({
     transcription: { configured: true, apiKey: 'api-secret' },
   })), /api-secret/);
+});
+
+test('note Tab indentation edits text without moving focus out of the editor', () => {
+  assert.deepEqual(adjustNoteIndentation('alpha', 2, 2), {
+    value: 'al  pha',
+    replaceStart: 2,
+    replaceEnd: 2,
+    replacement: '  ',
+    selectionStart: 4,
+    selectionEnd: 4,
+  });
+
+  const indented = adjustNoteIndentation('- one\n- two\ntext', 0, 11);
+  assert.equal(indented.value, '  - one\n  - two\ntext');
+  assert.deepEqual([indented.selectionStart, indented.selectionEnd], [2, 15]);
+
+  const outdented = adjustNoteIndentation('  - one\n\t- two\ntext', 0, 14, true);
+  assert.equal(outdented.value, '- one\n- two\ntext');
+  assert.deepEqual([outdented.selectionStart, outdented.selectionEnd], [0, 11]);
+
+  const currentLine = adjustNoteIndentation('before\n  item\nafter', 11, 11, true);
+  assert.equal(currentLine.value, 'before\nitem\nafter');
+  assert.deepEqual([currentLine.selectionStart, currentLine.selectionEnd], [9, 9]);
+
+  const unchanged = adjustNoteIndentation('item', 2, 2, true);
+  assert.equal(unchanged.value, 'item');
+  assert.deepEqual([unchanged.selectionStart, unchanged.selectionEnd], [2, 2]);
 });
 
 test('saved notes preserve cleared content and keep recently updated notes first', () => {
