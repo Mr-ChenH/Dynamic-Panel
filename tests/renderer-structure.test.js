@@ -115,6 +115,9 @@ test('notes provide local-first creation, rich editing, and guarded image attach
   assert.match(appJs, /addEventListener\('paste'/);
   assert.match(appJs, /addEventListener\('drop'/);
   assert.match(appJs, /safeNoteImageReference/);
+  assert.match(stylesCss, /\.notes-list \{[^}]*scrollbar-gutter:\s*stable[^}]*scrollbar-color:\s*transparent transparent/);
+  assert.match(stylesCss, /\.notes-list:hover,\s*\.notes-list:focus-within \{[^}]*scrollbar-color:\s*var\(--scrollbar-thumb-hover\)/);
+  assert.match(stylesCss, /\.notes-list::-webkit-scrollbar-button \{[^}]*display:\s*none[^}]*width:\s*0[^}]*height:\s*0/);
   assert.match(preloadJs, /notes:save-image/);
   assert.match(preloadJs, /notes:choose-images/);
   assert.match(preloadJs, /notes:read-image/);
