@@ -29,6 +29,7 @@ const {
   updateDefaultTabPreference,
   selectTranscriptionSettings,
   createWorkspacePersistenceGate,
+  editableContextMenuTemplate,
   hoverSpacePollingPolicy,
   collapsedDisplayFollowPolicy,
   reduceClipboardObservation,
@@ -541,6 +542,20 @@ test('Electron 44 clipboard items decode text first and only read image bytes wh
   assert.equal(withImage.image.mimeType, 'image/png');
   assert.deepEqual(withImage.image.buffer, Buffer.from([4, 5, 6]));
   assert.equal(imageReads, 1);
+});
+
+test('editable context menus expose native paste while respecting Chromium edit flags', () => {
+  const template = editableContextMenuTemplate({ canUndo: true, canCopy: true, canPaste: true, canSelectAll: true });
+  const items = Object.fromEntries(template.filter((item) => item.role).map((item) => [item.role, item]));
+  assert.deepEqual(template.filter((item) => item.type === 'separator').map((item) => item.type), ['separator', 'separator']);
+  assert.equal(items.undo.enabled, true);
+  assert.equal(items.redo.enabled, false);
+  assert.equal(items.cut.enabled, false);
+  assert.equal(items.copy.enabled, true);
+  assert.equal(items.paste.label, '粘贴');
+  assert.equal(items.paste.enabled, true);
+  assert.equal(items.delete.enabled, false);
+  assert.equal(items.selectAll.enabled, true);
 });
 
 test('screen-recording startup checks never touch capture APIs before user consent', () => {

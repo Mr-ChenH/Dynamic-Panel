@@ -489,6 +489,7 @@
       setLinksStatus('这个链接已经收藏过了', 'error');
       return false;
     }
+    const previousLinkGroups = structuredClone(linkGroups);
     const link = { id: uid('link'), url: normalized, title: '未命名', description: '', tags: [], favorite: false, read: false, note: '', icon: '', createdAt: Date.now(), updatedAt: Date.now() };
     const preferredGroupId = requestedGroupId || Domain.preferredLinkGroupId(linkGroups, normalized);
     const preferredGroup = linkGroups.find((group) => group.id === preferredGroupId);
@@ -503,7 +504,12 @@
     if(destination)linkLimits.set(destination.id,Math.max(LINK_PAGE_SIZE,destination.links.length));
     if(linksSearch)linksSearch.value='';if(groupFilter)groupFilter.value='';
     linkSelection.clear();linkSelectionAnchor=null;
-    persistLinks();
+    if (!persistLinks()) {
+      linkGroups = previousLinkGroups;
+      renderLinkGroups();
+      setLinksStatus('链接保存失败，请检查存储空间', 'error');
+      return false;
+    }
     renderLinkGroups();
     requestAnimationFrame(()=>linkGroupsEl.querySelector(`[data-link-id="${CSS.escape(String(link.id))}"]`)?.scrollIntoView({block:'nearest'}));
     setLinksStatus('链接已保存');
@@ -548,6 +554,7 @@
       }
       persistLinks();
       renderLinkGroups();
+      void syncWorkspaceData();
     }).catch(() => {});
     return true;
   }
@@ -3310,6 +3317,13 @@
 
   window.NotchWorkspace = {
     hasLink: (id) => linkGroups.some((g) => (g.links || []).some((l) => String(l.id) === String(id))),
+    async saveCapturedLink(rawValue) {
+      const normalized = Domain.normalizeHttpUrl(rawValue);
+      if (!normalized) return { ok: false, error: 'invalid_url' };
+      if (allLinks().some((link) => link.url === normalized)) return { ok: false, error: 'duplicate' };
+      if (!addLink(normalized)) return { ok: false, error: 'save_failed' };
+      return { ok: true, workspaceSynced: await syncWorkspaceData() };
+    },
     selectLink(id) {
       const group = linkGroups.find((g) => (g.links || []).some((l) => String(l.id) === String(id)));
       if (!group) return false;

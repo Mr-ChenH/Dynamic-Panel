@@ -52,8 +52,15 @@
 .home-note-tag::before { content: ''; position: absolute; left: 0; top: 50%; width: 3px; height: 3px; border-radius: 50%; background: var(--text-4); transform: translateY(-50%); }
 .home-note-rows > .home-hint { flex: 1; display: grid; place-items: center; margin: 0; padding: 20px 8px; text-align: center; }
 .home-capture { grid-column: 3; grid-row: 1; }
+.home-capture-modes { flex: 0 0 28px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: 7px; background: var(--surface-2); }
+.home-card .home-capture-modes button { min-height: 24px; padding: 0 7px; border: 0; border-radius: 5px; background: transparent; color: var(--text-4); font-size: var(--fs-caption); }
+.home-card .home-capture-modes button:hover { background: rgba(255,255,255,.045); color: var(--text-2); }
+.home-card .home-capture-modes button[aria-pressed='true'] { background: var(--surface-3); color: var(--text-1); box-shadow: inset 0 0 0 1px rgba(255,255,255,.05); }
+.home-capture[data-capture-kind='link'] { border-top-color: rgba(142,178,255,.66); }
 .home-capture textarea, .home-chat textarea, .home-weather input { width: 100%; min-width: 0; box-sizing: border-box; padding: 10px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--surface-2); color: var(--text-1); font: var(--fs-body)/1.6 var(--font); }
 .home-capture textarea { flex: 1; min-height: 65px; resize: none; }
+.home-capture[data-capture-kind='link'] textarea:focus { border-color: rgba(142,178,255,.40); outline: 0; }
+.home-capture footer > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-weather, .home-weather-detail {
   --weather-accent: #9fb5c8;
   --weather-panel: #171a1d;

@@ -52,6 +52,19 @@
     }
   }
 
+  function classifyHomeCapture(value, mode = 'auto') {
+    const content = String(value || '').trim();
+    const requestedMode = ['auto', 'note', 'link'].includes(mode) ? mode : 'auto';
+    const looksLikeUrl = !/\s/.test(content) && (
+      /^(?:https?:\/\/|www\.)\S+$/i.test(content)
+      || /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z]{2,63}(?::\d{1,5})?(?:[/?#]\S*)?$/i.test(content)
+    );
+    const url = looksLikeUrl ? normalizeHttpUrl(content) : null;
+    if (requestedMode === 'note') return { kind: 'note', content, url: null };
+    if (requestedMode === 'link') return { kind: 'link', content, url };
+    return { kind: url ? 'link' : 'note', content, url };
+  }
+
   function classifyLink(url, title) {
     const haystack = `${url || ''} ${title || ''}`;
     const matched = CATEGORY_RULES.find(([, pattern]) => pattern.test(haystack));
@@ -1227,6 +1240,7 @@
 
   return {
     normalizeHttpUrl,
+    classifyHomeCapture,
     classifyLink,
     addLinkToGroups,
     preferredLinkGroupId,

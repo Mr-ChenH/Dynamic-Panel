@@ -2946,6 +2946,7 @@ async function requestNoteTitle(note) {
   }
   localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next.slice(0, 200)));
   updateSavedNotePresentation(updated);
+  await syncWorkspaceSnapshot();
 }
 
 function updateSavedNotePresentation(note) {
@@ -3300,7 +3301,9 @@ window.NotchNotes = {
     return { ok: true, workspaceSynced: await syncWorkspaceSnapshot() };
   },
   async saveCaptured(content) {
-    return window.NotchNotes.saveGenerated('', content, '');
+    const result = await window.NotchNotes.saveGenerated('', content, '');
+    if (result.ok && result.note) void requestNoteTitle(result.note);
+    return result;
   },
   async saveGenerated(title, content, titleSource = 'model') {
     flushNotesEditorSave();

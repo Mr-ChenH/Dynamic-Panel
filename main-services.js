@@ -511,6 +511,20 @@ function createWorkspacePersistenceGate() {
   };
 }
 
+function editableContextMenuTemplate(editFlags = {}) {
+  return [
+    { label: '撤销', role: 'undo', enabled: editFlags.canUndo === true },
+    { label: '重做', role: 'redo', enabled: editFlags.canRedo === true },
+    { type: 'separator' },
+    { label: '剪切', role: 'cut', enabled: editFlags.canCut === true },
+    { label: '复制', role: 'copy', enabled: editFlags.canCopy === true },
+    { label: '粘贴', role: 'paste', enabled: editFlags.canPaste === true },
+    { label: '删除', role: 'delete', enabled: editFlags.canDelete === true },
+    { type: 'separator' },
+    { label: '全选', role: 'selectAll', enabled: editFlags.canSelectAll === true },
+  ];
+}
+
 function hoverSpacePollingPolicy({ shortcut, visible, mode } = {}) {
   return {
     enabled: shortcut === 'Space' && visible === true && mode === 'collapsed',
@@ -578,6 +592,7 @@ module.exports = {
   reduceClipboardObservation,
   createForegroundMediaPermissionCoordinator,
   createWorkspacePersistenceGate,
+  editableContextMenuTemplate,
   hoverSpacePollingPolicy,
   collapsedDisplayFollowPolicy,
   updateFeaturePreference,

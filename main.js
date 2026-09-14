@@ -67,6 +67,7 @@ const {
   screenRecordingProbePolicy,
   taskNotificationWindowPolicy,
   updateFeaturePreference,
+  editableContextMenuTemplate,
   selectTranscriptionSettings,
   createWorkspacePersistenceGate,
   hoverSpacePollingPolicy,
@@ -1071,6 +1072,21 @@ function createWindow() {
   });
 
   installLocalWebContentsGuards(mainWindow.webContents);
+  mainWindow.webContents.on('context-menu', (event, params) => {
+    if (!params.isEditable || !mainWindow || mainWindow.isDestroyed()) return;
+    event.preventDefault();
+    const owner = mainWindow;
+    const menu = Menu.buildFromTemplate(editableContextMenuTemplate(params.editFlags));
+    transientSystemInteractionRequests++;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      transientSystemInteractionRequests = Math.max(0, transientSystemInteractionRequests - 1);
+    };
+    try { menu.popup({ window: owner, callback: release }); }
+    catch (error) { release(); }
+  });
   const rendererOwnerId = mainWindow.webContents.id;
   mainWindow.webContents.on('render-process-gone', () => aiModelService?.cancelOwner(rendererOwnerId));
 

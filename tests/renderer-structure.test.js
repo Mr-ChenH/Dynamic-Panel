@@ -197,6 +197,24 @@ test('settings exposes every panel tab as a possible default opening page', () =
   assert.match(workspaceJs, /setDefaultTab/);
 });
 
+test('home quick capture routes notes and links through explicit modes', () => {
+  assert.match(html, /data-home-capture-mode="auto"[^>]*aria-pressed="true"/);
+  assert.match(html, /data-home-capture-mode="note"/);
+  assert.match(html, /data-home-capture-mode="link"/);
+  assert.match(homeJs, /NotchDomain\.classifyHomeCapture/);
+  assert.match(homeJs, /NotchWorkspace\?\.saveCapturedLink/);
+  assert.match(homeJs, /NotchNotes\.saveCaptured/);
+  assert.match(appJs, /async saveCaptured\(content\)[\s\S]*?requestNoteTitle\(result\.note\)/);
+  assert.match(workspaceJs, /async saveCapturedLink\(rawValue\)/);
+});
+
+test('editable fields receive a native context menu without collapsing the panel', () => {
+  assert.match(mainJs, /webContents\.on\('context-menu'/);
+  assert.match(mainJs, /editableContextMenuTemplate\(params\.editFlags\)/);
+  assert.match(mainJs, /transientSystemInteractionRequests\+\+/);
+  assert.match(mainJs, /menu\.popup\(\{ window: owner, callback: release \}\)/);
+});
+
 test('home chat exposes temporary-session state, recovery controls and safe markdown', () => {
   assert.match(html, /id="home-chat-empty"/);
   assert.match(html, /id="home-chat-provider"/);

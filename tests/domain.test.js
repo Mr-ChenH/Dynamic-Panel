@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const domain = require('../renderer/domain');
 const {
   normalizeHttpUrl,
+  classifyHomeCapture,
   classifyLink,
   addLinkToGroups,
   renameGroup,
@@ -158,6 +159,18 @@ test('normalizeHttpUrl rejects non-web and local URLs', () => {
   assert.equal(normalizeHttpUrl('file:///tmp/a'), null);
   assert.equal(normalizeHttpUrl('http://localhost:3000'), null);
   assert.equal(normalizeHttpUrl('http://127.0.0.1/private'), null);
+});
+
+test('home capture routes explicit public URLs without misclassifying ordinary text', () => {
+  assert.deepEqual(classifyHomeCapture('https://example.com/docs?q=1'), {
+    kind: 'link', content: 'https://example.com/docs?q=1', url: 'https://example.com/docs?q=1',
+  });
+  assert.equal(classifyHomeCapture('example.com/guide').kind, 'link');
+  assert.equal(classifyHomeCapture('记录 example.com，稍后阅读').kind, 'note');
+  assert.equal(classifyHomeCapture('今天需要整理发布计划').kind, 'note');
+  assert.equal(classifyHomeCapture('http://localhost:3000').kind, 'note');
+  assert.equal(classifyHomeCapture('example.com', 'note').kind, 'note');
+  assert.equal(classifyHomeCapture('普通文字', 'link').url, null);
 });
 
 test('classifyLink maps familiar services and falls back to 其他', () => {

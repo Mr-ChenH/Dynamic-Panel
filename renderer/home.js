@@ -109,19 +109,63 @@
     if (!items.length) empty(today, '今天没有到期事项，可以安排下一步');
     else if (items.length > 3) empty(today, `还有 ${items.length - 3} 项，进入全部待办查看`);
   }
-  const capture = $('home-capture-input'); capture.value = localStorage.getItem(DRAFT_KEY) || '';
-  capture.addEventListener('input', () => { try { localStorage.setItem(DRAFT_KEY, capture.value); } catch { setText($('home-capture-status'), '草稿保存失败，请复制内容'); } });
-  $('home-capture-save').addEventListener('click', async () => {
-    const content = capture.value.trim(); if (!content) { capture.focus(); return; }
-    $('home-capture-save').disabled = true; capture.readOnly = true;
-    try {
-      const result = await window.NotchNotes.saveCaptured(content);
-      if (!result.ok) { setText($('home-capture-status'), result.error === 'capacity' ? '笔记已满，请先整理笔记库' : '保存失败，内容已保留'); return; }
-      capture.value = ''; localStorage.removeItem(DRAFT_KEY);
-      setText($('home-capture-status'), result.workspaceSynced === false ? '已存本机，工作区同步失败' : '已保存到笔记库'); refreshLists();
-    } catch { setText($('home-capture-status'), '保存未完成，请检查笔记库，内容已保留'); }
-    finally { $('home-capture-save').disabled = false; capture.readOnly = false; }
+  const captureCard = document.querySelector('.home-capture');
+  const capture = $('home-capture-input');
+  const captureSave = $('home-capture-save');
+  const captureStatus = $('home-capture-status');
+  const captureModes = [...document.querySelectorAll('[data-home-capture-mode]')];
+  let captureMode = 'auto';
+  let captureBusy = false;
+  capture.value = localStorage.getItem(DRAFT_KEY) || '';
+  function capturePlan() { return window.NotchDomain.classifyHomeCapture(capture.value, captureMode); }
+  function updateCapturePresentation(message = '') {
+    const plan = capturePlan();
+    captureCard.dataset.captureKind = plan.kind;
+    captureModes.forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.homeCaptureMode === captureMode)));
+    captureSave.textContent = plan.content ? (plan.kind === 'link' ? '保存链接' : '保存笔记') : '收集';
+    captureSave.disabled = captureBusy || !plan.content || (plan.kind === 'link' && !plan.url);
+    if (message) setText(captureStatus, message);
+    else if (!plan.content) setText(captureStatus, captureMode === 'auto' ? '自动识别文字或链接' : `固定保存到${captureMode === 'link' ? '链接' : '笔记'}库`);
+    else if (plan.kind === 'link' && !plan.url) setText(captureStatus, '请输入一个完整的公开网址');
+    else setText(captureStatus, captureMode === 'auto' ? `已识别为${plan.kind === 'link' ? '链接' : '笔记'}` : `将保存到${plan.kind === 'link' ? '链接' : '笔记'}库`);
+    return plan;
+  }
+  captureModes.forEach((button) => button.addEventListener('click', () => {
+    if (captureBusy) return;
+    captureMode = button.dataset.homeCaptureMode;
+    updateCapturePresentation();
+    capture.focus();
+  }));
+  capture.addEventListener('input', () => {
+    try { localStorage.setItem(DRAFT_KEY, capture.value); }
+    catch { updateCapturePresentation('草稿保存失败，请复制内容'); return; }
+    updateCapturePresentation();
   });
+  capture.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.isComposing || !(event.metaKey || event.ctrlKey)) return;
+    event.preventDefault(); captureSave.click();
+  });
+  captureSave.addEventListener('click', async () => {
+    const plan = capturePlan(); if (!plan.content || (plan.kind === 'link' && !plan.url)) { capture.focus(); return; }
+    captureBusy = true; capture.readOnly = true; updateCapturePresentation(plan.kind === 'link' ? '正在加入链接库…' : '正在保存笔记…');
+    try {
+      const result = plan.kind === 'link'
+        ? await window.NotchWorkspace?.saveCapturedLink?.(plan.url)
+        : await window.NotchNotes.saveCaptured(plan.content);
+      if (!result?.ok) {
+        const errors = { capacity: '笔记已满，请先整理笔记库', duplicate: '链接已存在，内容已保留', invalid_url: '请输入一个完整的公开网址' };
+        updateCapturePresentation(errors[result?.error] || '保存失败，内容已保留');
+        return;
+      }
+      capture.value = ''; localStorage.removeItem(DRAFT_KEY);
+      const destination = plan.kind === 'link' ? '链接库' : '笔记库';
+      const detail = plan.kind === 'link' ? '，正在补全网页信息' : '';
+      updateCapturePresentation(result.workspaceSynced === false ? `已存本机${destination}，工作区同步失败` : `已保存到${destination}${detail}`);
+      refreshLists();
+    } catch { updateCapturePresentation('保存未完成，内容已保留'); }
+    finally { captureBusy = false; capture.readOnly = false; updateCapturePresentation(captureStatus.textContent); }
+  });
+  updateCapturePresentation();
   function weatherCondition(code) {
     if (code === 0) return '晴';
     if (code === 1) return '晴间多云';
