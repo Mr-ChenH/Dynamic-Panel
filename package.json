@@ -33,6 +33,7 @@
       "main-services.js",
       "home-services.js",
       "home-media.js",
+      "finance-service.js",
       "platform.js",
       "launcher/**/*.js",
       "ai/**/*.js",

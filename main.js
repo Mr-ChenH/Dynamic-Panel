@@ -29,6 +29,7 @@ const { execFile } = require('child_process');
 const platformPolicy = require('./platform');
 const { createLauncherService } = require('./launcher/service');
 const { createAIService } = require('./ai/service');
+const { createFinanceService } = require('./finance-service');
 const {
   PROVIDERS,
   providerFor,
@@ -235,6 +236,7 @@ const NOTE_IMAGE_MAX_EDGE = 2400;
 const RECORDINGS_DIR_NAME = 'recordings';
 const TRANSCRIPTION_SETTINGS_FILE = 'transcription-settings.json';
 const AI_DIAGNOSTICS_FILE = 'ai-diagnostics.json';
+const FINANCE_SETTINGS_FILE = 'finance-settings.json';
 const CREDENTIALS_VAULT_FILE = 'credentials.vault.json';
 const APP_SETTINGS_FILE = 'app-settings.json';
 const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
@@ -247,6 +249,25 @@ const RECORDING_MAX_BYTES = 200 * 1024 * 1024;
 const LINK_FETCH_TIMEOUT_MS = 8000;
 const LINK_FETCH_MAX_BYTES = 512 * 1024;
 const LINK_FETCH_MAX_REDIRECTS = 3;
+const FINANCE_FETCH_TIMEOUT_MS = 10000;
+const FINANCE_FETCH_MAX_BYTES = 2 * 1024 * 1024;
+const FINANCE_FETCH_MAX_REQUEST_BYTES = 32 * 1024;
+const FINANCE_ALLOWED_ORIGINS = new Set([
+  'https://api.coingecko.com',
+  'https://api.binance.com',
+  'https://www.alphavantage.co',
+  'https://data.alpaca.markets',
+  'https://paper-api.alpaca.markets',
+  'https://api.twelvedata.com',
+  'https://www.sec.gov',
+  'https://data.sec.gov',
+  'https://api.quantdash.net',
+  'https://qt.gtimg.cn',
+  'https://push2.eastmoney.com',
+  'https://push2delay.eastmoney.com',
+  'https://push2his.eastmoney.com',
+  'https://hq.sinajs.cn',
+]);
 
 const TASK_NOTIFICATION_WIDTH = 400;
 const TASK_NOTIFICATION_HEIGHT = 96;
@@ -312,6 +333,14 @@ const windowIconCache = new Map();
 const transcriptionSessions = new Map();
 let aiModelService = null;
 let aiContextGeneration = 0;
+let financeBackgroundTimer = null;
+let financeBackgroundActive = false;
+let financeBackgroundPending = false;
+let financeBackgroundInterval = 60;
+let financeBackgroundGeneration = 0;
+let financeBackgroundSequence = 0;
+let financeBackgroundRequestId = '';
+let financeBackgroundPayload = { assetIds: [], rankingMarket: 'all', rankingSource: 'coingecko', rankingSort: 'gainers', rankingPage: 1 };
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -1176,6 +1205,7 @@ function setAutoLaunch(enabled) {
 const DEFAULT_FEATURES = {
   home: true,
   todo: true,
+  finance: true,
   notes: true,
   links: true,
   recordings: true,
@@ -1225,6 +1255,354 @@ function publicAppSettings() {
 
 function saveAppSettings(settings) {
   return writeJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE), settings);
+}
+
+function readFinanceSettings() {
+  const stored = readJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE));
+  const providers = stored.providers && typeof stored.providers === 'object' && !Array.isArray(stored.providers)
+    ? stored.providers : {};
+  const coingecko = providers.coingecko && typeof providers.coingecko === 'object' ? providers.coingecko : {};
+  const binance = providers.binance && typeof providers.binance === 'object' ? providers.binance : {};
+  const alphaVantage = providers['alpha-vantage'] && typeof providers['alpha-vantage'] === 'object' ? providers['alpha-vantage'] : {};
+  const alpaca = providers.alpaca && typeof providers.alpaca === 'object' ? providers.alpaca : {};
+  const twelveData = providers['twelve-data'] && typeof providers['twelve-data'] === 'object' ? providers['twelve-data'] : {};
+  const secEdgar = providers['sec-edgar'] && typeof providers['sec-edgar'] === 'object' ? providers['sec-edgar'] : {};
+  const cnStock = providers['cn-stock'] && typeof providers['cn-stock'] === 'object' ? providers['cn-stock'] : {};
+  const cnTencent = providers['cn-tencent'] && typeof providers['cn-tencent'] === 'object' ? providers['cn-tencent'] : {};
+  const cnEastmoney = providers['cn-eastmoney'] && typeof providers['cn-eastmoney'] === 'object' ? providers['cn-eastmoney'] : {};
+  const cnSina = providers['cn-sina'] && typeof providers['cn-sina'] === 'object' ? providers['cn-sina'] : {};
+  const refreshSeconds = [0, 30, 60, 120, 300].includes(Number(stored.refreshSeconds)) ? Number(stored.refreshSeconds) : 60;
+  return {
+    schemaVersion: 2,
+    refreshSeconds,
+    providers: {
+      coingecko: {
+        enabled: coingecko.enabled !== false,
+        encryptedApiKey: String(coingecko.encryptedApiKey || ''),
+        verification: coingecko.verification && typeof coingecko.verification === 'object' ? coingecko.verification : null,
+      },
+      binance: {
+        enabled: binance.enabled !== false,
+        verification: binance.verification && typeof binance.verification === 'object' ? binance.verification : null,
+      },
+      'alpha-vantage': {
+        enabled: alphaVantage.enabled === true,
+        encryptedApiKey: String(alphaVantage.encryptedApiKey || ''),
+        verification: alphaVantage.verification && typeof alphaVantage.verification === 'object' ? alphaVantage.verification : null,
+      },
+      alpaca: {
+        enabled: alpaca.enabled === true,
+        feed: alpaca.feed === 'sip' ? 'sip' : 'iex',
+        encryptedKeyId: String(alpaca.encryptedKeyId || ''),
+        encryptedSecretKey: String(alpaca.encryptedSecretKey || ''),
+        verification: alpaca.verification && typeof alpaca.verification === 'object' ? alpaca.verification : null,
+      },
+      'twelve-data': {
+        enabled: twelveData.enabled === true,
+        encryptedApiKey: String(twelveData.encryptedApiKey || ''),
+        verification: twelveData.verification && typeof twelveData.verification === 'object' ? twelveData.verification : null,
+      },
+      'sec-edgar': {
+        enabled: secEdgar.enabled === true,
+        encryptedContact: String(secEdgar.encryptedContact || ''),
+        verification: secEdgar.verification && typeof secEdgar.verification === 'object' ? secEdgar.verification : null,
+      },
+      'cn-stock': {
+        enabled: cnStock.enabled === true,
+        encryptedApiKey: String(cnStock.encryptedApiKey || ''),
+        verification: cnStock.verification && typeof cnStock.verification === 'object' ? cnStock.verification : null,
+      },
+      'cn-tencent': {
+        enabled: cnTencent.enabled !== false,
+        verification: cnTencent.verification && typeof cnTencent.verification === 'object' ? cnTencent.verification : null,
+      },
+      'cn-eastmoney': {
+        enabled: cnEastmoney.enabled !== false,
+        verification: cnEastmoney.verification && typeof cnEastmoney.verification === 'object' ? cnEastmoney.verification : null,
+      },
+      'cn-sina': {
+        enabled: cnSina.enabled !== false,
+        verification: cnSina.verification && typeof cnSina.verification === 'object' ? cnSina.verification : null,
+      },
+    },
+  };
+}
+
+function normalizeSecEdgarContact(value) {
+  const contact = String(value || '').trim().slice(0, 160);
+  return contact.includes('@') && !/[\r\n]/.test(contact) ? contact : '';
+}
+
+function resolveFinanceConfig() {
+  const stored = readFinanceSettings();
+  const environmentCoinGeckoKey = String(process.env.COINGECKO_API_KEY || '').trim();
+  const environmentAlphaVantageKey = String(process.env.ALPHA_VANTAGE_API_KEY || '').trim();
+  const environmentAlpacaKey = String(process.env.ALPACA_API_KEY_ID || '').trim();
+  const environmentAlpacaSecret = String(process.env.ALPACA_API_SECRET_KEY || '').trim();
+  const environmentTwelveDataKey = String(process.env.TWELVE_DATA_API_KEY || '').trim();
+  const environmentSecEdgarContact = normalizeSecEdgarContact(process.env.SEC_EDGAR_CONTACT);
+  const environmentQuantDashKey = String(process.env.QUANTDASH_API_KEY || '').trim();
+  const coinGeckoKey = environmentCoinGeckoKey || decryptStoredSecret(stored.providers.coingecko.encryptedApiKey).trim();
+  const alphaVantageKey = environmentAlphaVantageKey || decryptStoredSecret(stored.providers['alpha-vantage'].encryptedApiKey).trim();
+  const alpacaKey = environmentAlpacaKey || decryptStoredSecret(stored.providers.alpaca.encryptedKeyId).trim();
+  const alpacaSecret = environmentAlpacaSecret || decryptStoredSecret(stored.providers.alpaca.encryptedSecretKey).trim();
+  const twelveDataKey = environmentTwelveDataKey || decryptStoredSecret(stored.providers['twelve-data'].encryptedApiKey).trim();
+  const secEdgarContact = environmentSecEdgarContact || normalizeSecEdgarContact(decryptStoredSecret(stored.providers['sec-edgar'].encryptedContact));
+  const quantDashKey = environmentQuantDashKey || decryptStoredSecret(stored.providers['cn-stock'].encryptedApiKey).trim();
+  return {
+    coingecko: {
+      enabled: stored.providers.coingecko.enabled,
+      apiKey: coinGeckoKey,
+      credentialSource: environmentCoinGeckoKey ? 'environment' : coinGeckoKey ? 'stored' : 'none',
+    },
+    binance: {
+      enabled: stored.providers.binance.enabled,
+    },
+    alphaVantage: {
+      enabled: stored.providers['alpha-vantage'].enabled,
+      apiKey: alphaVantageKey,
+      credentialSource: environmentAlphaVantageKey ? 'environment' : alphaVantageKey ? 'stored' : 'none',
+    },
+    alpaca: {
+      enabled: stored.providers.alpaca.enabled,
+      feed: stored.providers.alpaca.feed,
+      keyId: alpacaKey,
+      secretKey: alpacaSecret,
+      credentialSource: environmentAlpacaKey && environmentAlpacaSecret ? 'environment' : alpacaKey && alpacaSecret ? 'stored' : 'none',
+    },
+    twelveData: {
+      enabled: stored.providers['twelve-data'].enabled,
+      apiKey: twelveDataKey,
+      credentialSource: environmentTwelveDataKey ? 'environment' : twelveDataKey ? 'stored' : 'none',
+    },
+    secEdgar: {
+      enabled: stored.providers['sec-edgar'].enabled,
+      contact: secEdgarContact,
+      credentialSource: environmentSecEdgarContact ? 'environment' : secEdgarContact ? 'stored' : 'none',
+    },
+    cnStock: {
+      enabled: stored.providers['cn-stock'].enabled,
+      apiKey: quantDashKey,
+      credentialSource: environmentQuantDashKey ? 'environment' : quantDashKey ? 'stored' : 'none',
+      label: 'QuantDash',
+    },
+    cnTencent: { enabled: stored.providers['cn-tencent'].enabled },
+    cnEastmoney: { enabled: stored.providers['cn-eastmoney'].enabled },
+    cnSina: { enabled: stored.providers['cn-sina'].enabled },
+  };
+}
+
+let financeService = null;
+function getFinanceService() {
+  if (!financeService) financeService = createFinanceService({ requestJson: requestFinanceJson, getConfig: resolveFinanceConfig });
+  return financeService;
+}
+
+function publicFinanceSettings() {
+  const stored = readFinanceSettings();
+  const config = resolveFinanceConfig();
+  const states = getFinanceService().providerStates();
+  return {
+    ok: true,
+    schemaVersion: 2,
+    refreshSeconds: stored.refreshSeconds,
+    secureStorage: safeStorage.isEncryptionAvailable(),
+    providers: states.map((provider) => ({
+      ...provider,
+      hasCredential: provider.id === 'coingecko' ? Boolean(config.coingecko.apiKey)
+        : provider.id === 'alpha-vantage' ? Boolean(config.alphaVantage.apiKey)
+          : provider.id === 'alpaca' ? Boolean(config.alpaca.keyId && config.alpaca.secretKey)
+            : provider.id === 'twelve-data' ? Boolean(config.twelveData.apiKey)
+              : provider.id === 'sec-edgar' ? Boolean(config.secEdgar.contact)
+                : provider.id === 'cn-stock' ? Boolean(config.cnStock.apiKey) : false,
+      verification: provider.id === 'coingecko' ? stored.providers.coingecko.verification
+        : provider.id === 'binance' ? stored.providers.binance.verification
+          : provider.id === 'alpha-vantage' ? stored.providers['alpha-vantage'].verification
+            : provider.id === 'alpaca' ? stored.providers.alpaca.verification
+              : provider.id === 'twelve-data' ? stored.providers['twelve-data'].verification
+                : provider.id === 'sec-edgar' ? stored.providers['sec-edgar'].verification
+                  : provider.id === 'cn-stock' ? stored.providers['cn-stock'].verification
+                    : provider.id === 'cn-tencent' ? stored.providers['cn-tencent'].verification
+                      : provider.id === 'cn-eastmoney' ? stored.providers['cn-eastmoney'].verification
+                        : provider.id === 'cn-sina' ? stored.providers['cn-sina'].verification : null,
+    })),
+  };
+}
+
+function updateFinanceProvider(payload) {
+  const providerId = String(payload?.providerId || '');
+  if (!['coingecko', 'binance', 'alpha-vantage', 'alpaca', 'twelve-data', 'sec-edgar', 'cn-stock', 'cn-tencent', 'cn-eastmoney', 'cn-sina'].includes(providerId)) return { ok: false, error: 'invalid_provider' };
+  const current = readFinanceSettings();
+  const apiKey = String(payload?.apiKey || '').trim();
+  const keyId = String(payload?.keyId || '').trim();
+  const secretKey = String(payload?.secretKey || '').trim();
+  const rawContact = String(payload?.contact || '').trim();
+  const contact = normalizeSecEdgarContact(rawContact);
+  if (apiKey.length > 512 || keyId.length > 256 || secretKey.length > 512 || rawContact.length > 160) return { ok: false, error: 'invalid_credential' };
+  if (providerId === 'sec-edgar' && rawContact && !contact) return { ok: false, error: 'invalid_contact' };
+  if ((apiKey || keyId || secretKey || contact) && !safeStorage.isEncryptionAvailable()) return { ok: false, error: 'secure_storage_unavailable' };
+  const providers = { ...current.providers };
+  if (providerId === 'coingecko') {
+    providers.coingecko = {
+      enabled: payload?.enabled !== false,
+      encryptedApiKey: payload?.removeCredential === true ? '' : apiKey
+        ? safeStorage.encryptString(apiKey).toString('base64') : current.providers.coingecko.encryptedApiKey,
+      verification: null,
+    };
+  } else if (providerId === 'binance') {
+    providers.binance = { enabled: payload?.enabled !== false, verification: null };
+  } else if (providerId === 'alpha-vantage') {
+    providers['alpha-vantage'] = {
+      enabled: payload?.enabled === true,
+      encryptedApiKey: payload?.removeCredential === true ? '' : apiKey
+        ? safeStorage.encryptString(apiKey).toString('base64') : current.providers['alpha-vantage'].encryptedApiKey,
+      verification: null,
+    };
+  } else if (providerId === 'alpaca') {
+    providers.alpaca = {
+      enabled: payload?.enabled === true,
+      feed: payload?.feed === 'sip' ? 'sip' : 'iex',
+      encryptedKeyId: payload?.removeCredential === true ? '' : keyId
+        ? safeStorage.encryptString(keyId).toString('base64') : current.providers.alpaca.encryptedKeyId,
+      encryptedSecretKey: payload?.removeCredential === true ? '' : secretKey
+        ? safeStorage.encryptString(secretKey).toString('base64') : current.providers.alpaca.encryptedSecretKey,
+      verification: null,
+    };
+  } else if (providerId === 'twelve-data') {
+    providers['twelve-data'] = {
+      enabled: payload?.enabled === true,
+      encryptedApiKey: payload?.removeCredential === true ? '' : apiKey
+        ? safeStorage.encryptString(apiKey).toString('base64') : current.providers['twelve-data'].encryptedApiKey,
+      verification: null,
+    };
+  } else if (providerId === 'sec-edgar') {
+    providers['sec-edgar'] = {
+      enabled: payload?.enabled === true,
+      encryptedContact: payload?.removeCredential === true ? '' : contact
+        ? safeStorage.encryptString(contact).toString('base64') : current.providers['sec-edgar'].encryptedContact,
+      verification: null,
+    };
+  } else if (providerId === 'cn-stock') {
+    providers['cn-stock'] = {
+      enabled: payload?.enabled === true,
+      encryptedApiKey: payload?.removeCredential === true ? '' : apiKey
+        ? safeStorage.encryptString(apiKey).toString('base64') : current.providers['cn-stock'].encryptedApiKey,
+      verification: null,
+    };
+  } else {
+    providers[providerId] = { enabled: payload?.enabled !== false, verification: null };
+  }
+  if (!writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), { schemaVersion: 2, refreshSeconds: current.refreshSeconds, providers })) return { ok: false, error: 'save_failed' };
+  getFinanceService().clearCache({ includeQuotaProtected: true });
+  if (financeBackgroundActive) {
+    financeBackgroundGeneration += 1;
+    if (financeBackgroundRequestId) getFinanceService().cancel(financeBackgroundRequestId);
+    void refreshFinanceBackground();
+  }
+  return publicFinanceSettings();
+}
+
+function clearFinanceBackgroundTimer() {
+  if (financeBackgroundTimer) clearTimeout(financeBackgroundTimer);
+  financeBackgroundTimer = null;
+}
+
+function scheduleFinanceBackgroundTimer() {
+  clearFinanceBackgroundTimer();
+  if (!financeBackgroundActive || financeBackgroundInterval <= 0 || isQuitting) return;
+  financeBackgroundTimer = setTimeout(() => {
+    financeBackgroundTimer = null;
+    void refreshFinanceBackground();
+  }, financeBackgroundInterval * 1000);
+  financeBackgroundTimer.unref?.();
+}
+
+function financeBackgroundIssueCode(value) {
+  const code = String(value?.error || value?.warning || value?.code || value?.message || value || '').trim().slice(0, 80);
+  return /^[a-z0-9_,:-]+$/i.test(code) ? code : 'network_error';
+}
+
+function financeBackgroundIssues(snapshot) {
+  const issues = [];
+  for (const warning of Array.isArray(snapshot?.overview?.warnings) ? snapshot.overview.warnings : []) {
+    issues.push(`${String(warning?.provider || 'overview').slice(0, 32)}:${financeBackgroundIssueCode(warning)}`);
+  }
+  for (const [key, result] of Object.entries(snapshot?.rankings || {})) {
+    if (!result) issues.push(`${key}:request_failed`);
+    else if (result.ok === false || result.error) issues.push(`${key}:${financeBackgroundIssueCode(result)}`);
+    else if ((!Array.isArray(result.rows) || !result.rows.length) && result.unavailable) issues.push(`${key}:${financeBackgroundIssueCode(result.unavailable)}`);
+    else if ((!Array.isArray(result.rows) || !result.rows.length) && result.warning) issues.push(`${key}:${financeBackgroundIssueCode(result.warning)}`);
+  }
+  return [...new Set(issues)].slice(0, 16);
+}
+
+async function refreshFinanceBackground({ allowInactive = false } = {}) {
+  if ((!financeBackgroundActive && !allowInactive) || financeBackgroundPending || isQuitting) return;
+  const generation = financeBackgroundGeneration;
+  const requestId = `finance-background-${generation}-${++financeBackgroundSequence}`;
+  financeBackgroundRequestId = requestId;
+  financeBackgroundPending = true;
+  const startedAt = Date.now();
+  try {
+    const snapshot = await getFinanceService().prefetch({ ...financeBackgroundPayload, requestId });
+    const issues = financeBackgroundIssues(snapshot);
+    if (issues.length) console.warn(`[finance] Background refresh ${requestId} completed with issues after ${Date.now() - startedAt}ms: ${issues.join(', ')}`);
+    if (generation === financeBackgroundGeneration && (financeBackgroundActive || allowInactive) && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('finance:update', snapshot);
+    }
+  } catch (error) {
+    const code = financeBackgroundIssueCode(error);
+    if (code !== 'cancelled') console.warn(`[finance] Background refresh ${requestId} failed after ${Date.now() - startedAt}ms: ${code}`);
+  } finally {
+    if (financeBackgroundRequestId === requestId) financeBackgroundRequestId = '';
+    financeBackgroundPending = false;
+    if (generation === financeBackgroundGeneration && financeBackgroundActive) scheduleFinanceBackgroundTimer();
+    else if (financeBackgroundActive && !isQuitting) void refreshFinanceBackground();
+  }
+}
+
+function setFinanceBackgroundActivity(payload = {}) {
+  const active = payload.active === true;
+  // 启动预热只读取一次已配置的 provider 快照，不改变隐藏页面的周期刷新策略。
+  const startupPrefetch = payload.prefetch === true && readAppSettings().features?.finance !== false;
+  const nextInterval = [0, 30, 60, 120, 300].includes(Number(payload.refreshSeconds)) ? Number(payload.refreshSeconds) : readFinanceSettings().refreshSeconds;
+  const nextPayload = {
+    assetIds: Array.isArray(payload.assetIds) ? [...new Set(payload.assetIds.map((value) => String(value).trim().slice(0, 240)).filter(Boolean))].slice(0, 100) : [],
+    rankingMarket: ['all', 'crypto', 'binance', 'us', 'cn'].includes(payload.rankingMarket) ? payload.rankingMarket : 'all',
+    rankingSource: ['coingecko', 'binance'].includes(payload.rankingSource) ? payload.rankingSource : 'coingecko',
+    rankingSort: ['gainers', 'losers', 'market_cap', 'volume'].includes(payload.rankingSort) ? payload.rankingSort : 'gainers',
+    rankingPage: Math.max(1, Math.min(200, Math.floor(Number(payload.rankingPage) || 1))),
+  };
+  const payloadChanged = JSON.stringify(nextPayload) !== JSON.stringify(financeBackgroundPayload);
+  const changed = active !== financeBackgroundActive || nextInterval !== financeBackgroundInterval || payloadChanged;
+  financeBackgroundActive = active;
+  financeBackgroundInterval = nextInterval;
+  financeBackgroundPayload = nextPayload;
+  if (!active) {
+    financeBackgroundGeneration += 1;
+    if (financeBackgroundRequestId) getFinanceService().cancel(financeBackgroundRequestId);
+    clearFinanceBackgroundTimer();
+    if (startupPrefetch) void refreshFinanceBackground({ allowInactive: true });
+    return { ok: true, active: false, refreshSeconds: financeBackgroundInterval, prefetching: startupPrefetch };
+  }
+  if (payloadChanged && financeBackgroundPending) {
+    financeBackgroundGeneration += 1;
+    if (financeBackgroundRequestId) getFinanceService().cancel(financeBackgroundRequestId);
+  }
+  scheduleFinanceBackgroundTimer();
+  if (financeBackgroundInterval > 0 && (changed || !financeBackgroundPending)) void refreshFinanceBackground();
+  return { ok: true, active: true, refreshSeconds: financeBackgroundInterval };
+}
+
+function updateFinanceRefreshInterval(value) {
+  const refreshSeconds = [0, 30, 60, 120, 300].includes(Number(value)) ? Number(value) : null;
+  if (refreshSeconds === null) return { ok: false, error: 'invalid_refresh_interval' };
+  const current = readFinanceSettings();
+  if (!writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), { schemaVersion: 2, refreshSeconds, providers: current.providers })) return { ok: false, error: 'save_failed' };
+  financeBackgroundInterval = refreshSeconds;
+  scheduleFinanceBackgroundTimer();
+  if (financeBackgroundActive && refreshSeconds > 0) void refreshFinanceBackground();
+  return publicFinanceSettings();
 }
 
 function workspaceRoot() {
@@ -1550,7 +1928,7 @@ function refreshTrayMenu() {
   if (!tray) return;
   const autoLaunch = isAutoLaunchEnabled();
   const settings = readAppSettings();
-  const featureLabels = { todo: '待办', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板' };
+  const featureLabels = { todo: '待办', finance: '行情', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板' };
   const menu = Menu.buildFromTemplate([
     {
       label: 'API 配置…',
@@ -1942,6 +2320,82 @@ function fetchPinnedAIEndpoint(endpoint, options = {}) {
   });
 }
 
+async function requestFinanceJson(value, options = {}) {
+  let url;
+  try { url = new URL(value); } catch (error) { throw Object.assign(new Error('invalid_endpoint'), { code: 'invalid_endpoint' }); }
+  if (!FINANCE_ALLOWED_ORIGINS.has(url.origin) || url.username || url.password) {
+    throw Object.assign(new Error('unsafe_endpoint'), { code: 'unsafe_endpoint' });
+  }
+  const method = options.method === 'POST' ? 'POST' : 'GET';
+  if (options.method && !['GET', 'POST'].includes(options.method)) throw Object.assign(new Error('invalid_request'), { code: 'invalid_request' });
+  const body = method === 'POST' ? String(options.body || '') : '';
+  if (Buffer.byteLength(body, 'utf8') > FINANCE_FETCH_MAX_REQUEST_BYTES) throw Object.assign(new Error('invalid_request'), { code: 'invalid_request' });
+  if (options.signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
+  const endpoint = await resolvePinnedAIEndpoint(url.toString());
+  if (options.signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
+  if (!endpoint) throw Object.assign(new Error('unsafe_endpoint'), { code: 'unsafe_endpoint' });
+  const controller = new AbortController();
+  let timedOut = false;
+  const onExternalAbort = () => controller.abort();
+  if (options.signal?.aborted) onExternalAbort();
+  else options.signal?.addEventListener('abort', onExternalAbort, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, FINANCE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetchPinnedAIEndpoint(endpoint, {
+      method,
+      headers: options.headers,
+      body: body || undefined,
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      let retryAfterMs = null;
+      try {
+        const bodyText = await readResponseText(response);
+        const body = JSON.parse(bodyText);
+        retryAfterMs = Number.isFinite(Number(body?.retry_after_ms)) ? Number(body.retry_after_ms) : null;
+      } catch (error) {}
+      throw Object.assign(new Error(`http_${response.status}`), { code: `http_${response.status}`, retryAfterMs });
+    }
+    const responseType = options.responseType === 'text' ? 'text' : 'json';
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    if (responseType === 'json' && contentType && !contentType.includes('application/json')) {
+      try { await response.body?.cancel(); } catch (error) {}
+      throw Object.assign(new Error('invalid_response_type'), { code: 'invalid_response' });
+    }
+    const reader = response.body?.getReader();
+    if (!reader) throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' });
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const { done, value: chunk } = await reader.read();
+      if (done) break;
+      size += chunk.byteLength;
+      if (size > FINANCE_FETCH_MAX_BYTES) {
+        await reader.cancel();
+        throw Object.assign(new Error('response_too_large'), { code: 'response_too_large' });
+      }
+      chunks.push(Buffer.from(chunk));
+    }
+    const bytes = Buffer.concat(chunks);
+    if (responseType === 'text') {
+      try { return new TextDecoder(options.encoding || 'utf-8').decode(bytes); }
+      catch (error) { throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' }); }
+    }
+    try { return JSON.parse(bytes.toString('utf8')); }
+    catch (error) { throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' }); }
+  } catch (error) {
+    if (options.signal?.aborted && !timedOut) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
+    if (error?.name === 'AbortError' || timedOut) throw Object.assign(new Error('timeout'), { code: 'timeout' });
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', onExternalAbort);
+  }
+}
+
 async function readResponseText(response) {
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -2064,6 +2518,54 @@ async function inspectLink(rawUrl, ownerId) {
 }
 
 ipcMain.handle('links:inspect', (event, url) => inspectLink(url, event.sender.id));
+
+function financeRequestId(senderId, value) {
+  const requestId = String(value || '').trim().slice(0, 120);
+  return requestId ? `${senderId}:${requestId}` : '';
+}
+
+function financeRequestPayload(event, payload = {}) {
+  const input = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+  return { ...input, requestId: financeRequestId(event.sender.id, input.requestId) };
+}
+
+ipcMain.handle('finance:get-settings', () => publicFinanceSettings());
+ipcMain.handle('finance:set-provider', (event, payload) => updateFinanceProvider(payload));
+ipcMain.handle('finance:set-refresh-interval', (event, value) => updateFinanceRefreshInterval(value));
+ipcMain.handle('finance:set-activity', (event, payload) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, error: 'forbidden' };
+  return setFinanceBackgroundActivity(payload);
+});
+ipcMain.handle('finance:test-provider', async (event, providerId) => {
+  const id = String(providerId || '');
+  if (!['coingecko', 'binance', 'alpha-vantage', 'alpaca', 'twelve-data', 'sec-edgar', 'cn-stock', 'cn-tencent', 'cn-eastmoney', 'cn-sina'].includes(id)) return { ok: false, error: 'invalid_provider' };
+  const result = await getFinanceService().testProvider(id);
+  const current = readFinanceSettings();
+  const providers = { ...current.providers };
+  providers[id] = {
+    ...providers[id],
+    verification: {
+      state: result.ok ? 'verified' : 'failed',
+      verifiedAt: new Date().toISOString(),
+      error: result.ok ? '' : String(result.error || 'unknown').slice(0, 80),
+      capabilities: result.ok && result.capabilities && typeof result.capabilities === 'object'
+        ? result.capabilities : null,
+    },
+  };
+  writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), { schemaVersion: 2, refreshSeconds: current.refreshSeconds, providers });
+  return { ...result, settings: publicFinanceSettings() };
+});
+ipcMain.handle('finance:refresh', () => {
+  getFinanceService().clearCache();
+  return { ok: true };
+});
+ipcMain.handle('finance:overview', (event, payload) => getFinanceService().overview(financeRequestPayload(event, payload)));
+ipcMain.handle('finance:ranking', (event, payload) => getFinanceService().ranking(financeRequestPayload(event, payload)));
+ipcMain.handle('finance:quotes', (event, payload) => getFinanceService().quotes(financeRequestPayload(event, payload)));
+ipcMain.handle('finance:history', (event, payload) => getFinanceService().history(financeRequestPayload(event, payload)));
+ipcMain.handle('finance:fundamentals', (event, payload) => getFinanceService().fundamentals(financeRequestPayload(event, payload)));
+ipcMain.handle('finance:search', (event, payload) => getFinanceService().search(financeRequestPayload(event, payload)));
+ipcMain.handle('finance:cancel', (event, requestId) => getFinanceService().cancel(financeRequestId(event.sender.id, requestId)));
 
 ipcMain.handle('smart:organize-material', async (event, payload) => {
   const text = String(payload && payload.text || '').trim();
@@ -3965,6 +4467,10 @@ app.on('window-all-closed', () => {});
 
 app.on('before-quit', () => {
   launcherService?.cancel().catch(() => {});
+  financeBackgroundGeneration += 1;
+  financeBackgroundActive = false;
+  if (financeBackgroundRequestId) getFinanceService().cancel(financeBackgroundRequestId);
+  clearFinanceBackgroundTimer();
   isQuitting = true;
   hideWhenCollapsed = false;
 });

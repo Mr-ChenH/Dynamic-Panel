@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="links.css" />
     <link rel="stylesheet" href="ai.css" />
     <link rel="stylesheet" href="home.css" />
+    <link rel="stylesheet" href="finance.css" />
   </head>
   <body>
     <div id="app" class="collapsed">
@@ -69,6 +70,10 @@
                 <rect x="9" y="3" width="6" height="4" rx="1" />
               </svg>
               <span class="tab-label">剪贴</span>
+            </button>
+            <button class="tab" id="tab-button-finance" type="button" data-tab="finance" role="tab" aria-controls="tab-finance" aria-selected="false" tabindex="-1">
+              <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V5M4 19h16"/><path d="m7 15 3-4 3 2 5-7"/></svg>
+              <span class="tab-label">行情</span>
             </button>
             <button class="tab" id="tab-button-notes" type="button" data-tab="notes" role="tab" aria-controls="tab-notes" aria-selected="false" tabindex="-1">
               <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -498,6 +503,58 @@
             </div>
           </section>
 
+          <section id="tab-finance" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-finance" aria-hidden="true" inert>
+            <div class="finance-page">
+              <header class="finance-page-head">
+                <div class="finance-title"><span class="tile-label">市场数据</span><h1>金融观察</h1></div>
+                <nav class="finance-view-tabs" role="tablist" aria-label="行情视图"><button type="button" class="active" data-finance-view="overview" role="tab" aria-selected="true">市场</button><button type="button" data-finance-view="ranking" role="tab" aria-selected="false">榜单</button><button type="button" data-finance-view="watchlist" role="tab" aria-selected="false">自选</button></nav>
+                <div class="finance-head-actions"><span id="finance-provider-summary">正在读取数据源</span><time id="finance-updated">尚未更新</time><button id="finance-refresh" class="finance-icon-button" type="button" title="刷新行情" aria-label="刷新行情"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66L20 8"/><path d="M20 3v5h-5"/></svg></button></div>
+              </header>
+              <main class="finance-content">
+                <section id="finance-overview" class="finance-view active" data-finance-view-panel="overview">
+                  <header class="finance-section-head finance-overview-head"><div><span class="tile-label">全球市场 · 只读快照</span><strong>市场总览</strong></div><div class="finance-overview-head-actions"><span id="finance-overview-status">正在获取</span><button id="finance-ai-analyze" class="finance-ai-button" type="button" title="根据当前行情快照生成结构化事实解读"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 1.3 4.7L18 9l-4.7 1.3L12 15l-1.3-4.7L6 9l4.7-1.3L12 3Z"/><path d="m19 14 .6 2.4L22 17l-2.4.6L19 20l-.6-2.4L16 17l2.4-.6L19 14Z"/></svg><span>AI 解读</span></button></div></header>
+                  <div id="finance-market-status" class="finance-market-status"></div>
+                  <div class="finance-overview-hero">
+                    <section class="finance-overview-chart-block">
+                      <header><div><span class="tile-label">可用趋势 · 7 日</span><strong id="finance-overview-chart-title">等待曲线</strong><small>仅展示 provider 返回的真实历史序列</small></div><div id="finance-overview-benchmarks" class="finance-benchmark-tabs" role="group" aria-label="市场曲线选择"></div></header>
+                      <div class="finance-chart-metric"><strong id="finance-overview-chart-value">--</strong><span id="finance-overview-chart-change">--</span></div>
+                      <canvas id="finance-overview-chart" class="finance-chart" role="img" aria-label="市场七日走势"></canvas>
+                      <footer><span id="finance-overview-chart-range">7 日 · 实际价格序列</span><span id="finance-overview-chart-source">等待数据</span></footer>
+                    </section>
+                    <aside class="finance-overview-rail">
+                      <section class="finance-overview-lead">
+                        <header><div><span class="tile-label">三市场</span><strong>市场数据概览</strong></div><span>当前样本</span></header>
+                        <div id="finance-overview-market-summaries" class="finance-overview-market-summaries"></div>
+                      </section>
+                    </aside>
+                  </div>
+                  <section class="finance-market-movers" aria-label="市场异动">
+                    <header><div><span class="tile-label">分市场行情</span><strong>各市场当前焦点</strong></div><button type="button" data-finance-open-ranking>查看完整榜单</button></header>
+                    <div class="finance-market-mover-grid">
+                      <section><header><span class="finance-mover-indicator cn"></span><strong>A 股</strong><small>领涨 · 领跌 · 活跃</small></header><div id="finance-overview-cn" class="finance-overview-leaders"></div></section>
+                      <section><header><span class="finance-mover-indicator us"></span><strong>美股</strong><small>领涨 · 领跌 · 活跃</small></header><div id="finance-overview-us" class="finance-overview-leaders"></div></section>
+                      <section><header><span class="finance-mover-indicator crypto"></span><strong>加密货币</strong><small>领涨 · 领跌 · 活跃</small></header><div id="finance-overview-crypto" class="finance-overview-leaders"></div></section>
+                    </div>
+                  </section>
+                  <div class="finance-overview-disclosure"><span>只读观察</span><p>各市场摘要与异动只统计当前 provider 返回的样本；未配置或不支持榜单的市场会保留明确空态。</p><p>主图只展示真实历史序列；全球加密历史不可用时会明确使用 BTC 作为代理。</p></div>
+                  <section class="finance-ai-panel"><header><div><span class="tile-label">辅助阅读</span><strong>AI 市场解读</strong></div><span id="finance-ai-scope">只引用当前快照 · 不构成投资建议</span></header><div id="finance-ai-result" class="finance-ai-result"><p>点击“AI 解读”，让已配置的内容模型整理当前市场状态。</p></div><footer><span id="finance-ai-status" role="status" aria-live="polite">不会自动调用</span><span>数据源、事件时间和取回时间会随快照一并提供给模型</span></footer></section>
+                </section>
+                <section id="finance-ranking" class="finance-view" data-finance-view-panel="ranking" hidden>
+                  <div class="finance-ranking-toolbar"><div class="finance-market-pills" role="group" aria-label="榜单市场"><button type="button" class="active" data-finance-market="all">全部可用</button><button type="button" data-finance-market="crypto">加密货币</button><button type="button" data-finance-market="us">美股</button><button type="button" data-finance-market="cn">A 股</button></div><div class="finance-ranking-filters"><label id="finance-ranking-source-label"><span>加密源</span><select id="finance-ranking-source" aria-label="加密货币数据源"><option value="coingecko">CoinGecko 聚合</option><option value="binance">Binance USDT 现货</option></select></label><label><span>排序</span><select id="finance-ranking-sort" aria-label="榜单类型"><option value="gainers">24h 涨幅</option><option value="losers">24h 跌幅</option><option value="market_cap">市值</option><option value="volume">24h 成交额</option></select></label></div></div>
+                  <section class="finance-ranking-summary" aria-label="榜单摘要"><div class="finance-ranking-summary-copy"><span class="tile-label">榜单快照</span><strong id="finance-ranking-title">等待榜单</strong><small id="finance-ranking-subtitle">只显示 provider 返回的数据</small></div><div class="finance-ranking-summary-metrics"><span><b id="finance-ranking-total">--</b><small>返回标的</small></span><span><b id="finance-ranking-positive">--</b><small>上涨</small></span><span><b id="finance-ranking-negative">--</b><small>下跌</small></span><span><b id="finance-ranking-flat">--</b><small>横盘</small></span></div></section>
+                  <div id="finance-ranking-state" class="finance-inline-state" role="status" aria-live="polite"></div>
+                  <section class="finance-ranking-spotlight-section" aria-label="榜单前三名"><header><div><span class="tile-label">快速查看</span><strong>榜单前三</strong></div><span>按当前排序</span></header><div id="finance-ranking-spotlight" class="finance-ranking-spotlight"></div></section>
+                  <div id="finance-ranking-list" class="finance-ranking-list" role="table" aria-label="行情榜单"></div>
+                  <nav id="finance-ranking-pagination" class="finance-ranking-pagination" aria-label="榜单分页" hidden><button id="finance-ranking-previous" type="button" title="上一页" aria-label="上一页">&larr;</button><span id="finance-ranking-page-label">第 1 页</span><button id="finance-ranking-next" type="button" title="下一页" aria-label="下一页">&rarr;</button></nav>
+                </section>
+                <section id="finance-watchlist" class="finance-view" data-finance-view-panel="watchlist" hidden>
+                  <div class="finance-toolbar"><div><label><span>自选分组</span><select id="finance-list-select" aria-label="自选分组"></select></label><span id="finance-result-count">0 个标的</span></div><label><span>排序</span><select id="finance-sort" aria-label="行情排序"><option value="manual">手动顺序</option><option value="change">24h 涨跌</option><option value="name">名称</option></select></label></div>
+                  <div class="finance-watchlist-workspace"><div id="finance-quotes" class="finance-quotes" role="list" aria-label="自选行情列表"></div><aside id="finance-detail" class="finance-detail" aria-label="资产详情"><div class="finance-detail-empty">选择一个标的查看详情</div></aside></div>
+                </section>
+              </main>
+            </div>
+          </section>
+
           <section id="tab-recordings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-recordings" aria-hidden="true" inert>
             <div class="recordings-page">
               <aside class="recording-library">
@@ -670,6 +727,66 @@
                   </div>
                 </section>
 
+                <section class="tile settings-card settings-finance-card">
+                  <div class="settings-card-heading"><div><span class="tile-label">行情服务</span><strong>数据源配置</strong></div><small>先选择市场，再配置主数据源；辅助来源按需开启</small></div>
+                  <div class="finance-settings-overview" aria-label="行情数据源配置概览">
+                    <div class="finance-settings-overview-copy"><span class="tile-label">推荐配置顺序</span><strong>选择市场 → 启用主数据源 → 保存凭据 → 测试连接</strong><p>同一市场可以启用多个来源，应用会按能力组合使用。没有明确需要时，不必把所有 API 都配置一遍。</p></div>
+                    <div class="finance-settings-overview-stats" aria-live="polite"><span><b id="finance-settings-enabled-count">--</b>已启用</span><span><b id="finance-settings-credential-count">--</b>已配置凭据</span><span><b id="finance-settings-verified-count">--</b>已验证</span></div>
+                  </div>
+                  <div class="finance-settings-layout">
+                    <nav class="finance-settings-nav" aria-label="行情设置分类" role="tablist">
+                      <button id="finance-settings-tab-crypto" type="button" class="active" data-finance-settings-tab="crypto" role="tab" aria-selected="true" aria-controls="finance-settings-panel-crypto">
+                        <span class="finance-settings-nav-icon">₿</span><span><strong>加密货币</strong><small>2 个数据源</small></span>
+                      </button>
+                      <button id="finance-settings-tab-us" type="button" data-finance-settings-tab="us" role="tab" aria-selected="false" aria-controls="finance-settings-panel-us">
+                        <span class="finance-settings-nav-icon">US</span><span><strong>美股</strong><small>4 个数据源</small></span>
+                      </button>
+                      <button id="finance-settings-tab-cn" type="button" data-finance-settings-tab="cn" role="tab" aria-selected="false" aria-controls="finance-settings-panel-cn">
+                        <span class="finance-settings-nav-icon">A</span><span><strong>A 股</strong><small>4 个数据源</small></span>
+                      </button>
+                      <span class="finance-settings-nav-divider" aria-hidden="true"></span>
+                      <button id="finance-settings-tab-preferences" type="button" data-finance-settings-tab="preferences" role="tab" aria-selected="false" aria-controls="finance-settings-panel-preferences">
+                        <span class="finance-settings-nav-icon">⚙</span><span><strong>展示偏好</strong><small>默认视图与刷新</small></span>
+                      </button>
+                      <button id="finance-settings-tab-watchlists" type="button" data-finance-settings-tab="watchlists" role="tab" aria-selected="false" aria-controls="finance-settings-panel-watchlists">
+                        <span class="finance-settings-nav-icon">☆</span><span><strong>自选与分组</strong><small>管理观察列表</small></span>
+                      </button>
+                    </nav>
+                    <div class="finance-settings-detail">
+                  <div class="finance-settings-sources" id="finance-settings-sources">
+                    <section class="finance-settings-market" id="finance-settings-panel-crypto" data-finance-settings-market="crypto" data-finance-settings-panel="crypto" role="tabpanel" aria-labelledby="finance-settings-tab-crypto">
+                      <header class="finance-settings-market-heading"><div><span class="finance-settings-market-icon">₿</span><div><strong>加密货币</strong><small>默认即可使用，API Key 用于提高稳定性或补充来源</small></div></div><span class="finance-settings-market-count">2 个来源</span></header>
+                      <div class="finance-settings-market-grid">
+                        <section class="finance-settings-source" data-finance-provider="coingecko"><header><div><span class="finance-provider-kicker">主数据源 · API Key 可选</span><strong>CoinGecko</strong><span>聚合市场、榜单与历史走势</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-coingecko-enabled" type="checkbox" /></label></header><div class="finance-provider-fields"><label><span>Demo API Key（可选）</span><input id="finance-coingecko-key" type="password" maxlength="512" placeholder="已保存时留空" autocomplete="off" spellcheck="false" /></label><p class="finance-provider-help">不填密钥也可使用公开接口；配置 Demo Key 后可减少公共限流对榜单与历史数据的影响。</p></div><footer><small data-finance-provider-status="coingecko">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-remove="coingecko">清除密钥</button><button type="button" class="workspace-button compact" data-finance-provider-test="coingecko">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="coingecko">保存</button></footer></section>
+                        <section class="finance-settings-source" data-finance-provider="binance"><header><div><span class="finance-provider-kicker">辅助报价 · 无需密钥</span><strong>Binance Public API</strong><span>USDT 现货实时行情</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-binance-enabled" type="checkbox" /></label></header><div class="finance-provider-fields"><p class="finance-provider-help">只读取公开 USDT 现货行情，适合补充高频报价。数据可用性受所在地区与 Binance 服务条款限制。</p></div><footer><small data-finance-provider-status="binance">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-test="binance">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="binance">保存</button></footer></section>
+                      </div>
+                    </section>
+                    <section class="finance-settings-market" id="finance-settings-panel-us" data-finance-settings-market="us" data-finance-settings-panel="us" role="tabpanel" aria-labelledby="finance-settings-tab-us" hidden>
+                      <header class="finance-settings-market-heading"><div><span class="finance-settings-market-icon">US</span><div><strong>美股</strong><small>报价、榜单、搜索和基本面由不同服务分别提供</small></div></div><span class="finance-settings-market-count">4 个来源</span></header>
+                      <div class="finance-settings-market-grid">
+                        <section class="finance-settings-source" data-finance-provider="alpaca"><header><div><span class="finance-provider-kicker">主报价 · 需要账户凭据</span><strong>Alpaca Market Data</strong><span>实时快照与精确代码查询</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-alpaca-enabled" type="checkbox" /></label></header><div class="finance-provider-fields finance-provider-fields-alpaca"><label><span>API Key ID</span><input id="finance-alpaca-key-id" type="password" maxlength="256" placeholder="已保存时留空" autocomplete="off" spellcheck="false" /></label><label><span>Secret Key</span><input id="finance-alpaca-secret" type="password" maxlength="512" placeholder="已保存时留空" autocomplete="off" spellcheck="false" /></label><label><span>行情 Feed</span><select id="finance-alpaca-feed"><option value="iex">IEX（基础账户）</option><option value="sip">SIP（需权限）</option></select></label><p class="finance-provider-help">Basic 账户通常使用 IEX，仅代表单一交易所成交；只有账户具备全市场 SIP 权限时才选择 SIP。</p><div class="finance-provider-capabilities" data-finance-provider-capabilities="alpaca" aria-live="polite">运行连接测试后显示账户实际能力</div></div><footer><small data-finance-provider-status="alpaca">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-remove="alpaca">清除密钥</button><button type="button" class="workspace-button compact" data-finance-provider-test="alpaca">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="alpaca">保存</button></footer></section>
+                        <section class="finance-settings-source" data-finance-provider="alpha-vantage"><header><div><span class="finance-provider-kicker">榜单 · 需要 API Key</span><strong>Alpha Vantage</strong><span>日终涨跌榜与成交榜</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-alpha-vantage-enabled" type="checkbox" /></label></header><div class="finance-provider-fields"><label><span>API Key</span><input id="finance-alpha-vantage-key" type="password" maxlength="512" placeholder="免费 API Key" autocomplete="off" spellcheck="false" /></label><p class="finance-provider-help">免费榜单通常为日终快照，额度约 25 次/日；应用至少复用 12 小时缓存，手动刷新不会绕过限制。</p></div><footer><small data-finance-provider-status="alpha-vantage">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-remove="alpha-vantage">清除密钥</button><button type="button" class="workspace-button compact" data-finance-provider-test="alpha-vantage">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="alpha-vantage">保存</button></footer></section>
+                        <section class="finance-settings-source" data-finance-provider="twelve-data"><header><div><span class="finance-provider-kicker">搜索与补充报价 · 需要 API Key</span><strong>Twelve Data</strong><span>名称搜索、历史与备用报价</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-twelve-data-enabled" type="checkbox" /></label></header><div class="finance-provider-fields"><label><span>API Key</span><input id="finance-twelve-data-key" type="password" maxlength="512" placeholder="免费 API Key" autocomplete="off" spellcheck="false" /></label><p class="finance-provider-help">Basic 额度约 8 credits/分钟、800/日。默认实时源并非全市场 SIP，主要用于名称搜索和 Alpaca 未解析代码的补充。</p><div class="finance-provider-capabilities" data-finance-provider-capabilities="twelve-data" aria-live="polite">运行连接测试后显示账户实际能力</div></div><footer><small data-finance-provider-status="twelve-data">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-remove="twelve-data">清除密钥</button><button type="button" class="workspace-button compact" data-finance-provider-test="twelve-data">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="twelve-data">保存</button></footer></section>
+                        <section class="finance-settings-source" data-finance-provider="sec-edgar"><header><div><span class="finance-provider-kicker">基本面 · 需要联系邮箱</span><strong>SEC EDGAR</strong><span>官方 XBRL 申报数据</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-sec-edgar-enabled" type="checkbox" /></label></header><div class="finance-provider-fields"><label><span>Fair Access 联系邮箱</span><input id="finance-sec-edgar-contact" type="email" maxlength="160" placeholder="name@example.com" autocomplete="off" spellcheck="false" /></label><p class="finance-provider-help">不提供股价或实时行情。SEC 要求 User-Agent 包含可联系身份，邮箱仅进入请求头并由系统安全存储保存。</p><div class="finance-provider-capabilities" data-finance-provider-capabilities="sec-edgar" aria-live="polite">运行连接测试后显示实际能力</div></div><footer><small data-finance-provider-status="sec-edgar">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-remove="sec-edgar">清除联系信息</button><button type="button" class="workspace-button compact" data-finance-provider-test="sec-edgar">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="sec-edgar">保存</button></footer></section>
+                      </div>
+                    </section>
+                    <section class="finance-settings-market" id="finance-settings-panel-cn" data-finance-settings-market="cn" data-finance-settings-panel="cn" role="tabpanel" aria-labelledby="finance-settings-tab-cn" hidden>
+                      <header class="finance-settings-market-heading"><div><span class="finance-settings-market-icon">A</span><div><strong>A 股</strong><small>公开来源适合基础行情，QuantDash 用于稳定 API 与历史能力</small></div></div><span class="finance-settings-market-count">4 个来源</span></header>
+                      <div class="finance-settings-market-grid">
+                        <section class="finance-settings-source" data-finance-provider="cn-eastmoney"><header><div><span class="finance-provider-kicker">推荐公开源 · 无需密钥</span><strong>东方财富公开行情</strong><span>列表、榜单、实时与日 K</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-eastmoney-enabled" type="checkbox" /></label></header><div class="finance-provider-fields"><p class="finance-provider-help">用于 A 股列表、榜单分页、按代码报价和日 K 历史；市值字段不作为统一榜单能力承诺。</p></div><footer><small data-finance-provider-status="cn-eastmoney">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-test="cn-eastmoney">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="cn-eastmoney">保存</button></footer></section>
+                        <section class="finance-settings-source" data-finance-provider="cn-stock"><header><div><span class="finance-provider-kicker">增强能力 · 需要 API Key</span><strong>QuantDash</strong><span>实时快照与 K 线 API</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-quantdash-enabled" type="checkbox" /></label></header><div class="finance-provider-fields finance-provider-fields-quantdash"><label><span>API Key</span><input id="finance-quantdash-key" type="password" maxlength="512" placeholder="已保存时留空" autocomplete="off" spellcheck="false" /></label><p class="finance-provider-help">免费套餐有分钟级次数和单次标的数量限制；全市场榜单还需要 CN_Stock 标的池权限，市值榜暂不提供。</p><div class="finance-provider-capabilities" data-finance-provider-capabilities="cn-stock" aria-live="polite">运行连接测试后显示账户实际能力</div></div><footer><small data-finance-provider-status="cn-stock">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-remove="cn-stock">清除 API Key</button><button type="button" class="workspace-button compact" data-finance-provider-test="cn-stock">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="cn-stock">保存</button></footer></section>
+                        <section class="finance-settings-source" data-finance-provider="cn-tencent"><header><div><span class="finance-provider-kicker">备用快照 · 无需密钥</span><strong>腾讯公开行情</strong><span>按代码批量实时快照</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-tencent-enabled" type="checkbox" /></label></header><div class="finance-provider-fields"><p class="finance-provider-help">提供公开实时批量行情，不提供完整市场排名和日 K 历史；接口和字段可用性受上游变化影响。</p></div><footer><small data-finance-provider-status="cn-tencent">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-test="cn-tencent">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="cn-tencent">保存</button></footer></section>
+                        <section class="finance-settings-source" data-finance-provider="cn-sina"><header><div><span class="finance-provider-kicker">备用快照 · 无需密钥</span><strong>新浪公开行情</strong><span>按代码批量实时快照</span></div><label class="finance-provider-switch"><span>启用</span><input id="finance-sina-enabled" type="checkbox" /></label></header><div class="finance-provider-fields"><p class="finance-provider-help">提供 GBK 文本格式的公开实时行情，不提供完整市场排名和日 K 历史；接口和字段可用性受上游变化影响。</p></div><footer><small data-finance-provider-status="cn-sina">读取配置中</small><button type="button" class="workspace-button compact" data-finance-provider-test="cn-sina">测试连接</button><button type="button" class="workspace-button compact primary" data-finance-provider-save="cn-sina">保存</button></footer></section>
+                      </div>
+                    </section>
+                  </div>
+                  <div class="finance-settings-preferences" id="finance-settings-panel-preferences" data-finance-settings-panel="preferences" role="tabpanel" aria-labelledby="finance-settings-tab-preferences" hidden><div><span class="tile-label">展示偏好</span><strong>默认行情视图</strong></div><div class="finance-settings-preference-grid"><label><span>打开时视图</span><select id="finance-settings-default-view"><option value="overview">市场总览</option><option value="ranking">行情榜单</option><option value="watchlist">自选行情</option></select></label><label><span>默认榜单市场</span><select id="finance-settings-default-market"><option value="all">全部可用</option><option value="crypto">加密货币</option><option value="us">美股</option><option value="cn">A 股</option></select></label><label><span>默认加密源</span><select id="finance-settings-default-source"><option value="coingecko">CoinGecko 聚合</option><option value="binance">Binance USDT 现货</option></select></label><label><span>默认榜单类型</span><select id="finance-settings-default-ranking"><option value="gainers">24h 涨幅</option><option value="losers">24h 跌幅</option><option value="market_cap">市值</option><option value="volume">24h 成交额</option></select></label><label><span>自动刷新</span><select id="finance-settings-refresh-seconds"><option value="0">仅手动</option><option value="30">30 秒</option><option value="60">60 秒</option><option value="120">2 分钟</option><option value="300">5 分钟</option></select></label></div></div>
+                  <div class="finance-settings-watchlists" id="finance-settings-panel-watchlists" data-finance-settings-panel="watchlists" role="tabpanel" aria-labelledby="finance-settings-tab-watchlists" hidden><div class="settings-card-heading"><div><span class="tile-label">我的观察</span><strong>自选资产与分组</strong></div><small>金融面板只读展示这里配置的内容</small></div><div class="finance-settings-watchlist-add"><input id="finance-settings-asset-search" type="search" maxlength="120" placeholder="搜索代码或名称" autocomplete="off" /><select id="finance-settings-target-list" aria-label="加入目标分组"></select><button id="finance-settings-add" class="workspace-button compact primary" type="button">加入</button><button id="finance-settings-create-group" class="workspace-button compact" type="button">新建分组</button></div><small class="finance-settings-search-boundary">美股名称搜索由可选 Twelve Data 提供，Alpaca 支持精确代码；QuantDash、腾讯、东方财富和新浪均可按 6 位代码查询 A 股，A 股名称搜索使用当前进程已获取的东方财富榜单页。</small><div id="finance-settings-asset-results" class="finance-search-results" role="listbox" aria-label="设置中的资产搜索结果" hidden></div><div id="finance-settings-watchlists" class="finance-settings-watchlist-list"></div></div>
+                    </div>
+                  </div>
+                  <p class="settings-inline-note">密钥与 SEC 联系信息只由主进程使用系统安全存储保存。IEX 与 Twelve Data Basic 均不是全市场 SIP；Alpha Vantage 免费榜单按日终快照和低额度处理。SEC EDGAR 仅补充申报基本面。任何来源的本地可用性都不自动授予公开展示或再分发权利；发布前需按实际用途确认供应商授权。</p>
+                </section>
+
                 <section class="tile settings-card settings-features-card">
                   <div class="settings-card-heading">
                     <div><span class="tile-label">工作区</span><strong>显示功能</strong></div>
@@ -677,6 +794,7 @@
                   </div>
                   <div class="settings-feature-grid" id="settings-feature-list">
                     <label><span><b>待办</b><small>四象限任务</small></span><input type="checkbox" data-settings-feature="todo" aria-label="显示待办" /><i aria-hidden="true"></i></label>
+                    <label><span><b>行情</b><small>A 股、美股与加密货币</small></span><input type="checkbox" data-settings-feature="finance" aria-label="显示行情" /><i aria-hidden="true"></i></label>
                     <label><span><b>笔记</b><small>随笔与资料库</small></span><input type="checkbox" data-settings-feature="notes" aria-label="显示笔记" /><i aria-hidden="true"></i></label>
                     <label><span><b>链接</b><small>收藏与分组</small></span><input type="checkbox" data-settings-feature="links" aria-label="显示链接" /><i aria-hidden="true"></i></label>
                     <label><span><b>录制</b><small>录音与转写</small></span><input type="checkbox" data-settings-feature="recordings" aria-label="显示录制" /><i aria-hidden="true"></i></label>
@@ -719,6 +837,7 @@
                     <select id="settings-default-tab" aria-label="默认展开页">
                       <option value="home">首页</option>
                       <option value="todo">待办</option>
+                      <option value="finance">行情</option>
                       <option value="notes">笔记</option>
                       <option value="links">链接</option>
                       <option value="recordings">录制</option>
@@ -818,6 +937,7 @@
     <script src="chat-reader.js"></script>
     <script src="markdown.js"></script>
     <script src="home.js"></script>
+    <script src="finance.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

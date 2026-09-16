@@ -492,10 +492,10 @@ async function main() {
       columns: 2,
       api: true,
       mirror: false,
-      features: 6,
+      features: 7,
       homeModules: 6,
       shortcut: true,
-      defaultTab: { exists: true, value: 'home', options: 8 },
+      defaultTab: { exists: true, value: 'home', options: 9 },
       workspace: true,
       autoLaunch: true,
     });

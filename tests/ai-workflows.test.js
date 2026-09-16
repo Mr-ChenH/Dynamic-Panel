@@ -1,4 +1,5 @@
 const test = require('node:test');
+const { mock } = require('node:test');
 const assert = require('node:assert/strict');
 const { validateRequest, normalizeResponse } = require('../ai/schema');
 const {
@@ -62,7 +63,7 @@ test('chat context validates explicit local sources and treats their content as 
   assert.equal(validated.ok, true);
   assert.equal(validated.value.context.sources[0].sourceId, 'note-1');
   const prompt = actionPrompt(validated.value);
-  assert.equal(PROMPT_VERSION, 2);
+  assert.equal(PROMPT_VERSION, 3);
   assert.match(prompt.system, /不可信参考数据/);
   const serialized = prompt.user.split('\n').at(-1);
   assert.deepEqual(JSON.parse(serialized), [{ type: 'note', title: '发布计划', content: source.text }]);
@@ -92,6 +93,30 @@ test('AI todo response requires bounded candidates with source evidence', () => 
   assert.equal(valid.todos[0].evidence.offset, 0);
   assert.equal(normalizeResponse('extractTodos', JSON.stringify({ todos: [{ text: '编造任务', evidence: { quote: '不存在' } }] }), source).error, 'invalid_evidence');
   assert.equal(normalizeResponse('extractTodos', JSON.stringify({ todos: Array.from({ length: 21 }, () => ({ text: 'a', evidence: { quote: '购买电池' } })) }), source).error, 'too_many_todos');
+});
+
+test('finance interpretation requires bounded, source-backed structured signals', () => {
+  const source = '[S1] 快照取回时间：2026-09-15T08:00:00.000Z；当前响应未标记为缓存。\n[B1] 市场宽度：provider 样本共 2 个资产，其中上涨 1、横盘 0、下跌 1；这是完整 provider 返回样本的统计。\n[A1] BTC（BTC）：价格=100 USD，24h=+5.00%，市值=1,000，成交额=200，事件=09/15 16:00，来源=coingecko';
+  const content = JSON.stringify({
+    stance: 'mixed',
+    summary: '样本内部出现分化，结论只适用于当前 provider 返回的快照。',
+    signals: [
+      { direction: 'positive', text: '上涨资产数量为 1。', evidence: { quote: '[B1] 市场宽度：provider 样本共 2 个资产，其中上涨 1、横盘 0、下跌 1；这是完整 provider 返回样本的统计。' } },
+      { direction: 'negative', text: '下跌资产数量为 1。', evidence: { quote: '[B1] 市场宽度：provider 样本共 2 个资产，其中上涨 1、横盘 0、下跌 1；这是完整 provider 返回样本的统计。' } },
+    ],
+    watchItems: [{ text: '继续观察 provider 样本的宽度变化。', evidence: { quote: '[B1] 市场宽度：provider 样本共 2 个资产，其中上涨 1、横盘 0、下跌 1；这是完整 provider 返回样本的统计。' } }],
+  });
+  const result = normalizeResponse('financeInterpretation', content, source);
+  assert.equal(result.ok, true);
+  assert.equal(result.kind, 'financeInterpretation');
+  assert.equal(result.signals.length, 2);
+  assert.equal(result.watchItems.length, 1);
+  assert.equal(result.signals[0].evidence.offset, source.indexOf('[B1]'));
+  assert.equal(normalizeResponse('financeInterpretation', JSON.stringify({ stance: 'mixed', summary: 'x', signals: [{ direction: 'positive', text: '编造', evidence: { quote: '不存在' } }], watchItems: [] }), source).error, 'invalid_evidence');
+  assert.equal(normalizeResponse('financeInterpretation', JSON.stringify({ stance: 'mixed', summary: 'x', signals: Array.from({ length: 7 }, () => ({ direction: 'neutral', text: 'x', evidence: { quote: '[S1] 快照取回时间：2026-09-15T08:00:00.000Z；当前响应未标记为缓存。' } })), watchItems: [] }), source).error, 'too_many_finance_items');
+  const prompt = actionPrompt(request({ action: 'financeInterpretation', context: { sourceType: 'manual', text: source } }));
+  assert.match(prompt.system, /不联网/);
+  assert.match(prompt.user, /watchItems/);
 });
 
 test('AI recording response validates decisions and todos against source', () => {
@@ -134,6 +159,75 @@ test('AI service runs through compatible provider and reports usage', async () =
   assert.equal(diagnostic.request.action, 'extractTodos');
   assert.equal(diagnostic.result.ok, true);
   assert.deepEqual(events, ['started', 'completed']);
+});
+
+test('AI service sends finance interpretation through the structured JSON path', async () => {
+  let body;
+  const source = '[B1] 市场宽度：provider 样本共 1 个资产，其中上涨 1、横盘 0、下跌 0。';
+  const service = createAIService({
+    getConfig: () => ({ apiKey: 'secret', baseUrl: 'https://api.example.test/v1', model: 'model' }),
+    validateEndpoint: async (url) => url,
+    fetchImpl: async (url, options) => {
+      body = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ stance: 'constructive', summary: '当前样本偏强，但只适用于 provider 返回范围。', signals: [{ direction: 'positive', text: '上涨资产数量为 1。', evidence: { quote: source } }], watchItems: [] }) } }] }) };
+    },
+  });
+  const result = await service.run(7, request({ action: 'financeInterpretation', interactive: true, context: { sourceType: 'manual', sourceId: 'finance-overview', sourceRevision: 'r1', text: source } }));
+  assert.equal(result.ok, true);
+  assert.equal(result.kind, 'financeInterpretation');
+  assert.equal(body.response_format.type, 'json_object');
+  assert.equal(Object.hasOwn(body, 'stream'), false);
+});
+
+test('AI service reports malformed finance output and rejects unsupported evidence', async () => {
+  const source = '[B1] 市场宽度：provider 样本共 1 个资产，其中上涨 1、横盘 0、下跌 0。';
+  const base = request({ action: 'financeInterpretation', interactive: true, context: { sourceType: 'manual', sourceId: 'finance-overview', sourceRevision: 'r1', text: source } });
+  const runWithContent = async (content) => {
+    const events = [];
+    const service = createAIService({
+      getConfig: () => ({ apiKey: 'secret', baseUrl: 'https://api.example.test/v1', model: 'model' }),
+      validateEndpoint: async (url) => url,
+      onEvent: (_ownerId, event) => events.push(event),
+      fetchImpl: async () => ({ ok: true, json: async () => ({ choices: [{ finish_reason: 'stop', message: { content } }] }) }),
+    });
+    const result = await service.run(7, base);
+    return { result, lastEvent: events.at(-1) };
+  };
+  const malformed = await runWithContent('{not-json');
+  assert.deepEqual(malformed.result, { ok: false, error: 'invalid_response' });
+  assert.deepEqual(malformed.lastEvent, { requestId: 'ai-test-1', type: 'failed', error: 'invalid_response' });
+  const unsupportedEvidence = await runWithContent(JSON.stringify({
+    stance: 'mixed', summary: '只测试证据校验。',
+    signals: [{ direction: 'neutral', text: '无法核对', evidence: { quote: '[A1] 不存在于快照' } }], watchItems: [],
+  }));
+  assert.deepEqual(unsupportedEvidence.result, { ok: false, error: 'invalid_evidence' });
+  assert.deepEqual(unsupportedEvidence.lastEvent, { requestId: 'ai-test-1', type: 'failed', error: 'invalid_evidence' });
+});
+
+test('AI service reports a finance interpretation timeout', async () => {
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const events = [];
+    const service = createAIService({
+      getConfig: () => ({ apiKey: 'secret', baseUrl: 'https://api.example.test/v1', model: 'model', timeoutMs: 10000 }),
+      validateEndpoint: async (url) => url,
+      onEvent: (_ownerId, event) => events.push(event),
+      fetchImpl: async (_url, options) => new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(Object.assign(Error('aborted'), { name: 'AbortError' })), { once: true });
+      }),
+    });
+    const pending = service.run(7, request({
+      action: 'financeInterpretation',
+      interactive: true,
+      context: { sourceType: 'manual', sourceId: 'finance-overview', sourceRevision: 'r1', text: '[S1] 仅用于超时测试。' },
+    }));
+    await new Promise((resolve) => setImmediate(resolve));
+    mock.timers.tick(10000);
+    assert.deepEqual(await pending, { ok: false, error: 'timeout' });
+    assert.deepEqual(events.at(-1), { requestId: 'ai-test-1', type: 'failed', error: 'timeout' });
+  } finally {
+    mock.timers.reset();
+  }
 });
 
 test('AI service cancellation aborts only the matching owner request', async () => {

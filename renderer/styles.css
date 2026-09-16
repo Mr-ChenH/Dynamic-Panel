@@ -3783,10 +3783,18 @@ body {
 .tabs.is-split .tab {
   background: rgba(255,255,255,.035);
   pointer-events: auto;
+  gap: 3px;
+  padding-right: 7px;
+  padding-left: 7px;
+  font-size: 12px;
 }
+.tabs.is-split .tab-icon { width: 14px; height: 14px; }
 .tabs .tab[data-tab='links'] { margin-right: 0; }
 .tabs.is-split .tab-split-start { margin-left: auto; }
 .topbar-mid { position:absolute; inset:4px 8px auto auto; z-index:6; }
+/* The launcher button owns the right edge; tab groups must never cover it at narrow widths. */
+.topbar > .tabs { right: 84px; width: calc(100% - 84px); }
+.topbar > .tabs:not(.is-split) { width: max-content; }
 .topbar-actions { display: none !important; }
 
 /* 模块尺寸按钮固定在右下角，避免争夺标题区。 */

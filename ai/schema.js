@@ -5,6 +5,7 @@ const ChatContext = require('../renderer/chat-context');
 const ACTIONS = new Set([
   'chat',
   'summarize',
+  'financeInterpretation',
   'shorten',
   'translate',
   'extractTodos',
@@ -20,6 +21,10 @@ const MAX_INPUT_LENGTH = 12000;
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_RESPONSE_TEXT = 64 * 1024;
 const MAX_TODOS = 20;
+const MAX_FINANCE_SIGNALS = 6;
+const MAX_FINANCE_WATCH_ITEMS = 4;
+const FINANCE_STANCES = new Set(['constructive', 'mixed', 'cautious', 'insufficient']);
+const FINANCE_DIRECTIONS = new Set(['positive', 'negative', 'neutral']);
 
 function cleanLine(value, limit) {
   return Array.from(String(value == null ? '' : value)
@@ -151,6 +156,28 @@ function normalizeTodo(value, sourceText) {
   return { text, categoryId, deadline, deadlineText, evidence };
 }
 
+function normalizeFinanceItem(value, sourceText, kind) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const text = cleanLine(value.text, kind === 'signal' ? 180 : 160);
+  const evidence = normalizeEvidence(value.evidence, sourceText);
+  if (!text || !evidence) return null;
+  if (kind === 'signal' && !FINANCE_DIRECTIONS.has(value.direction)) return null;
+  return kind === 'signal' ? { direction: value.direction, text, evidence } : { text, evidence };
+}
+
+function normalizeFinanceInterpretation(parsed, sourceText) {
+  const stance = FINANCE_STANCES.has(parsed.stance) ? parsed.stance : '';
+  const summary = cleanText(parsed.summary, 1200);
+  if (!stance || !summary) return { ok: false, error: 'invalid_response' };
+  const rawSignals = Array.isArray(parsed.signals) ? parsed.signals : [];
+  const rawWatchItems = Array.isArray(parsed.watchItems) ? parsed.watchItems : [];
+  if (rawSignals.length > MAX_FINANCE_SIGNALS || rawWatchItems.length > MAX_FINANCE_WATCH_ITEMS) return { ok: false, error: 'too_many_finance_items' };
+  const signals = rawSignals.map((item) => normalizeFinanceItem(item, sourceText, 'signal'));
+  const watchItems = rawWatchItems.map((item) => normalizeFinanceItem(item, sourceText, 'watch'));
+  if (signals.some((item) => !item) || watchItems.some((item) => !item)) return { ok: false, error: 'invalid_evidence' };
+  return { ok: true, kind: 'financeInterpretation', stance, summary, signals, watchItems };
+}
+
 function normalizeResponse(action, content, sourceText) {
   if (typeof content !== 'string' || Buffer.byteLength(content) > MAX_RESPONSE_TEXT) return { ok: false, error: 'response_too_large' };
   if (TEXT_ACTIONS.has(action)) {
@@ -159,6 +186,7 @@ function normalizeResponse(action, content, sourceText) {
   }
   const parsed = parseObject(content);
   if (!parsed) return { ok: false, error: 'invalid_response' };
+  if (action === 'financeInterpretation') return normalizeFinanceInterpretation(parsed, sourceText);
   if (action === 'nameNote' || action === 'nameRecording' || action === 'nameLink') {
     const title = cleanLine(parsed.title, action === 'nameLink' ? 80 : 48);
     const category = cleanLine(parsed.category, action === 'nameLink' ? 14 : 24);
@@ -190,6 +218,8 @@ module.exports = {
   MAX_REQUEST_BYTES,
   MAX_RESPONSE_TEXT,
   MAX_TODOS,
+  MAX_FINANCE_SIGNALS,
+  MAX_FINANCE_WATCH_ITEMS,
   cleanLine,
   cleanText,
   normalizeCategories,
