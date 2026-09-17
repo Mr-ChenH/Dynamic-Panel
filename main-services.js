@@ -548,6 +548,14 @@ function collapsedDisplayRelocationPolicy({ visible, mode, currentDisplayId, tar
   };
 }
 
+function panelBlurCollapsePolicy({ mode, windowFocused, guarded } = {}) {
+  return {
+    collapse: guarded !== true && windowFocused !== true,
+    closeLauncher: mode === 'launcher',
+    settleDelayMs: 80,
+  };
+}
+
 const CONFIGURABLE_FEATURES = new Set(['todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip']);
 const DEFAULT_PANEL_TABS = new Set(['home', 'todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings']);
 
@@ -605,6 +613,7 @@ module.exports = {
   hoverSpacePollingPolicy,
   collapsedDisplayFollowPolicy,
   collapsedDisplayRelocationPolicy,
+  panelBlurCollapsePolicy,
   updateFeaturePreference,
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,

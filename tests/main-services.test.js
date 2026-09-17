@@ -33,6 +33,7 @@ const {
   hoverSpacePollingPolicy,
   collapsedDisplayFollowPolicy,
   collapsedDisplayRelocationPolicy,
+  panelBlurCollapsePolicy,
   reduceClipboardObservation,
   createForegroundMediaPermissionCoordinator,
 } = require('../main-services');
@@ -212,6 +213,18 @@ test('cross-display relocation conceals only a visible collapsed strip', () => {
   assert.equal(collapsedDisplayRelocationPolicy({ visible: true, mode: 'collapsed', currentDisplayId: 2, targetDisplayId: 2 }).conceal, false);
   assert.equal(collapsedDisplayRelocationPolicy({ visible: true, mode: 'expanded', currentDisplayId: 1, targetDisplayId: 2 }).conceal, false);
   assert.equal(collapsedDisplayRelocationPolicy({ visible: false, mode: 'collapsed', currentDisplayId: 1, targetDisplayId: 2 }).conceal, false);
+});
+
+test('panel blur collapses only after the window stays unfocused', () => {
+  assert.deepEqual(panelBlurCollapsePolicy({ mode: 'expanded', windowFocused: false, guarded: false }), {
+    collapse: true,
+    closeLauncher: false,
+    settleDelayMs: 80,
+  });
+  assert.equal(panelBlurCollapsePolicy({ mode: 'expanded', windowFocused: false, guarded: false }).collapse, true);
+  assert.equal(panelBlurCollapsePolicy({ mode: 'expanded', windowFocused: true, guarded: false }).collapse, false);
+  assert.equal(panelBlurCollapsePolicy({ mode: 'expanded', windowFocused: false, guarded: true }).collapse, false);
+  assert.equal(panelBlurCollapsePolicy({ mode: 'launcher', windowFocused: false, guarded: false }).closeLauncher, true);
 });
 
 test('isPrivateAddress blocks loopback, private, link-local and unique-local ranges', () => {

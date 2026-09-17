@@ -80,6 +80,7 @@ const {
   hoverSpacePollingPolicy,
   collapsedDisplayFollowPolicy,
   collapsedDisplayRelocationPolicy,
+  panelBlurCollapsePolicy,
   reduceClipboardObservation,
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,
@@ -332,6 +333,8 @@ let windowsCollapsedHovering = false;
 let displayFollowTimer = null;
 let displayRelocationTimer = null;
 let displayRelocationGeneration = 0;
+let panelBlurTimer = null;
+let panelBlurGeneration = 0;
 let configuredShortcut = '';
 let configuredLauncherShortcut = '';
 let launcherService;
@@ -548,6 +551,32 @@ function requestRendererCollapse() {
   if (!mainWindow || currentMode !== 'expanded') return;
   beginNativeCollapse();
   mainWindow.webContents.send('window:request-collapse');
+}
+
+function cancelPanelBlurCollapse() {
+  panelBlurGeneration++;
+  if (panelBlurTimer) clearTimeout(panelBlurTimer);
+  panelBlurTimer = null;
+}
+
+function schedulePanelBlurCollapse() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const target = mainWindow;
+  const generation = ++panelBlurGeneration;
+  if (panelBlurTimer) clearTimeout(panelBlurTimer);
+  const initial = panelBlurCollapsePolicy({ mode: currentMode });
+  panelBlurTimer = setTimeout(() => {
+    if (generation !== panelBlurGeneration || mainWindow !== target || target.isDestroyed()) return;
+    panelBlurTimer = null;
+    const policy = panelBlurCollapsePolicy({
+      mode: currentMode,
+      windowFocused: target.isFocused(),
+      guarded: mediaPermissionRequests > 0 || transientSystemInteractionRequests > 0 || launcherManaging,
+    });
+    if (!policy.collapse) return;
+    if (policy.closeLauncher) target.webContents.send('launcher:close');
+    else requestRendererCollapse();
+  }, initial.settleDelayMs);
 }
 
 function hideWindowAfterCollapse() {
@@ -1172,18 +1201,17 @@ function createWindow() {
     }
   });
 
-  // 失焦时让渲染层走完整退场动画，再由渲染层请求缩小原生窗口。
-  mainWindow.on('blur', () => {
-    if (mediaPermissionRequests > 0 || transientSystemInteractionRequests > 0 || launcherManaging) return;
-    if (currentMode === 'launcher') { mainWindow.webContents.send('launcher:close'); return; }
-    requestRendererCollapse();
-  });
+  // Windows 的 Tab、原生下拉框和同应用弹层可能让 BrowserWindow 短暂 blur。
+  // 等焦点状态稳定后再判断应用是否真的失去前台，避免面板内点击触发误收起。
+  mainWindow.on('blur', schedulePanelBlurCollapse);
+  mainWindow.on('focus', cancelPanelBlurCollapse);
 
   mainWindow.on('show', () => {
     syncHoverSpacePolling();
     syncDisplayFollowPolling();
   });
   mainWindow.on('hide', () => {
+    cancelPanelBlurCollapse();
     cancelDisplayRelocation();
     syncHoverSpacePolling();
     syncDisplayFollowPolling();
@@ -1197,6 +1225,7 @@ function createWindow() {
   });
 
   mainWindow.on('closed', () => {
+    cancelPanelBlurCollapse();
     cancelCollapseWatchdog();
     cancelDisplayRelocation(false);
     hideWhenCollapsed = false;
