@@ -1,0 +1,233 @@
+// Generated canvas frames only: no desktop or microphone access.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { app, BrowserWindow, desktopCapturer, session, nativeImage, net, screen } = require('electron');
+const { registerCaptureScheme, createCaptureService } = require('../captureService');
+const { CaptureStorage } = require('../captureStorage');
+app.disableHardwareAcceleration();
+app.setPath('userData', process.env.TODO_TEST_USER_DATA);
+registerCaptureScheme();
+const deadline = setTimeout(() => { console.error('Capture integration timed out'); app.exit(1); }, 45000);
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function until(fn, message) {
+  for (let attempt = 0; attempt < 150; attempt++) { const value = await fn(); if (value) return value; await pause(40); }
+  throw new Error(message);
+}
+async function main() {
+  await app.whenReady();
+  const root = path.join(app.getPath('userData'), 'workspace'); fs.mkdirSync(root, { recursive: true });
+  const owner = new BrowserWindow({ show: false, webPreferences: { preload: path.join(__dirname, '..', 'preload.js'), contextIsolation: true, sandbox: true } });
+  owner.webContents.on('console-message', (details) => { if (details.level === 'error') console.error(details.message); });
+  await owner.loadFile(path.join(__dirname, 'capture-owner.html'));
+  let settings = { screenshot: 'screen', quality: '720', audio: 'none', countdown: 0 }, restored = 0, microphoneRequests = 0, handler;
+  const copiedImages = [];
+  const captureSession = session.fromPartition('capture-tools');
+  captureSession.setDisplayMediaRequestHandler = (callback) => { handler = callback; };
+  let sourceThumbnail = nativeImage.createEmpty();
+  desktopCapturer.getSources = async () => [{ id: 'screen:synthetic:0', display_id: String(screen.getPrimaryDisplay().id), name: 'Synthetic canvas', thumbnail: sourceThumbnail }];
+  const service = createCaptureService({ getMainWindow: () => owner, getRoot: () => root, getSettings: () => settings, saveSettings: (value) => { settings = value; },
+    ensureMicrophone: () => { microphoneRequests++; return true; }, suspendPanel: () => () => { restored++; }, onChange: () => {},
+    screenshotProvider: async () => sourceThumbnail, clipboardWriter: (image) => copiedImages.push(image.getSize()) });
+  await owner.loadFile(path.join(__dirname, 'capture-owner.html'));
+  const execute = (code) => owner.webContents.executeJavaScript(code);
+  const unwrap = (reply) => { assert.equal(reply.ok, true, JSON.stringify(reply)); return reply.value; };
+  async function open(mode, denied = false) {
+    unwrap(await execute(`window.notchAPI.openCapture('${mode}')`));
+    const win = BrowserWindow.getAllWindows().find((candidate) => candidate !== owner);
+    await until(() => win.webContents.executeJavaScript(`document.querySelectorAll('.source').length === 1`), 'Source picker did not populate');
+    await win.webContents.executeJavaScript(`document.querySelector('.source').click()`);
+    await until(() => win.webContents.executeJavaScript(`!document.getElementById('start').disabled`), 'Source selection not acknowledged');
+    let rejected;
+    await handler({ frame: owner.webContents.mainFrame, userGesture: true }, (value) => { rejected = value; });
+    assert.deepEqual(rejected, {}, 'Other frames must not obtain a source');
+    await handler({ frame: win.webContents.mainFrame, userGesture: false }, (value) => { rejected = value; });
+    assert.deepEqual(rejected, {}, 'A user gesture is required');
+    let granted;
+    await handler({ frame: win.webContents.mainFrame, userGesture: true }, (value) => { granted = value; });
+    assert.equal(granted.video.id, 'screen:synthetic:0');
+    await handler({ frame: win.webContents.mainFrame, userGesture: true }, (value) => { rejected = value; });
+    assert.deepEqual(rejected, {}, 'Source grants are one-shot');
+    await win.webContents.executeJavaScript(`
+      navigator.mediaDevices.getDisplayMedia = async () => {
+        if (${JSON.stringify(denied)}) throw new DOMException('Unavailable', ${JSON.stringify(typeof denied === 'string' ? denied : 'NotAllowedError')});
+        const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 360; window.syntheticCanvas = canvas;
+        const context = canvas.getContext('2d'); let frame = 0;
+        const draw = () => { context.fillStyle = '#2457a6'; context.fillRect(0,0,640,360); context.fillStyle = '#fff'; context.fillRect((frame++ * 5) % 500,100,100,100); context.fillStyle = '#e03020'; context.fillRect(160,90,30,30); };
+        draw(); window.syntheticTimer = setInterval(draw, 40);
+        window.syntheticStream = canvas.captureStream(25); return window.syntheticStream;
+      };
+      navigator.mediaDevices.getUserMedia = async () => {
+        if (${settings.audio !== 'microphone'}) throw new Error('Microphone must not start');
+        const context = new AudioContext(); const oscillator = context.createOscillator();
+        const output = context.createMediaStreamDestination(); oscillator.connect(output); oscillator.start();
+        window.syntheticAudioContext = context; return output.stream;
+      };
+      document.getElementById('start').click();
+    `, true);
+    return win;
+  }
+  await open('screenshot');
+  await until(() => service.state().phase === 'idle', 'Screenshot did not finish');
+  assert.equal(service.state().error, '');
+  const image = new CaptureStorage(root).list()[0];
+  assert.equal(image.kind, 'screenshot'); assert.equal(image.width, 640); assert.equal(image.height, 360);
+  assert.deepEqual(copiedImages.at(-1), { width: 640, height: 360 }, 'Screenshot must be sent to the clipboard writer');
+  const url = unwrap(await execute(`window.notchAPI.previewCapture('${image.id}')`));
+  const response = await net.fetch(url, { headers: { Range: 'bytes=0-7' } });
+  assert.equal(response.status, 206);
+  assert.equal(Buffer.from(await response.arrayBuffer()).toString('hex'), '89504e470d0a1a0a');
+
+  sourceThumbnail = await owner.webContents.capturePage();
+  const directWidth = sourceThumbnail.getSize().width, directHeight = sourceThumbnail.getSize().height;
+  unwrap(await execute(`window.notchAPI.openCapture('screenshot')`));
+  const directWindow = BrowserWindow.getAllWindows().find((candidate) => candidate !== owner);
+  await until(() => directWindow.webContents.executeJavaScript(`document.body.classList.contains('direct-screenshot') && !document.getElementById('cropper').hidden`), 'Direct screenshot overlay did not open');
+  assert.equal(await directWindow.webContents.executeJavaScript(`document.getElementById('picker').hidden`), true, 'Direct screenshot must skip the source picker');
+  await directWindow.webContents.executeJavaScript(`
+    const c = document.getElementById('crop-canvas'); const r = c.getBoundingClientRect();
+    c.setPointerCapture = () => {};
+    c.dispatchEvent(new PointerEvent('pointerdown', {clientX:r.left+r.width/4,clientY:r.top+r.height/4,pointerId:2}));
+    c.dispatchEvent(new PointerEvent('pointerup', {clientX:r.left+r.width*3/4,clientY:r.top+r.height*3/4,pointerId:2}));
+  `);
+  await until(() => service.state().phase === 'idle', 'Direct screenshot did not finish on pointer release');
+  const directImage = new CaptureStorage(root).list()[0];
+  assert.equal(directImage.width, Math.ceil(directWidth * 3 / 4) - Math.floor(directWidth / 4));
+  assert.equal(directImage.height, Math.ceil(directHeight * 3 / 4) - Math.floor(directHeight / 4));
+  assert.deepEqual(copiedImages.at(-1), { width: directImage.width, height: directImage.height }, 'Direct selection must be sent to the clipboard writer');
+  sourceThumbnail = nativeImage.createEmpty();
+
+  const videoWindow = await open('video');
+  await until(() => service.state().phase === 'recording', 'Video did not start');
+  assert.equal(videoWindow.isVisible(), false, 'Capture worker should be hidden');
+  assert.equal((await execute('window.notchAPI.beginAudioCapture()')).ok, false);
+  await pause(1600); await service.stop();
+  assert.equal(service.state().error, '');
+  const video = new CaptureStorage(root).list().find((item) => item.kind === 'video');
+  assert.equal(video.status, 'complete'); assert.ok(video.bytes > 100); assert.ok(video.durationMs > 1000);
+  const videoUrl = unwrap(await execute(`window.notchAPI.previewCapture('${video.id}')`));
+  const range = await net.fetch(videoUrl, { headers: { Range: 'bytes=-20' } });
+  assert.equal(range.status, 206); assert.equal((await range.arrayBuffer()).byteLength, 20);
+  const replay = await execute(`new Promise((resolve, reject) => {
+    const video = document.createElement('video'); document.body.append(video); video.muted = true;
+    video.onloadeddata = () => { video.currentTime = .5; };
+    video.onseeked = () => resolve({width:video.videoWidth,height:video.videoHeight,duration:video.duration,time:video.currentTime});
+    video.onerror = () => reject(new Error('Video decode failed: ' + video.error?.code + ' ' + video.error?.message));
+    video.src = ${JSON.stringify(videoUrl)}; video.load();
+  })`);
+  assert.equal(replay.width, 640); assert.equal(replay.height, 360);
+  assert.ok(Number.isFinite(replay.duration) && replay.duration > 1); assert.equal(replay.time, .5);
+  assert.equal(restored, 3); assert.equal(microphoneRequests, 0);
+  const count = new CaptureStorage(root).list().length;
+  await open('screenshot', true);
+  await until(() => service.state().phase === 'idle', 'Denied capture did not finish');
+  assert.equal(service.state().error, 'permission_denied');
+  assert.equal(new CaptureStorage(root).list().length, count);
+  const unavailableWindow = await open('screenshot', 'NotReadableError');
+  await until(() => unavailableWindow.webContents.executeJavaScript(`document.getElementById('status').textContent.includes('此窗口当前无法采集')`), 'Uncapturable source must allow reselection');
+  assert.equal(service.state().phase, 'selecting');
+  assert.equal(await unavailableWindow.webContents.executeJavaScript(`document.getElementById('start').disabled && !document.getElementById('type').disabled && !document.getElementById('refresh').disabled`), true);
+  assert.equal(new CaptureStorage(root).list().length, count, 'Failed capture must not create files or silently record another screen');
+  await service.stop();
+  settings.screenshot = 'region';
+  const regionWindow = await open('screenshot');
+  await until(() => service.state().phase === 'cropping', 'Region selector did not open');
+  await regionWindow.webContents.executeJavaScript(`
+    const c = document.getElementById('crop-canvas'); const r = c.getBoundingClientRect();
+    c.setPointerCapture = () => {};
+    c.dispatchEvent(new PointerEvent('pointerdown', {clientX:r.left+r.width/4,clientY:r.top+r.height/4,pointerId:1}));
+    c.dispatchEvent(new PointerEvent('pointermove', {clientX:r.left+r.width*3/4,clientY:r.top+r.height*3/4,pointerId:1}));
+    c.dispatchEvent(new PointerEvent('pointerup', {clientX:r.left+r.width*3/4,clientY:r.top+r.height*3/4,pointerId:1}));
+    document.getElementById('crop-save').click();
+  `);
+  await until(() => service.state().phase === 'idle', 'Region screenshot did not save');
+  const region = new CaptureStorage(root).list()[0]; assert.equal(region.width, 320); assert.equal(region.height, 180);
+  assert.equal(settings.fixedRegion.x, 160); assert.equal(settings.fixedRegion.y, 90);
+  const remembered = { ...settings.fixedRegion };
+  unwrap(await execute(`window.notchAPI.saveCaptureSettings({screenshot:'region',video:'region',quality:'720',audio:'none',countdown:0})`));
+  assert.deepEqual(settings.fixedRegion, remembered, 'Saving preferences must preserve fixed region');
+  const repeatWindow = await open('screenshot');
+  await until(() => repeatWindow.webContents.executeJavaScript(`!document.getElementById('crop-save').disabled`), 'Saved screenshot region did not load');
+  assert.equal(await repeatWindow.webContents.executeJavaScript(`document.getElementById('crop-width').value`), '320');
+  await repeatWindow.webContents.executeJavaScript(`document.getElementById('crop-save').click()`);
+  await until(() => service.state().phase === 'idle', 'Repeat screenshot did not save');
+  assert.equal(new CaptureStorage(root).list()[0].width, 320);
+  const croppedWindow = await open('video');
+  await until(() => croppedWindow.webContents.executeJavaScript(`!document.getElementById('crop-save').disabled`), 'Video must reuse screenshot region');
+  await croppedWindow.webContents.executeJavaScript(`document.getElementById('crop-save').click()`);
+  await until(() => service.state().phase === 'recording', 'Region video did not start: ' + JSON.stringify(service.state()));
+  assert.equal(croppedWindow.isVisible(), false);
+  await pause(1300); await service.stop();
+  assert.equal(service.state().error, '');
+  const croppedVideo = new CaptureStorage(root).list()[0];
+  assert.equal(croppedVideo.width, 320); assert.equal(croppedVideo.height, 180); assert.equal(croppedVideo.status, 'complete');
+  const croppedUrl = unwrap(await execute(`window.notchAPI.previewCapture('${croppedVideo.id}')`));
+  // Decode the saved bytes via a data URL so pixel inspection is not cross-origin tainted.
+  const croppedData = 'data:video/webm;base64,' + Buffer.from(await (await net.fetch(croppedUrl)).arrayBuffer()).toString('base64');
+  const croppedReplay = await execute(`new Promise((resolve, reject) => {
+    const video = document.createElement('video'); document.body.append(video); video.muted = true;
+    video.onloadeddata = () => { video.currentTime = .5; };
+    video.onseeked = () => {
+      const canvas = document.createElement('canvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d'); ctx.drawImage(video,0,0);
+      resolve({width:video.videoWidth,height:video.videoHeight,duration:video.duration,pixel:[...ctx.getImageData(10,10,1,1).data]});
+    };
+    video.onerror = () => reject(new Error('Region video decode failed'));
+    video.src = ${JSON.stringify(croppedData)}; video.load();
+  })`);
+  assert.equal(croppedReplay.width, 320); assert.equal(croppedReplay.height, 180);
+  assert.ok(Number.isFinite(croppedReplay.duration) && croppedReplay.duration > 1);
+  assert.ok(croppedReplay.pixel[0] > 190 && croppedReplay.pixel[1] < 80 && croppedReplay.pixel[2] < 80, 'Crop origin must contain the red marker, not the full-screen blue corner');
+  const resizedWindow = await open('video');
+  await until(() => resizedWindow.webContents.executeJavaScript(`!document.getElementById('crop-save').disabled`), 'Region controls unavailable');
+  await resizedWindow.webContents.executeJavaScript(`
+    for (const [key,value] of Object.entries({x:20,y:40,width:200,height:120})) {
+      const field = document.getElementById('crop-'+key); field.value = value; field.dispatchEvent(new Event('input'));
+    }
+    document.getElementById('crop-remember').checked = false;
+    document.getElementById('crop-save').click();
+  `);
+  await until(() => service.state().phase === 'recording', 'Numeric region did not start');
+  await pause(1200);
+  await resizedWindow.webContents.executeJavaScript(`window.syntheticCanvas.width = 800`);
+  await until(() => service.state().phase === 'idle', 'Frame resize must stop region recording');
+  assert.equal(service.state().error, 'region_changed');
+  const resizedVideo = new CaptureStorage(root).list()[0];
+  assert.equal(resizedVideo.width, 200); assert.equal(resizedVideo.height, 120); assert.equal(resizedVideo.status, 'complete');
+  assert.deepEqual(settings.fixedRegion, remembered, 'Unchecked remember must preserve the previous preset');
+  settings.audio = 'microphone';
+  const cancelledRegionCount = new CaptureStorage(root).list().length;
+  const cancelledRegion = await open('video');
+  await until(() => service.state().phase === 'cropping', 'Region cancel selector missing');
+  assert.equal(microphoneRequests, 0, 'Selecting a region must not activate microphone');
+  await cancelledRegion.webContents.executeJavaScript(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))`);
+  await until(() => service.state().phase === 'idle', 'Region cancellation did not finish');
+  assert.equal(new CaptureStorage(root).list().length, cancelledRegionCount);
+  settings.fixedRegion.frameWidth = 800;
+  const staleWindow = await open('screenshot');
+  await until(() => staleWindow.webContents.executeJavaScript(`document.getElementById('crop-size').textContent.includes('重新框选')`), 'Changed frame must invalidate preset');
+  assert.equal(await staleWindow.webContents.executeJavaScript(`document.getElementById('crop-save').disabled && document.getElementById('crop-x').value === ''`), true);
+  await service.stop();
+  unwrap(await execute('window.notchAPI.clearCaptureRegion()'));
+  assert.equal(settings.fixedRegion, null);
+  settings.video = 'screen';
+  settings.audio = 'microphone';
+  await open('video');
+  await until(() => service.state().phase === 'recording', 'Microphone video did not start');
+  await pause(1100); await service.stop();
+  assert.equal(service.state().error, ''); assert.equal(microphoneRequests, 1);
+  const audioVideo = new CaptureStorage(root).list()[0]; assert.equal(audioVideo.audio, 'microphone'); assert.match(audioVideo.mimeType, /opus/);
+  settings.audio = 'none'; settings.countdown = 3;
+  const prior = new CaptureStorage(root).list().length;
+  await open('video');
+  await until(() => service.state().phase === 'countdown', 'Countdown did not start');
+  await service.stop();
+  assert.equal(new CaptureStorage(root).list().length, prior, 'Cancelled countdown must not leave empty files');
+  unwrap(await execute('window.notchAPI.beginAudioCapture()'));
+  assert.equal((await execute(`window.notchAPI.openCapture('video')`)).ok, false);
+  unwrap(await execute('window.notchAPI.endAudioCapture()'));
+  assert.equal(service.busy(), false);
+  owner.destroy();
+  console.log('Capture integration passed: screenshot, fixed region reuse/clear, numeric crop, cropped video pixels/seek, frame resize stop, hidden recording, synthetic audio, cancellation, ranges, authorization, audio exclusion');
+}
+main().then(() => { clearTimeout(deadline); app.quit(); }, (error) => { console.error(error); app.exit(1); });

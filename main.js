@@ -30,6 +30,12 @@ const platformPolicy = require('./platform');
 const { createLauncherService } = require('./launcher/service');
 const { createAIService } = require('./ai/service');
 const { createFinanceService } = require('./finance-service');
+const { registerCaptureScheme, createCaptureService } = require('./captureService');
+const { copyCaptures } = require('./captureStorage');
+registerCaptureScheme();
+let captureService = null;
+let captureQuitPending = false;
+let captureQuitReady = false;
 const {
   PROVIDERS,
   providerFor,
@@ -1654,13 +1660,23 @@ function copyWorkspaceAssets(sourceRoot, targetRoot) {
 }
 
 async function chooseWorkspaceFolder() {
+  if (captureService?.busy()) {
+    await dialog.showMessageBox({ type: 'info', message: '请先结束录音或屏幕采集并等待保存，再更换数据文件夹。' });
+    return false;
+  }
   const result = await showOwnedOpenDialog({
     title: '选择 TO-DO Panel 数据文件夹',
     properties: ['openDirectory', 'createDirectory'],
   });
   const selected = !result.canceled && result.filePaths && result.filePaths[0];
   if (!selected) return false;
+  if (captureService?.busy()) return false;
   const previousRoot = workspaceRoot();
+  try { copyCaptures(previousRoot, selected); }
+  catch (error) {
+    await dialog.showMessageBox({ type: 'error', message: '截图与录屏资料复制失败，数据文件夹未切换。', detail: '请检查目标目录权限、剩余空间及是否存在冲突文件。' });
+    return false;
+  }
   copyWorkspaceAssets(previousRoot, selected);
   if (!writeJsonFile(getJsonSettingsPath(WORKSPACE_SETTINGS_FILE), { path: selected })) return false;
   aiContextGeneration += 1;
@@ -1669,6 +1685,7 @@ async function chooseWorkspaceFolder() {
     try { fs.mkdirSync(path.join(selected, directory), { recursive: true }); } catch (error) {}
   }
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('workspace:changed', { path: selected });
+  captureService?.refresh();
   refreshTrayMenu();
   return true;
 }
@@ -1930,6 +1947,11 @@ function refreshTrayMenu() {
   const settings = readAppSettings();
   const featureLabels = { todo: '待办', finance: '行情', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板' };
   const menu = Menu.buildFromTemplate([
+    ...(captureService && captureService.state().phase !== 'idle' ? [
+      { label: captureService.state().phase === 'recording' ? '● 正在录屏' : '屏幕采集中', enabled: false },
+      { label: '停止 / 取消采集', click: () => { void captureService.stop(); } },
+      { type: 'separator' },
+    ] : []),
     {
       label: 'API 配置…',
       click: () => openRendererPanel('app:open-api-settings'),
@@ -4445,6 +4467,30 @@ app.whenReady().then(() => {
   }
 
   ensureFirstRunAutoLaunch();
+  captureService = createCaptureService({
+    getMainWindow: () => mainWindow,
+    getRoot: workspaceRoot,
+    getSettings: () => readJsonFile(getJsonSettingsPath('capture-settings.json'), {}),
+    saveSettings: (settings) => {
+      if (!writeJsonFile(getJsonSettingsPath('capture-settings.json'), settings)) throw new Error('write_failed');
+    },
+    ensureMicrophone: () => requestMacMediaAccess('microphone'),
+    onChange: refreshTrayMenu,
+    suspendPanel: () => {
+      const mode = currentMode, display = getWindowDisplay();
+      const visible = mainWindow?.isVisible();
+      transientSystemInteractionRequests++;
+      // A screen-saver level panel otherwise obscures the source picker and TCC dialogs.
+      mainWindow?.hide();
+      return () => {
+        transientSystemInteractionRequests = Math.max(0, transientSystemInteractionRequests - 1);
+        if (!mainWindow || mainWindow.isDestroyed() || captureQuitPending) return;
+        const restoredDisplay = screen.getAllDisplays().find((candidate) => candidate.id === display.id) || getTargetDisplay();
+        applyMode(mode, restoredDisplay);
+        if (visible) mainWindow.show();
+      };
+    },
+  });
   createWindow();
   createTray();
   watchDisplayChanges();
@@ -4465,7 +4511,15 @@ app.whenReady().then(() => {
 // 常驻菜单栏应用：所有窗口暂时关闭时仍保持后台运行。
 app.on('window-all-closed', () => {});
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (!captureQuitReady && captureService?.state().phase !== 'idle' && captureService) {
+    event.preventDefault();
+    if (!captureQuitPending) {
+      captureQuitPending = true;
+      captureService.stop().finally(() => { captureQuitReady = true; app.quit(); });
+    }
+    return;
+  }
   launcherService?.cancel().catch(() => {});
   financeBackgroundGeneration += 1;
   financeBackgroundActive = false;

@@ -15,10 +15,11 @@ function run(executable, args) {
   }
 }
 run(process.execPath, ['--test', '--test-concurrency=2', ...fs.readdirSync(path.join(root, 'tests')).filter((name) => name.endsWith('.test.js')).map((name) => `tests/${name}`)]);
+for (const file of ['captureService.js', 'captureSources.js', 'captureStorage.js', 'captureWindowsScreen.js', 'capturePreload.js', 'renderer/captureDomain.js', 'renderer/captureWindow.js', 'renderer/capture.js']) run(process.execPath, ['--check', file]);
 env.TODO_TEST_LOG = path.join(root, 'dist.noindex', 'windows-smoke', 'renderer-test.log');
 fs.mkdirSync(path.dirname(env.TODO_TEST_LOG), { recursive: true });
 fs.writeFileSync(env.TODO_TEST_LOG, '');
-for (const file of ['notch-focus', 'retained-workspace', 'startup']) {
+for (const file of ['notch-focus', 'retained-workspace', 'startup', 'capture']) {
   const testProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-renderer-test-'));
   env.TODO_TEST_USER_DATA = testProfile;
   run(require('electron'), [`tests/${file}.electron.js`]);

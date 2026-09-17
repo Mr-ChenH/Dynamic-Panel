@@ -1,0 +1,35 @@
+.capture-workspace { display: flex; flex-direction: column; height: 100%; min-height: 0; gap: var(--s-3); }
+.capture-workspace [hidden], .capture-global-status[hidden] { display: none !important; }
+.capture-toolbar { display: flex; align-items: center; gap: var(--s-2); flex-shrink: 0; }
+.capture-tabs { display: flex; gap: var(--s-1); padding: var(--s-1); border: 1px solid var(--hairline); border-radius: var(--r-input); background: var(--surface-1); }
+.capture-tabs button { padding: var(--s-2) var(--s-4); color: var(--text-3); background: transparent; border: 0; border-radius: var(--r-input); font: inherit; cursor: pointer; }
+.capture-tabs button[aria-selected=true] { color: var(--text-1); background: var(--surface-3); }
+#capture-status { flex: 1; min-width: 0; color: var(--text-3); font-size: var(--font-sm, 12px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capture-workspace > .recordings-page, .capture-library { flex: 1; min-height: 0; height: auto; }
+.capture-library { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--s-3); }
+.capture-list-pane, .capture-detail { border: 1px solid var(--hairline); border-radius: var(--r-tile); background: var(--surface-1); min-width: 0; min-height: 0; }
+.capture-list-pane { display: flex; flex-direction: column; overflow: hidden; }
+.capture-list-pane > header { display: flex; align-items: center; justify-content: space-between; padding: var(--s-4); border-bottom: 1px solid var(--hairline); }
+.capture-list-pane > header span, .capture-row small { color: var(--text-3); font-size: var(--font-sm, 12px); }
+#capture-list { overflow: auto; min-height: 0; padding: var(--s-2); }
+.capture-row { display: flex; flex-direction: column; width: 100%; text-align: left; gap: var(--s-2); padding: var(--s-3); margin-bottom: var(--s-1); color: var(--text-1); background: transparent; border: 1px solid transparent; border-radius: var(--r-input); cursor: pointer; font: inherit; }
+.capture-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; font-weight: 500; }
+.capture-row:hover { background: var(--surface-2); }
+.capture-row[aria-pressed=true] { border-color: var(--hairline); background: var(--surface-3); }
+.capture-detail { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4); overflow: auto; }
+.capture-detail-header { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; }
+.capture-title-input { flex: 1; min-width: 160px; color: var(--text-1); background: var(--surface-2); border: 1px solid var(--hairline); border-radius: var(--r-input); padding: var(--s-2); font: inherit; }
+.capture-detail-meta { margin: 0; color: var(--text-3); font-size: var(--font-sm, 12px); }
+.capture-preview { flex: 1; min-height: 0; display: flex; justify-content: center; align-items: center; overflow: hidden; background: var(--bg-base); border-radius: var(--r-input); }
+.capture-preview img, .capture-preview video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.capture-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; }
+.capture-empty { margin: auto; padding: var(--s-5); text-align: center; line-height: 1.8; color: var(--text-3); }
+.capture-settings-form { display: flex; flex-direction: column; gap: var(--s-4); max-width: 740px; }
+.capture-settings-form > label { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: var(--s-3); align-items: center; }
+.capture-settings-form p { margin: 0; color: var(--text-3); line-height: 1.7; }
+.capture-settings-form select { background: var(--surface-2); color: var(--text-1); border: 1px solid var(--hairline); border-radius: var(--r-input); padding: var(--s-2); font: inherit; }
+#capture-settings-status { margin-left: var(--s-3); color: var(--text-3); }
+.capture-region-setting { display: flex; gap: var(--s-3); align-items: center; flex-wrap: wrap; }
+.capture-region-setting p { flex: 1; min-width: 200px; overflow-wrap: anywhere; }
+.capture-global-status { color: var(--p0); font-size: var(--font-sm, 12px); white-space: nowrap; flex-shrink: 0; }
+@media (max-width: 760px) { .capture-library { grid-template-columns: 200px minmax(0, 1fr); } .capture-toolbar { flex-wrap: wrap; } .capture-settings-form > label { grid-template-columns: 1fr; } }

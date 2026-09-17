@@ -975,6 +975,12 @@
   let speechRecognitionBlocked = false;
   let speechRecognitionError = '';
   let recordingStatus = 'idle';
+  let audioCaptureReserved = false;
+  function releaseAudioCapture() {
+    if (!audioCaptureReserved) return;
+    audioCaptureReserved = false;
+    window.notchAPI?.endAudioCapture?.().catch(() => {});
+  }
   let recordingStartedAt = 0;
   let pausedAt = 0;
   let pausedTotalMs = 0;
@@ -1959,6 +1965,7 @@
     recordingStatus = 'saving';
     updateRecordingUi();
     if (!blob || blob.size === 0) {
+      releaseAudioCapture();
       recordingStatus = 'idle';
       recordingCaptureIssue = '';
       discardRecordingDraft();
@@ -2023,6 +2030,7 @@
     }
     recordingStatus = 'idle';
     recordingStartedAt = 0;
+    releaseAudioCapture();
     pausedAt = 0;
     pausedTotalMs = 0;
     audioChunks = [];
@@ -2035,7 +2043,16 @@
   async function startRecordingAttempt() {
     if (recordingStatus !== 'idle' || !navigator.mediaDevices || !window.MediaRecorder) return;
     try {
+      if (window.notchAPI?.beginAudioCapture) {
+        const reservation = await window.notchAPI.beginAudioCapture();
+        if (!reservation?.ok) {
+          if (liveTranscript) { liveTranscript.textContent = '请先结束当前截图或录屏，再开始录音。'; liveTranscript.hidden = false; }
+          return;
+        }
+        audioCaptureReserved = true;
+      }
       if (window.notchAPI && !(await window.notchAPI.ensureMicrophone())) {
+        releaseAudioCapture();
         if (liveTranscript) {
           liveTranscript.textContent = '无法访问麦克风 · 请在系统设置中授权';
           liveTranscript.hidden = false;
@@ -2103,6 +2120,7 @@
     } catch (error) {
       stopMediaTracks();
       recordingStatus = 'idle';
+      releaseAudioCapture();
       recordingCaptureIssue = '';
       discardRecordingDraft();
       if (liveTranscript) {
@@ -2149,6 +2167,7 @@
       mediaRecorder.stop();
     } catch (error) {
       stopMediaTracks();
+      releaseAudioCapture();
       recordingStatus = 'idle';
       discardRecordingDraft();
       updateRecordingUi();
@@ -3299,6 +3318,7 @@
   setInterval(() => refreshWindows(), 6000);
 
   window.addEventListener('beforeunload', () => {
+    releaseAudioCapture();
     stopSpeechRecognition();
     stopTranscriptionAudioPipeline();
     if (transcriptionStartPromise && window.notchAPI) window.notchAPI.finishTranscription().catch(() => {});

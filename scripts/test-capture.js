@@ -1,0 +1,12 @@
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-capture-check-'));
+const env = { ...process.env, TODO_TEST_USER_DATA: profile };
+delete env.ELECTRON_RUN_AS_NODE;
+const result = spawnSync(require('electron'), ['tests/capture.electron.js'], { cwd: path.join(__dirname, '..'), env, stdio: 'inherit', timeout: 60000 });
+if (result.error) console.error(result.error);
+if (result.status === 0) fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+else console.error('Retained capture test profile:', profile);
+process.exit(result.status ?? 1);

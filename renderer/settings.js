@@ -6,6 +6,7 @@
     {id:'music',title:'音乐',description:'本地、网络与聚合歌单',selector:'.settings-music-card',icon:'M9 18V5l10-2v13 M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6 M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6'},
     {id:'launcher',title:'搜索与启动器',description:'搜索来源、快捷键与本地扩展',selector:'.settings-launcher-card',icon:'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M15 15l6 6'},
     {id:'finance',title:'金融与行情',description:'数据源、自选与默认展示',selector:'.settings-finance-card',icon:'M4 19V5 M4 19h16 M7 15l3-4 3 2 5-7'},
+    {id:'capture',title:'截图与录屏',description:'采集方式、画质与声音',selector:'.settings-capture-card',icon:'M4 5h16v12H4z M9 21h6 M12 17v4'},
     {id:'features',title:'显示功能',description:'选择工作区中的功能入口',selector:'.settings-features-card',icon:'M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h6v6h-6z'},
     {id:'api',title:'AI 与转写',description:'管理智能命名和语音转写服务',selector:'.settings-api-card',icon:'m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z'},
   ];

@@ -1,0 +1,21 @@
+const { contextBridge, ipcRenderer } = require('electron');
+contextBridge.exposeInMainWorld('captureAPI', {
+  init: () => ipcRenderer.invoke('capture:init'),
+  sources: (type) => ipcRenderer.invoke('capture:sources', type),
+  select: (token) => ipcRenderer.invoke('capture:select', token),
+  retrySource: () => ipcRenderer.invoke('capture:retry-source'),
+  onSourceUnavailable: (callback) => ipcRenderer.on('capture:source-unavailable', () => callback()),
+  microphone: () => ipcRenderer.invoke('capture:microphone'),
+  hide: () => ipcRenderer.invoke('capture:hide'),
+  crop: (frame, fresh = false) => ipcRenderer.invoke('capture:crop', { frame, fresh }),
+  confirmRegion: (rect, remember) => ipcRenderer.invoke('capture:confirm-region', { rect, remember }),
+  image: (bytes) => ipcRenderer.invoke('capture:image', bytes),
+  begin: (meta) => ipcRenderer.invoke('capture:begin', meta),
+  recording: () => ipcRenderer.invoke('capture:recording'),
+  append: (sequence, data) => ipcRenderer.invoke('capture:append', { sequence, data }),
+  finish: (result) => ipcRenderer.invoke('capture:finish', result),
+  cancel: () => ipcRenderer.invoke('capture:cancel'),
+  fail: (code) => ipcRenderer.invoke('capture:fail', code),
+  privacy: () => ipcRenderer.invoke('capture:privacy'),
+  onStop: (callback) => ipcRenderer.on('capture:stop', (_, reason) => callback(reason)),
+});

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>屏幕采集 · TO-DO Panel</title>
+  <link rel="stylesheet" href="captureWindow.css">
+</head>
+<body>
+  <main id="picker">
+    <header><div><span class="eyebrow">TO-DO PANEL</span><h1 id="heading">选择采集来源</h1></div><button id="cancel" type="button">取消 · Esc</button></header>
+    <div class="toolbar"><label>采集方式 <select id="type"><option value="region">框选区域</option><option value="screen">整个屏幕</option><option value="window">单个窗口</option></select></label><button id="refresh" type="button">刷新来源</button><span id="summary"></span></div>
+    <p id="status" role="status">正在读取屏幕与窗口…</p>
+    <div id="sources" role="group" aria-label="可采集的屏幕或窗口"></div>
+    <footer><button id="privacy" type="button">屏幕录制权限设置</button><span>选择器会在采集前隐藏</span><button id="start" class="primary" type="button" disabled>开始</button></footer>
+  </main>
+  <section id="cropper" hidden aria-label="鼠标框选采集区域">
+    <canvas id="crop-canvas" aria-label="按住鼠标拖动框选采集区域"></canvas>
+    <div class="crop-actions">
+      <span id="crop-size" role="status">拖动选择区域 · Esc 取消</span>
+      <div class="crop-coordinates" aria-label="区域位置与尺寸（画面像素）">
+        <label>X<input id="crop-x" type="number" min="0" step="1" aria-label="区域左边距（像素）"></label>
+        <label>Y<input id="crop-y" type="number" min="0" step="1" aria-label="区域上边距（像素）"></label>
+        <label>宽<input id="crop-width" type="number" min="2" step="1" aria-label="区域宽度（像素）"></label>
+        <label>高<input id="crop-height" type="number" min="2" step="1" aria-label="区域高度（像素）"></label>
+      </div>
+      <div class="crop-confirm"><label><input id="crop-remember" type="checkbox" checked>记住此区域，下次预填</label><button id="crop-reset" type="button">重新框选</button><button id="crop-cancel" type="button">取消</button><button id="crop-save" class="primary" type="button" disabled>保存截图</button></div>
+    </div>
+  </section>
+  <video id="source-video" muted playsinline aria-hidden="true"></video>
+  <script src="captureDomain.js"></script>
+  <script src="captureWindow.js"></script>
+</body>
+</html>

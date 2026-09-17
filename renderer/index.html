@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: capture-media:; media-src 'self' blob: capture-media:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TO-DO Panel</title>
@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="ai.css" />
     <link rel="stylesheet" href="home.css" />
     <link rel="stylesheet" href="finance.css" />
+    <link rel="stylesheet" href="capture.css" />
   </head>
   <body>
     <div id="app" class="collapsed">
@@ -556,7 +557,19 @@
           </section>
 
           <section id="tab-recordings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-recordings" aria-hidden="true" inert>
-            <div class="recordings-page">
+            <div class="capture-workspace">
+            <div class="capture-toolbar">
+              <div class="capture-tabs" role="tablist" aria-label="录制类型">
+                <button id="capture-tab-audio" type="button" role="tab" aria-selected="true" aria-controls="audio-library" data-capture-tab="audio">录音</button>
+                <button id="capture-tab-screenshot" type="button" role="tab" aria-selected="false" aria-controls="capture-library" data-capture-tab="screenshot" tabindex="-1">截图</button>
+                <button id="capture-tab-video" type="button" role="tab" aria-selected="false" aria-controls="capture-library" data-capture-tab="video" tabindex="-1">录屏</button>
+              </div>
+              <span id="capture-status" role="status" aria-live="polite"></span>
+              <button id="capture-stop" class="workspace-button compact danger" type="button" hidden>停止采集</button>
+              <button id="capture-settings" class="workspace-button compact" type="button">采集设置</button>
+              <button id="capture-new" class="workspace-button compact primary" type="button" hidden>新建截图</button>
+            </div>
+            <div class="recordings-page" id="audio-library" role="tabpanel" aria-labelledby="capture-tab-audio">
               <aside class="recording-library">
                 <div class="recording-library-head">
                   <div><span class="tile-label">录音资料库</span><strong id="recording-count">0 条</strong></div>
@@ -571,6 +584,11 @@
               <section class="recording-detail" id="recording-detail">
                 <div class="recording-detail-empty">完成一次录音后，音频和转写文本会保存在这里。</div>
               </section>
+            </div>
+            <div id="capture-library" class="capture-library" role="tabpanel" aria-labelledby="capture-tab-screenshot" hidden>
+              <aside class="capture-list-pane"><header><strong id="capture-library-title">截图资料库</strong><span id="capture-count">0 项</span></header><div id="capture-list" aria-label="采集文件列表"></div></aside>
+              <section id="capture-detail" class="capture-detail" aria-label="文件预览"><p class="capture-empty">截取画面后，可以在这里预览、复制和导出。</p></section>
+            </div>
             </div>
           </section>
 
@@ -620,6 +638,20 @@
 
           <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true" inert>
             <div class="settings-page" id="settings-page" aria-label="TO-DO Panel 设置">
+              <section class="tile settings-card settings-capture-card">
+                <div class="settings-card-heading"><div><span class="tile-label">本地画面采集</span><strong>截图与录屏</strong></div><small>仅在主动开始后采集</small></div>
+                <form id="capture-settings-form" class="capture-settings-form">
+                  <label><span>截图方式</span><select id="capture-default-screenshot" disabled><option value="region">鼠标框选（鼠标所在屏幕）</option></select></label>
+                  <label><span>默认录屏方式</span><select id="capture-default-video"><option value="screen">整个屏幕</option><option value="window">单个窗口</option><option value="region">框选区域（单个屏幕）</option></select></label>
+                  <label><span>录屏画质</span><select id="capture-default-quality"><option value="720">最高 720p · 30 fps</option><option value="1080">最高 1080p · 30 fps</option><option value="native">来源分辨率 · 30 fps</option></select></label>
+                  <label><span>录屏声音</span><select id="capture-default-audio"><option value="none">无声</option><option value="microphone">麦克风（开始时请求权限）</option></select></label>
+                  <label><span>开始倒计时</span><select id="capture-default-countdown"><option value="0">立即开始</option><option value="3">3 秒</option><option value="5">5 秒</option></select></label>
+                  <p>截图保存为 PNG，录屏保存为 WebM，随当前数据文件夹迁移。单次录屏最多 60 分钟或 4 GiB。录屏期间可通过托盘菜单停止；主动展开面板可能入镜。</p>
+                  <div class="capture-region-setting"><p id="capture-fixed-region" role="status"></p><button id="capture-clear-region" class="workspace-button compact" type="button" hidden>清除已记住区域</button></div>
+                  <p>框选区域支持鼠标拖动或输入像素位置与宽高；可选择记住区域，下次预填后仍需确认。暂不提供系统声音、标注或 MP4 转码，不占用系统截图快捷键。</p>
+                  <div><button class="workspace-button primary" type="submit">保存设置</button><span id="capture-settings-status" role="status"></span></div>
+                </form>
+              </section>
               <section class="tile settings-card settings-music-card">
                 <div class="settings-card-heading"><div><span class="tile-label">应用内播放</span><strong>音乐</strong></div><small>本地音乐、HTTPS 直链与 go-music-dl 歌单</small></div>
                 <div class="music-settings-modebar" role="tablist" aria-label="音乐工作模式"><button type="button" data-music-catalog-view="mine" role="tab" aria-selected="true">我的音乐</button><button type="button" data-music-catalog-view="discover" role="tab" aria-selected="false">在线发现</button></div>
@@ -938,6 +970,8 @@
     <script src="markdown.js"></script>
     <script src="home.js"></script>
     <script src="finance.js"></script>
+    <script src="captureDomain.js"></script>
+    <script src="capture.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>
