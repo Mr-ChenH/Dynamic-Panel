@@ -32,6 +32,7 @@ const {
   editableContextMenuTemplate,
   hoverSpacePollingPolicy,
   collapsedDisplayFollowPolicy,
+  collapsedDisplayRelocationPolicy,
   reduceClipboardObservation,
   createForegroundMediaPermissionCoordinator,
 } = require('../main-services');
@@ -201,6 +202,16 @@ test('collapsed panel follows the cursor only when multiple displays are active'
   assert.equal(collapsedDisplayFollowPolicy({ visible: true, mode: 'collapsed', displayCount: 1 }).enabled, false);
   assert.equal(collapsedDisplayFollowPolicy({ visible: true, mode: 'expanded', displayCount: 2 }).enabled, false);
   assert.equal(collapsedDisplayFollowPolicy({ visible: false, mode: 'collapsed', displayCount: 2 }).enabled, false);
+});
+
+test('cross-display relocation conceals only a visible collapsed strip', () => {
+  assert.deepEqual(collapsedDisplayRelocationPolicy({ visible: true, mode: 'collapsed', currentDisplayId: 1, targetDisplayId: 2 }), {
+    conceal: true,
+    settleDelayMs: 24,
+  });
+  assert.equal(collapsedDisplayRelocationPolicy({ visible: true, mode: 'collapsed', currentDisplayId: 2, targetDisplayId: 2 }).conceal, false);
+  assert.equal(collapsedDisplayRelocationPolicy({ visible: true, mode: 'expanded', currentDisplayId: 1, targetDisplayId: 2 }).conceal, false);
+  assert.equal(collapsedDisplayRelocationPolicy({ visible: false, mode: 'collapsed', currentDisplayId: 1, targetDisplayId: 2 }).conceal, false);
 });
 
 test('isPrivateAddress blocks loopback, private, link-local and unique-local ranges', () => {

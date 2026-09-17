@@ -539,6 +539,15 @@ function collapsedDisplayFollowPolicy({ visible, mode, displayCount } = {}) {
   };
 }
 
+function collapsedDisplayRelocationPolicy({ visible, mode, currentDisplayId, targetDisplayId } = {}) {
+  return {
+    conceal: visible === true && mode === 'collapsed'
+      && currentDisplayId !== undefined && targetDisplayId !== undefined
+      && currentDisplayId !== targetDisplayId,
+    settleDelayMs: 24,
+  };
+}
+
 const CONFIGURABLE_FEATURES = new Set(['todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip']);
 const DEFAULT_PANEL_TABS = new Set(['home', 'todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings']);
 
@@ -595,6 +604,7 @@ module.exports = {
   editableContextMenuTemplate,
   hoverSpacePollingPolicy,
   collapsedDisplayFollowPolicy,
+  collapsedDisplayRelocationPolicy,
   updateFeaturePreference,
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,

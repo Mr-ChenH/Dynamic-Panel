@@ -79,6 +79,7 @@ const {
   createWorkspacePersistenceGate,
   hoverSpacePollingPolicy,
   collapsedDisplayFollowPolicy,
+  collapsedDisplayRelocationPolicy,
   reduceClipboardObservation,
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,
@@ -329,6 +330,8 @@ let spaceShortcutTimer = null;
 let spaceShortcutRegistered = false;
 let windowsCollapsedHovering = false;
 let displayFollowTimer = null;
+let displayRelocationTimer = null;
+let displayRelocationGeneration = 0;
 let configuredShortcut = '';
 let configuredLauncherShortcut = '';
 let launcherService;
@@ -454,6 +457,7 @@ function cancelCollapseWatchdog() {
 function applyMode(mode, display) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   cancelCollapseWatchdog();
+  if (mode !== 'collapsed') cancelDisplayRelocation();
   if (mode !== 'collapsed') windowsCollapsedHovering = false;
   applyWindowGeometry(mode, display);
   mainWindow.setIgnoreMouseEvents(false);
@@ -469,9 +473,40 @@ function applyMode(mode, display) {
 }
 
 // 纯重新定位不能改变收起事务，否则屏幕变化会取消 watchdog 并重新吞掉鼠标。
+function cancelDisplayRelocation(restoreOpacity = true) {
+  displayRelocationGeneration++;
+  if (displayRelocationTimer) clearTimeout(displayRelocationTimer);
+  displayRelocationTimer = null;
+  if (restoreOpacity && mainWindow && !mainWindow.isDestroyed()) mainWindow.setOpacity(1);
+}
+
 function repositionWindow(display) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  applyWindowGeometry(currentMode, display);
+  const currentDisplay = getWindowDisplay();
+  const policy = collapsedDisplayRelocationPolicy({
+    visible: mainWindow.isVisible(),
+    mode: currentMode,
+    currentDisplayId: currentDisplay.id,
+    targetDisplayId: display?.id,
+  });
+  if (!policy.conceal) {
+    applyWindowGeometry(currentMode, display);
+    return;
+  }
+
+  // Windows can commit cross-monitor position and canvas-size changes on separate
+  // compositor frames. Keep the shaped strip invisible until both settle.
+  const target = mainWindow;
+  const generation = ++displayRelocationGeneration;
+  if (displayRelocationTimer) clearTimeout(displayRelocationTimer);
+  target.setOpacity(0);
+  applyWindowGeometry('collapsed', display);
+  displayRelocationTimer = setTimeout(() => {
+    if (generation !== displayRelocationGeneration || mainWindow !== target || target.isDestroyed()) return;
+    displayRelocationTimer = null;
+    applyWindowGeometry('collapsed', display);
+    target.setOpacity(1);
+  }, policy.settleDelayMs);
 }
 
 function applyWindowGeometry(mode, display) {
@@ -1149,6 +1184,7 @@ function createWindow() {
     syncDisplayFollowPolling();
   });
   mainWindow.on('hide', () => {
+    cancelDisplayRelocation();
     syncHoverSpacePolling();
     syncDisplayFollowPolling();
   });
@@ -1162,6 +1198,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     cancelCollapseWatchdog();
+    cancelDisplayRelocation(false);
     hideWhenCollapsed = false;
     mainWindow = null;
     stopDisplayFollowPolling();
