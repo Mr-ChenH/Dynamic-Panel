@@ -44,6 +44,7 @@ const { createTaskNotificationTimers } = require('./main/task-notification-timer
 const { createTaskNotificationWindowState } = require('./main/task-notification-window-state');
 const { createTaskNotificationWindowFactory } = require('./main/task-notification-window');
 const { createTaskNotificationController } = require('./main/task-notification-controller');
+const { createTranscriptionService } = require('./main/transcription-service');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -338,7 +339,6 @@ let launcherManaging = false;
 let previousPasteTarget = null;
 let windowScanCache = new Map();
 const windowIconCache = new Map();
-const transcriptionSessions = new Map();
 let aiModelService = null;
 let aiContextGeneration = 0;
 let financeBackgroundTimer = null;
@@ -2975,72 +2975,17 @@ function transcriptionEventId() {
   return `event_${crypto.randomUUID().replace(/-/g, '')}`;
 }
 
-function emitTranscription(session, payload) {
-  if (session.sender && !session.sender.isDestroyed()) {
-    session.sender.send('transcription:event', payload);
-  }
-}
+const transcriptionService = createTranscriptionService({
+  WebSocket,
+  getConfig: resolveTranscriptionConfig,
+  sampleRate: TRANSCRIPTION_SAMPLE_RATE,
+  finishTimeoutMs: TRANSCRIPTION_FINISH_TIMEOUT_MS,
+  senderFor: () => null,
+  eventId: transcriptionEventId,
+  urlFor: transcriptionUrl,
+});
 
-function sessionTranscript(session) {
-  return [...session.finalSegments, session.interim].filter(Boolean).join(' ').trim();
-}
-
-function closeTranscriptionSession(session, result = {}) {
-  if (!session || session.closed) return;
-  session.closed = true;
-  clearTimeout(session.connectTimer);
-  clearTimeout(session.finishTimer);
-  transcriptionSessions.delete(session.senderId);
-  try { session.socket.close(); } catch (error) {}
-  if (session.finishResolve) {
-    session.finishResolve({
-      ok: result.ok !== false,
-      transcript: sessionTranscript(session),
-      error: result.error || null,
-    });
-    session.finishResolve = null;
-  }
-}
-
-function handleTranscriptionMessage(session, raw) {
-  let message;
-  try { message = JSON.parse(String(raw)); } catch (error) { return; }
-  if (message.type === 'session.created' || message.type === 'session.updated') {
-    emitTranscription(session, { type: 'status', status: 'connected' });
-    return;
-  }
-  if (message.type === 'conversation.item.input_audio_transcription.text') {
-    session.interim = `${String(message.text || '').trim()}${String(message.stash || '').trim()}`;
-    emitTranscription(session, {
-      type: 'transcript',
-      final: session.finalSegments.join(' ').trim(),
-      interim: session.interim,
-    });
-    return;
-  }
-  if (message.type === 'conversation.item.input_audio_transcription.completed') {
-    const transcript = String(message.transcript || '').trim();
-    if (transcript && session.finalSegments[session.finalSegments.length - 1] !== transcript) {
-      session.finalSegments.push(transcript);
-    }
-    session.interim = '';
-    emitTranscription(session, {
-      type: 'transcript',
-      final: session.finalSegments.join(' ').trim(),
-      interim: '',
-    });
-    return;
-  }
-  if (message.type === 'error' || message.type === 'conversation.item.input_audio_transcription.failed') {
-    const details = message.error && message.error.message || '实时转写服务返回错误';
-    emitTranscription(session, { type: 'error', message: details });
-    session.lastError = details;
-    return;
-  }
-  if (message.type === 'session.finished') {
-    closeTranscriptionSession(session, { ok: !session.lastError, error: session.lastError });
-  }
-}
+const closeTranscriptionSession = (session, result) => transcriptionService.closeFor(session?.senderId, result);
 
 aiModelService = createAIService({
   fetchImpl: fetchPinnedAIEndpoint,
@@ -3267,7 +3212,7 @@ ipcMain.handle('transcription:set-config', (event, payload) => {
     model: activeProfile.activeModel,
     timeoutMs: activeProfile.timeoutMs,
   };
-  const transcriptionService = {
+  const transcriptionConfig = {
     providerId: 'aliyun-bailian-realtime',
     model: TRANSCRIPTION_MODEL,
     region,
@@ -3275,7 +3220,7 @@ ipcMain.handle('transcription:set-config', (event, payload) => {
   };
   const verification = { ...(previous.verification || {}) };
   const previousTranscription = resolveTranscriptionConfig();
-  const transcriptionChanged = apiKey || removeAsr || transcriptionConfigRevision(previousTranscription) !== transcriptionConfigRevision(transcriptionService);
+  const transcriptionChanged = apiKey || removeAsr || transcriptionConfigRevision(previousTranscription) !== transcriptionConfigRevision(transcriptionConfig);
   if (transcriptionChanged) delete verification.transcription;
   const activeContentChanged = llmApiKey || removeContent
     || contentConfigRevision(previousActiveContent) !== contentConfigRevision({ ...activeProfile, model: activeProfile.activeModel });
@@ -3288,7 +3233,7 @@ ipcMain.handle('transcription:set-config', (event, payload) => {
   const next = {
     ...previous,
     schemaVersion: 3,
-    services: { ...(previous.services || {}), transcription: transcriptionService, content: contentService },
+    services: { ...(previous.services || {}), transcription: transcriptionConfig, content: contentService },
     automations,
     verification,
     region,
@@ -3309,7 +3254,7 @@ ipcMain.handle('transcription:set-config', (event, payload) => {
     aiContextGeneration += 1;
     aiModelService?.cancelAll();
     if (transcriptionChanged) {
-      for (const session of [...transcriptionSessions.values()]) closeTranscriptionSession(session, { ok: false, error: 'config_changed' });
+      transcriptionService.closeAll();
     }
     return { ok: true, ...publicTranscriptionConfig() };
   } catch (error) {
@@ -3317,109 +3262,12 @@ ipcMain.handle('transcription:set-config', (event, payload) => {
   }
 });
 
-ipcMain.handle('transcription:start', (event) => {
-  const config = resolveTranscriptionConfig();
-  if (!config.apiKey) return { ok: false, error: 'not_configured' };
-  const existing = transcriptionSessions.get(event.sender.id);
-  if (existing) closeTranscriptionSession(existing, { ok: false, error: 'replaced' });
-  return new Promise((resolve) => {
-    const headers = {
-      Authorization: `Bearer ${config.apiKey}`,
-      'OpenAI-Beta': 'realtime=v1',
-      'User-Agent': 'DynamicPanel/0.3',
-    };
-    if (config.workspaceId) headers['X-DashScope-WorkSpace'] = config.workspaceId;
-    const socket = new WebSocket(transcriptionUrl(config), { headers });
-    const session = {
-      sender: event.sender,
-      senderId: event.sender.id,
-      socket,
-      finalSegments: [],
-      interim: '',
-      ready: false,
-      closed: false,
-      startSettled: false,
-      finishResolve: null,
-      connectTimer: null,
-      finishTimer: null,
-      lastError: '',
-    };
-    transcriptionSessions.set(event.sender.id, session);
-    const settleStart = (result) => {
-      if (session.startSettled) return;
-      session.startSettled = true;
-      clearTimeout(session.connectTimer);
-      resolve(result);
-    };
-    session.connectTimer = setTimeout(() => {
-      settleStart({ ok: false, error: 'connect_timeout' });
-      closeTranscriptionSession(session, { ok: false, error: 'connect_timeout' });
-    }, 8000);
-    socket.on('open', () => {
-      session.ready = true;
-      socket.send(JSON.stringify({
-        event_id: transcriptionEventId(),
-        type: 'session.update',
-        session: {
-          input_audio_format: 'pcm',
-          sample_rate: TRANSCRIPTION_SAMPLE_RATE,
-          input_audio_transcription: { language: 'zh' },
-          turn_detection: {
-            type: 'server_vad',
-            threshold: 0,
-            silence_duration_ms: 400,
-          },
-        },
-      }));
-      settleStart({ ok: true });
-    });
-    socket.on('message', (data) => handleTranscriptionMessage(session, data));
-    socket.on('error', (error) => {
-      const message = String(error && error.message || 'connection_failed');
-      emitTranscription(session, { type: 'error', message });
-      settleStart({ ok: false, error: 'connection_failed' });
-      closeTranscriptionSession(session, { ok: false, error: message });
-    });
-    socket.on('close', () => {
-      settleStart({ ok: false, error: 'connection_closed' });
-      closeTranscriptionSession(session, { ok: !session.lastError, error: session.lastError || null });
-    });
-  });
-});
-
-ipcMain.on('transcription:audio', (event, bytes) => {
-  const session = transcriptionSessions.get(event.sender.id);
-  if (!session || !session.ready || session.closed || session.socket.readyState !== WebSocket.OPEN) return;
-  const buffer = Buffer.from(bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : bytes || []);
-  if (!buffer.length || buffer.length > 512 * 1024) return;
-  session.socket.send(JSON.stringify({
-    event_id: transcriptionEventId(),
-    type: 'input_audio_buffer.append',
-    audio: buffer.toString('base64'),
-  }));
-});
-
-ipcMain.handle('transcription:finish', (event) => {
-  const session = transcriptionSessions.get(event.sender.id);
-  if (!session || session.closed) return { ok: false, error: 'not_active', transcript: '' };
-  if (session.finishResolve) return { ok: false, error: 'already_finishing', transcript: sessionTranscript(session) };
-  return new Promise((resolve) => {
-    session.finishResolve = resolve;
-    session.finishTimer = setTimeout(() => {
-      closeTranscriptionSession(session, { ok: false, error: 'finish_timeout' });
-    }, TRANSCRIPTION_FINISH_TIMEOUT_MS);
-    if (session.socket.readyState === WebSocket.OPEN) {
-      session.socket.send(JSON.stringify({ event_id: transcriptionEventId(), type: 'session.finish' }));
-    } else {
-      closeTranscriptionSession(session, { ok: false, error: 'connection_closed' });
-    }
-  });
-});
+ipcMain.handle('transcription:start', (event) => transcriptionService.start(event.sender.id, event.sender));
+ipcMain.on('transcription:audio', (event, bytes) => transcriptionService.sendAudio(event.sender.id, bytes));
+ipcMain.handle('transcription:finish', (event) => transcriptionService.finish(event.sender.id));
 
 function closeAllTranscriptionSessions() {
-  for (const session of transcriptionSessions.values()) {
-    closeTranscriptionSession(session, { ok: false, error: 'app_quit' });
-  }
+  transcriptionService.closeAll();
 }
 
 // ============ 工作区文件服务 ============
