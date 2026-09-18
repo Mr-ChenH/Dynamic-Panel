@@ -117,6 +117,7 @@
   },
   "dependencies": {
     "koffi": "^3.2.1",
+    "pinyin-pro": "^3.29.4",
     "ws": "^8.21.3"
   }
 }

@@ -17,6 +17,18 @@ test('launcher ranks aliases above text, supports subsequences, and never rewrit
   assert.equal(domain.mergeLauncherResults([rows, rows]).length, 2);
 });
 
+test('launcher searches Chinese titles and aliases by full pinyin and initials', () => {
+  const rows = [
+    { id: 'capture', title: '截图工具', subtitle: '本地画面采集' },
+    { id: 'notes', title: '笔记', subtitle: '个人资料' },
+    { id: 'english', title: 'Visual Studio Code' },
+  ];
+  assert.equal(domain.searchLauncherResults(rows, 'jietu')[0].id, 'capture');
+  assert.equal(domain.searchLauncherResults(rows, 'jtgj')[0].id, 'capture');
+  assert.equal(domain.searchLauncherResults(rows, 'bj')[0].id, 'notes');
+  assert.equal(domain.searchLauncherResults(rows, 'bjq', { english: '编辑器' })[0].id, 'english');
+});
+
 test('extension schema rejects unsafe entries, duplicate commands and undeclared clipboard access', () => {
   assert.equal(schema.manifest(example).commands.length, 2);
   for (const entry of ['../main.js', '/main.js', 'C:/main.js', 'a\\b.js']) assert.throws(() => schema.manifest({ ...example, runtime: { type: 'node', entry } }));

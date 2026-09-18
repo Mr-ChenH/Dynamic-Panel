@@ -2,23 +2,64 @@ function normalizeText(value) {
   return String(value || '').normalize('NFKC').toLocaleLowerCase().trim();
 }
 
+const pinyinCache = new Map();
+function pinyinSearchText(value) {
+  const text = String(value || '');
+  if (!text) return { full: '', initials: '' };
+  const cached = pinyinCache.get(text);
+  if (cached) return cached;
+  let full = '', initials = '';
+  try {
+    const converter = typeof globalThis !== 'undefined' && globalThis.pinyinPro?.pinyin;
+    const nodeConverter = typeof module !== 'undefined' ? require('pinyin-pro').pinyin : null;
+    const pinyin = converter || nodeConverter;
+    if (pinyin) {
+      full = normalizeText(pinyin(text, { toneType: 'none' })).replace(/\s+/g, '');
+      initials = normalizeText(pinyin(text, { pattern: 'first', toneType: 'none' })).replace(/\s+/g, '');
+    }
+  } catch {}
+  const result = { full, initials };
+  if (pinyinCache.size > 20000) pinyinCache.delete(pinyinCache.keys().next().value);
+  pinyinCache.set(text, result);
+  return result;
+}
+
+function searchFields(value) {
+  const text = normalizeText(value);
+  const pinyin = pinyinSearchText(value);
+  return [text, pinyin.full, pinyin.initials].filter(Boolean);
+}
+
 function scoreResult(result, query, aliases = {}) {
   const q = normalizeText(query);
   if (!q) return (result.favorite ? 1000000 : 0) + Math.min(999999, Math.max(0, Number(result.usage?.lastUsedAt || 0) / 1e7)) + Math.min(100, Number(result.usage?.count || 0));
+  const compactQuery = q.replace(/\s+/g, '');
   const alias = result.persistable === false ? '' : normalizeText(aliases[result.id]);
   const title = normalizeText(result.title);
-  const haystack = [title, normalizeText(result.subtitle), ...(result.keywords || []).map(normalizeText)].join(' ');
-  if (alias === q) return 10000;
-  if (alias.startsWith(q)) return 8000 - alias.length;
-  if (title === q) return 7000;
-  if (title.startsWith(q)) return 6000 - Math.min(1000, title.length);
+  const subtitle = normalizeText(result.subtitle);
+  const keywords = (result.keywords || []).map(normalizeText);
+  const directFields = [alias, title, subtitle, ...keywords].filter(Boolean);
+  const expandedFields = [alias, title, subtitle, ...keywords].flatMap(searchFields);
+  const exactPinyin = (value) => {
+    const fields = searchFields(value);
+    return fields.includes(compactQuery) || fields.some((field) => field.startsWith(compactQuery));
+  };
+  if (alias === q || (alias && exactPinyin(alias))) return 10000;
+  if (alias.startsWith(q) || (alias && searchFields(alias).some((field) => field.startsWith(compactQuery)))) return 8000 - alias.length;
+  if (title === q || exactPinyin(result.title)) return 7000;
+  if (title.startsWith(q) || searchFields(result.title).some((field) => field.startsWith(compactQuery))) return 6000 - Math.min(1000, title.length);
   const tokens = q.split(/\s+/).filter(Boolean);
-  if (!tokens.every((token) => haystack.includes(token))) {
+  if (!tokens.every((token) => expandedFields.some((field) => field.includes(token) || field.includes(token.replace(/\s+/g, ''))))) {
     let cursor = 0;
     for (const char of title) if (char === q[cursor]) cursor++;
-    return cursor === q.length ? 300 - Math.min(299, title.length) : -1;
+    if (cursor !== q.length && !expandedFields.some((field) => {
+      let index = 0;
+      for (const char of compactQuery) { index = field.indexOf(char, index) + 1; if (!index) return false; }
+      return true;
+    })) return -1;
   }
-  let score = 1000 - Math.min(600, haystack.indexOf(q) < 0 ? 100 : haystack.indexOf(q));
+  let score = 1000 - Math.min(600, directFields.join(' ').indexOf(q) < 0 ? 100 : directFields.join(' ').indexOf(q));
+  if (expandedFields.some((field) => field.includes(compactQuery))) score += 180;
   if (result.favorite) score += 300;
   score += Math.min(200, Number(result.usage?.count || 0) * 4);
   return score;

@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
 const mainJs = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
@@ -50,6 +51,12 @@ test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', (
   assert.match(stylesCss, /\.todo-scope-control/);
   assert.match(stylesCss, /\.todo-completed-disclosure/);
   assert.doesNotMatch(appJs, /localStorage\.setItem\([^\n]*todo-time-scope/);
+});
+
+test('launcher loads the browser pinyin index before its shared search domain', () => {
+  assert.ok(html.indexOf('pinyin-pro/dist/index.js') < html.indexOf('launcher/domain.js'));
+  assert.match(launcherDomain, /pinyinPro\?\.pinyin/);
+  assert.match(launcherDomain, /pattern: 'first'/);
 });
 
 test('global shortcuts expose configurable panel, launcher, screenshot, screen recording and audio actions', () => {
