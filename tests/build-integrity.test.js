@@ -10,12 +10,20 @@ function buildPatterns() {
   return Array.isArray(packageJson.build?.files) ? packageJson.build.files : [];
 }
 
+function javascriptFilesUnder(directory) {
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const absolute = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...javascriptFilesUnder(absolute));
+    else if (entry.isFile() && entry.name.endsWith('.js')) files.push(absolute);
+  }
+  return files;
+}
+
 test('electron package includes extracted main-process modules', () => {
   assert.ok(buildPatterns().includes('main/**/*.js'));
-  const mainDir = path.join(root, 'main');
-  for (const name of fs.readdirSync(mainDir)) {
-    if (!name.endsWith('.js')) continue;
-    assert.ok(fs.statSync(path.join(mainDir, name)).isFile(), `main/${name} must be a file`);
+  for (const file of javascriptFilesUnder(path.join(root, 'main'))) {
+    assert.equal(fs.statSync(file).isFile(), true, `${path.relative(root, file)} must be a file`);
   }
 });
 

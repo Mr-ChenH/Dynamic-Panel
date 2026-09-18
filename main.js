@@ -46,6 +46,7 @@ const { createTaskNotificationWindowFactory } = require('./main/task-notificatio
 const { createTaskNotificationController } = require('./main/task-notification-controller');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
+const { registerFinanceIpc } = require('./main/ipc/finance');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -2055,66 +2056,17 @@ const { inspectLink } = linkInspector;
 
 ipcMain.handle('links:inspect', (event, url) => inspectLink(url, event.sender.id));
 
-function financeRequestId(senderId, value) {
-  const requestId = String(value || '').trim().slice(0, 120);
-  return requestId ? `${senderId}:${requestId}` : '';
-}
-
-function financeRequestPayload(event, payload = {}) {
-  const input = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
-  return { ...input, requestId: financeRequestId(event.sender.id, input.requestId) };
-}
-
-ipcMain.handle('finance:get-settings', () => publicFinanceSettings());
-ipcMain.handle('finance:set-provider', (event, payload) => updateFinanceProvider(payload));
-ipcMain.handle('finance:set-refresh-interval', (event, value) => updateFinanceRefreshInterval(value));
-ipcMain.handle('finance:set-activity', (event, payload) => {
-  if (!mainWindow || event.sender !== mainWindow.webContents) return { ok: false, error: 'forbidden' };
-  return setFinanceBackgroundActivity(payload);
+registerFinanceIpc({
+  ipcMain,
+  getFinanceService,
+  publicFinanceSettings,
+  updateFinanceProvider,
+  updateFinanceRefreshInterval,
+  setFinanceBackgroundActivity,
+  readFinanceSettings,
+  writeFinanceSettings: (settings) => writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), settings),
+  isMainWindowSender: (sender) => Boolean(mainWindow && !mainWindow.isDestroyed() && sender === mainWindow.webContents),
 });
-ipcMain.handle('finance:test-provider', async (event, providerId) => {
-  const id = String(providerId || '');
-  if (!['coingecko', 'binance', 'alpha-vantage', 'alpaca', 'twelve-data', 'sec-edgar', 'cn-stock', 'cn-tencent', 'cn-eastmoney', 'cn-sina'].includes(id)) return { ok: false, error: 'invalid_provider' };
-  const result = await getFinanceService().testProvider(id);
-  const current = readFinanceSettings();
-  const providers = { ...current.providers };
-  providers[id] = {
-    ...providers[id],
-    verification: {
-      state: result.ok ? 'verified' : 'failed',
-      verifiedAt: new Date().toISOString(),
-      error: result.ok ? '' : String(result.error || 'unknown').slice(0, 80),
-      capabilities: result.ok && result.capabilities && typeof result.capabilities === 'object'
-        ? result.capabilities : null,
-    },
-  };
-  writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), { schemaVersion: 2, refreshSeconds: current.refreshSeconds, providers });
-  return { ...result, settings: publicFinanceSettings() };
-});
-ipcMain.handle('finance:refresh', () => {
-  getFinanceService().clearCache();
-  return { ok: true };
-});
-
-async function handleFinanceRequest(work) {
-  try {
-    return await work();
-  } catch (error) {
-    // Cancellation is an expected renderer lifecycle event, not an IPC failure.
-    if (error?.code === 'cancelled' || /cancel/i.test(String(error?.message || ''))) {
-      return { ok: false, error: 'cancelled' };
-    }
-    throw error;
-  }
-}
-
-ipcMain.handle('finance:overview', (event, payload) => handleFinanceRequest(() => getFinanceService().overview(financeRequestPayload(event, payload))));
-ipcMain.handle('finance:ranking', (event, payload) => handleFinanceRequest(() => getFinanceService().ranking(financeRequestPayload(event, payload))));
-ipcMain.handle('finance:quotes', (event, payload) => handleFinanceRequest(() => getFinanceService().quotes(financeRequestPayload(event, payload))));
-ipcMain.handle('finance:history', (event, payload) => handleFinanceRequest(() => getFinanceService().history(financeRequestPayload(event, payload))));
-ipcMain.handle('finance:fundamentals', (event, payload) => handleFinanceRequest(() => getFinanceService().fundamentals(financeRequestPayload(event, payload))));
-ipcMain.handle('finance:search', (event, payload) => handleFinanceRequest(() => getFinanceService().search(financeRequestPayload(event, payload))));
-ipcMain.handle('finance:cancel', (event, requestId) => getFinanceService().cancel(financeRequestId(event.sender.id, requestId)));
 
 ipcMain.handle('smart:organize-material', async (event, payload) => {
   const text = String(payload && payload.text || '').trim();

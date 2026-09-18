@@ -282,3 +282,13 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `tests/finance-background-refresh.test.js`
 
 相关定向检查当前通过 44 项测试，且 `main.js`、新模块和桌面检查脚本均通过 `node --check`。
+
+### 已完成：财务 IPC 注册拆分
+
+本阶段提交包含：
+
+- 新增 `main/ipc/finance.js`
+- 将 14 个 `finance:*` IPC handler 移出 `main.js`
+- 保留请求 ID 按 sender 隔离、主窗口来源校验、取消结果归一化和 provider 验证持久化
+- 新增 `tests/finance-ipc.test.js`
+- `main/` 语法检查改为递归扫描，覆盖 `main/ipc/` 等嵌套目录

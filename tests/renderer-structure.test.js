@@ -5,6 +5,8 @@ const path = require('node:path');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'), 'utf8');
 const mainJs = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+const financeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'finance.js'), 'utf8');
+const financeBackgroundJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-background-refresh.js'), 'utf8');
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
@@ -238,9 +240,10 @@ test('settings exposes every panel tab as a possible default opening page', () =
 });
 
 test('finance IPC turns expected cancellation into a structured result', () => {
-  assert.match(mainJs, /async function handleFinanceRequest\(work\)/);
-  assert.match(mainJs, /error\?\.code === 'cancelled'/);
-  assert.match(mainJs, /finance:quotes.*handleFinanceRequest/);
+  assert.match(mainJs, /registerFinanceIpc\(/);
+  assert.match(financeIpcJs, /async function handleFinanceRequest\(work\)/);
+  assert.match(financeIpcJs, /error\?\.code === 'cancelled'/);
+  assert.match(financeIpcJs, /finance:quotes.*handleFinanceRequest/);
 });
 
 test('finance is a provider-backed peer workspace with management isolated in settings', () => {
@@ -375,13 +378,14 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.doesNotMatch(financeJs, /refreshTimer/);
   assert.match(mainJs, /createFinanceService/);
   assert.match(mainJs, /refreshFinanceBackground/);
-  assert.match(mainJs, /allowInactive/);
-  assert.match(mainJs, /startupPrefetch/);
-  assert.match(mainJs, /if \(startupPrefetch\) void refreshFinanceBackground\(\{ allowInactive: true \}\)/);
-  assert.match(mainJs, /financeBackgroundInterval \* 1000/);
+  assert.match(mainJs, /createFinanceBackgroundRefresh/);
+  assert.match(financeBackgroundJs, /allowInactive/);
+  assert.match(financeBackgroundJs, /startupPrefetch/);
+  assert.match(financeBackgroundJs, /if \(startupPrefetch\) void refresh\(\{ allowInactive: true \}\)/);
+  assert.match(financeBackgroundJs, /interval \* 1000/);
   assert.match(mainJs, /finance:update/);
-  assert.match(mainJs, /Background refresh .* completed with issues/);
-  assert.match(mainJs, /Background refresh .* failed/);
+  assert.match(financeBackgroundJs, /Background refresh .* completed with issues/);
+  assert.match(financeBackgroundJs, /Background refresh .* failed/);
   assert.match(mainJs, /api\.binance\.com/);
   assert.match(mainJs, /alphavantage\.co/);
   assert.match(mainJs, /api\.twelvedata\.com/);
@@ -392,12 +396,12 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.doesNotMatch(mainJs, /TUSHARE_API_TOKEN/);
   assert.match(mainJs, /FINANCE_FETCH_MAX_REQUEST_BYTES/);
   assert.match(mainJs, /method === 'POST'/);
-  assert.match(mainJs, /finance:history/);
-  assert.match(mainJs, /finance:fundamentals/);
-  assert.match(mainJs, /finance:cancel/);
+  assert.match(financeIpcJs, /finance:history/);
+  assert.match(financeIpcJs, /finance:fundamentals/);
+  assert.match(financeIpcJs, /finance:cancel/);
   assert.match(mainJs, /safeStorage\.encryptString\(apiKey\)/);
   assert.match(mainJs, /encryptedApiKey/);
-  assert.match(mainJs, /capabilities: result\.ok && result\.capabilities/);
+  assert.match(financeIpcJs, /capabilities: result\.ok && result\.capabilities/);
   assert.match(mainJs, /finance: true/);
   assert.match(appJs, /'finance'/);
 });
