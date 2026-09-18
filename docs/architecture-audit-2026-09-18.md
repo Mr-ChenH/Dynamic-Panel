@@ -292,3 +292,11 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 保留请求 ID 按 sender 隔离、主窗口来源校验、取消结果归一化和 provider 验证持久化
 - 新增 `tests/finance-ipc.test.js`
 - `main/` 语法检查改为递归扫描，覆盖 `main/ipc/` 等嵌套目录
+
+### 已完成：录音 IPC 注册拆分
+
+- 新增 `main/ipc/recordings.js`
+- 将 `recordings:save`、`recordings:read`、`recordings:delete` 和 `recordings:reveal` 移出 `main.js`
+- 通过依赖注入保留工作区路径校验和系统文件管理器定位行为
+- 新增 `tests/recordings-ipc.test.js`
+- 保持录音文件只通过 `workspaceFiles.getSafeRecordingPath()` 暴露

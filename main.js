@@ -47,6 +47,7 @@ const { createTaskNotificationController } = require('./main/task-notification-c
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
 const { registerFinanceIpc } = require('./main/ipc/finance');
+const { registerRecordingsIpc } = require('./main/ipc/recordings');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -3194,15 +3195,13 @@ const startClipboardPolling = () => clipboardService.start();
 const stopClipboardPolling = () => clipboardService.stop();
 const writeClipboardEntry = (entry) => clipboardService.writeEntry(entry);
 
-ipcMain.handle('recordings:save', (event, payload) => saveRecording(payload));
-ipcMain.handle('recordings:read', (event, audioPath) => readRecording(audioPath));
-ipcMain.handle('recordings:delete', (event, audioPath) => deleteRecording(audioPath));
-
-ipcMain.handle('recordings:reveal', (event, audioPath) => {
-  const safePath = getSafeRecordingPath(audioPath);
-  if (!safePath) return false;
-  shell.showItemInFolder(safePath);
-  return true;
+registerRecordingsIpc({
+  ipcMain,
+  saveRecording,
+  readRecording,
+  deleteRecording,
+  getSafeRecordingPath,
+  revealItem: (safePath) => shell.showItemInFolder(safePath),
 });
 
 // ============ 笔记图片 ============
