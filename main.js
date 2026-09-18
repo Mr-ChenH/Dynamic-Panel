@@ -37,6 +37,7 @@ const { createNetworkSecurity } = require('./main/network-security');
 const { createLinkInspector } = require('./main/link-inspector');
 const { createWorkspaceFiles } = require('./main/workspace-files');
 const { createClipboardService } = require('./main/clipboard-service');
+const { createTaskNotificationServer } = require('./main/task-notification-server');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -312,8 +313,6 @@ const mediaPermissionCoordinator = createForegroundMediaPermissionCoordinator();
 
 let notificationWindow = null;
 let notificationWindowReady = false;
-let notificationServer = null;
-let notificationServerAvailable = false;
 let activeTaskNotification = null;
 let taskNotificationLeaving = false;
 let taskNotificationTimer = null;
@@ -929,112 +928,18 @@ function finishTaskNotification(eventId) {
   }, 80);
 }
 
-function sendTaskNotificationResponse(response, statusCode, body) {
-  if (response.headersSent) return;
-  const json = JSON.stringify(body);
-  response.writeHead(statusCode, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(json),
-    'Cache-Control': 'no-store',
-  });
-  response.end(json);
-}
-
-function startTaskNotificationServer() {
-  if (notificationServer) return;
-  const server = http.createServer((request, response) => {
-    let requestUrl;
-    try {
-      requestUrl = new URL(request.url || '/', `http://${TASK_NOTIFICATION_HOST}`);
-    } catch (error) {
-      sendTaskNotificationResponse(response, 400, { ok: false, error: 'invalid_url' });
-      return;
-    }
-    if (request.method === 'GET' && requestUrl.pathname === '/health') {
-      sendTaskNotificationResponse(response, 200, { ok: true });
-      return;
-    }
-
-    const sourceMatch = /^\/notify\/([a-z0-9-]{1,32})$/i.exec(requestUrl.pathname);
-    const requestedSource = sourceMatch ? sourceMatch[1].toLowerCase() : '';
-    const source = TASK_NOTIFICATION_SOURCES.has(requestedSource) ? requestedSource : null;
-    if (request.method !== 'POST' || !source) {
-      sendTaskNotificationResponse(response, 404, { ok: false, error: 'not_found' });
-      return;
-    }
-    const contentType = String(request.headers['content-type'] || '')
-      .split(';', 1)[0]
-      .trim()
-      .toLowerCase();
-    if (contentType !== 'application/json') {
-      sendTaskNotificationResponse(response, 415, {
-        ok: false,
-        error: 'application_json_required',
-      });
-      return;
-    }
-
-    const chunks = [];
-    let bodyLength = 0;
-    let bodyTooLarge = false;
-    request.on('data', (chunk) => {
-      bodyLength += chunk.length;
-      if (bodyLength > TASK_NOTIFICATION_BODY_LIMIT) {
-        bodyTooLarge = true;
-        chunks.length = 0;
-        return;
-      }
-      if (!bodyTooLarge) chunks.push(chunk);
-    });
-    request.on('end', () => {
-      if (bodyTooLarge) {
-        sendTaskNotificationResponse(response, 413, { ok: false, error: 'body_too_large' });
-        return;
-      }
-      let payload;
-      try {
-        const rawBody = Buffer.concat(chunks).toString('utf8').trim();
-        payload = rawBody ? JSON.parse(rawBody) : {};
-      } catch (error) {
-        sendTaskNotificationResponse(response, 400, { ok: false, error: 'invalid_json' });
-        return;
-      }
-      if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-        sendTaskNotificationResponse(response, 400, { ok: false, error: 'invalid_payload' });
-        return;
-      }
-      const result = enqueueTaskNotification(normalizeTaskNotification(payload, source));
-      sendTaskNotificationResponse(response, 202, { ok: true, result });
-    });
-    request.on('error', () => {
-      if (!response.headersSent) sendTaskNotificationResponse(response, 400, { ok: false });
-    });
-  });
-  notificationServer = server;
-
-  server.on('clientError', (error, socket) => {
-    if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
-  });
-  server.once('listening', () => {
-    if (notificationServer !== server) return;
-    notificationServerAvailable = true;
-    refreshTrayMenu();
-  });
-  server.on('error', (error) => {
-    if (notificationServer === server) notificationServer = null;
-    notificationServerAvailable = false;
-    refreshTrayMenu();
-    console.warn(`Task notification server unavailable: ${error.message}`);
-  });
-  server.listen(TASK_NOTIFICATION_PORT, TASK_NOTIFICATION_HOST);
-}
-
-function stopTaskNotificationServer() {
-  const server = notificationServer;
-  notificationServer = null;
-  notificationServerAvailable = false;
-  if (server) server.close();
-}
+const taskNotificationServer = createTaskNotificationServer({
+  http,
+  host: TASK_NOTIFICATION_HOST,
+  port: TASK_NOTIFICATION_PORT,
+  sources: TASK_NOTIFICATION_SOURCES,
+  bodyLimit: TASK_NOTIFICATION_BODY_LIMIT,
+  normalize: normalizeTaskNotification,
+  enqueue: enqueueTaskNotification,
+  onAvailabilityChange: () => refreshTrayMenu(),
+});
+const startTaskNotificationServer = () => taskNotificationServer.start();
+const stopTaskNotificationServer = () => taskNotificationServer.stop();
 
 ipcMain.on('task-notification:hover', (event, paused) => {
   if (
