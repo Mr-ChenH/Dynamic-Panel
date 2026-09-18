@@ -5822,9 +5822,9 @@ textarea::placeholder { color: var(--text-4); opacity: 1; }
   --tile-highlight: rgba(255, 255, 255, 0.7);
   --squircle-highlight: rgba(255, 255, 255, 0.95);
   --text-1: #172033;
-  --text-2: #35445a;
-  --text-3: #5d6b7e;
-  --text-4: #788598;
+  --text-2: #2f3e53;
+  --text-3: #526174;
+  --text-4: #627084;
   --focus-ring: #3f72d8;
   --scrollbar-thumb: rgba(30, 43, 61, 0.18);
   --scrollbar-thumb-hover: rgba(30, 43, 61, 0.32);
@@ -5998,4 +5998,80 @@ textarea::placeholder { color: var(--text-4); opacity: 1; }
 :root[data-theme='light'] #app[data-platform='win32'].collapsed .notch:hover {
   background: var(--surface-1);
   box-shadow: 0 7px 18px rgba(42, 58, 80, 0.22);
+}
+
+/* Keep small metadata and status text readable on pale surfaces. */
+:root[data-theme='light'] .api-field-heading small[data-state='warning'],
+:root[data-theme='light'] .settings-status-list small[data-state='warning'],
+:root[data-theme='light'] #settings-launcher-status[data-state='warning'],
+:root[data-theme='light'] #settings-home-module-status[data-state='warning'],
+:root[data-theme='light'] .ai-todo-warning,
+:root[data-theme='light'] .ai-service-heading > small[data-state='warning'],
+:root[data-theme='light'] .finance-market-status-card[data-state='error'] header span,
+:root[data-theme='light'] .home-weather[data-weather-state='error'] #home-weather-updated {
+  color: #9a5b00 !important;
+}
+
+:root[data-theme='light'] .settings-inline-note.error,
+:root[data-theme='light'] .credentials-note.error,
+:root[data-theme='light'] .ai-section-head span.error,
+:root[data-theme='light'] .ai-workspace-actions p.error,
+:root[data-theme='light'] .ai-service-heading > small[data-state='error'],
+:root[data-theme='light'] .ai-model-limit.error,
+:root[data-theme='light'] .ai-diagnostics-actions .danger,
+:root[data-theme='light'] .home-chat-reader > footer span[data-error='true'],
+:root[data-theme='light'] #home-chat-form[data-over-limit='true'] #home-chat-count {
+  color: #b42318 !important;
+}
+
+:root[data-theme='light'] .todo-overdue-jump,
+:root[data-theme='light'] .todo-item.overdue .todo-ddl,
+:root[data-theme='light'] #todo-editor-error,
+:root[data-theme='light'] .recording-item-delete:hover,
+:root[data-theme='light'] .bulk-delete:hover,
+:root[data-theme='light'] .notes-taxonomy-action.danger:hover,
+:root[data-theme='light'] .notes-category-confirm button.danger,
+:root[data-theme='light'] .notes-icon-button.danger:hover,
+:root[data-theme='light'] .music-library-remove:hover {
+  color: #b42318;
+}
+
+:root[data-theme='light'] .home-note-category,
+:root[data-theme='light'] .notes-taxonomy-children .notes-taxonomy-select.active,
+:root[data-theme='light'] .notes-detail-tag {
+  color: #7a5716;
+}
+
+:root[data-theme='light'] .link-actions .icon-button.is-active,
+:root[data-theme='light'] .links-main .link-state-flags .favorite,
+:root[data-theme='light'] .finance-ai-conclusion.mixed strong,
+:root[data-theme='light'] .finance-ranking-spotlight-rank strong,
+:root[data-theme='light'] .finance-provider-capabilities [data-state='permission_required'] b {
+  color: #8a5a00;
+}
+
+:root[data-theme='light'] .music-settings-modebar button[aria-selected='true'],
+:root[data-theme='light'] .music-view-tabs button[aria-selected='true'],
+:root[data-theme='light'] .music-online-badge {
+  color: #147066 !important;
+}
+
+:root[data-theme='light'] .home-chat-message-state {
+  background: #fff7df;
+  color: #7a5716;
+}
+
+:root[data-theme='light'] .home-chat-message[data-state='error'] .home-chat-message-state {
+  background: #fff0ee;
+  color: #9f2018;
+}
+
+:root[data-theme='light'] .settings-ai-migration {
+  border-color: #b58a38;
+  background: #fff7df;
+  color: #6e4c0b;
+}
+
+:root[data-theme='light'] .settings-ai-migration button {
+  color: #6e4c0b;
 }
