@@ -379,6 +379,7 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.match(mainJs, /createFinanceService/);
   assert.match(mainJs, /refreshFinanceBackground/);
   assert.match(mainJs, /createFinanceBackgroundRefresh/);
+  assert.doesNotMatch(mainJs, /clearFinanceBackgroundTimer/);
   assert.match(financeBackgroundJs, /allowInactive/);
   assert.match(financeBackgroundJs, /startupPrefetch/);
   assert.match(financeBackgroundJs, /if \(startupPrefetch\) void refresh\(\{ allowInactive: true \}\)/);

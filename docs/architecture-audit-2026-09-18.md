@@ -324,3 +324,13 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - AI service、provider 配置解析、验证持久化和密钥处理通过依赖注入保留在主进程领域层
 - 保留 sender ID 隔离、provider stale context 检查、诊断失败返回和迁移保存失败处理
 - 新增 `tests/ai-ipc.test.js`
+
+### 已完成：转录配置与流式 IPC 拆分
+
+- 新增 `main/ipc/transcription.js`
+- 将 `transcription:get-config`、`transcription:set-config`、`transcription:start`、`transcription:audio` 和 `transcription:finish` 移出 `main.js`
+- 保留 schema v3、旧字段兼容、模型列表去重、HTTPS endpoint 校验、safeStorage 密钥加密和 workspace ID 校验
+- 配置变更继续取消 AI 请求，并在转录配置变化时关闭实时转录 session
+- 新增 `tests/transcription-ipc.test.js`
+- 修复 `before-quit` 仍调用已删除 `clearFinanceBackgroundTimer()` 的退出路径缺陷，改由 `financeBackgroundService.dispose()` 统一清理
+- 全部 Node 单元测试为 297 项：296 通过，1 项按平台跳过
