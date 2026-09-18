@@ -23,7 +23,7 @@ function registerFinanceIpc({
     try {
       return await work();
     } catch (error) {
-      if (error?.code === 'cancelled' || /cancel/i.test(String(error?.message || ''))) {
+      if (error?.code === 'cancelled' || error?.name === 'AbortError') {
         return { ok: false, error: 'cancelled' };
       }
       throw error;

@@ -5,6 +5,8 @@
   const panel = document.getElementById('tab-finance');
   if (!panel) return;
 
+  const isCancelledFinanceResult = (result) => result?.ok === false && result.error === 'cancelled';
+
   const elements = {
     providerSummary: document.getElementById('finance-provider-summary'),
     updated: document.getElementById('finance-updated'),
@@ -1146,7 +1148,7 @@
     renderSearchResults('正在搜索真实数据源');
     try {
       const result = await api.searchFinanceAssets(query, requestId);
-      if (sequence !== state.searchSequence) return;
+      if (sequence !== state.searchSequence || isCancelledFinanceResult(result)) return;
       state.searchResults = Array.isArray(result?.items) ? result.items.map(normalizeAssetIdentity).filter(Boolean) : [];
       const notice = Array.isArray(result?.warnings) ? result.warnings[0] : null;
       state.searchNotice = notice ? errorLabel(notice.warning || notice.error) : '';
@@ -1276,10 +1278,10 @@
         api.getFinanceRanking({ market: 'all', source: state.preferences.defaultSource, sort: 'volume', page: 1, pageSize: RANKING_PAGE_SIZE, requestId }).catch((error) => ({ ok: false, rows: [], error: error?.message || 'network_error' })),
       ]);
       if (generation !== state.financeLoadGeneration) return;
-      if (overview?.ok !== false || !state.overview) state.overview = overview;
-      if (leaders?.ok !== false || !state.overviewLeaders) state.overviewLeaders = leaders;
-      if (losers?.ok !== false || !state.overviewLosers) state.overviewLosers = losers;
-      if (volume?.ok !== false || !state.overviewVolume) state.overviewVolume = volume;
+      if (!isCancelledFinanceResult(overview) && (overview?.ok !== false || !state.overview)) state.overview = overview;
+      if (!isCancelledFinanceResult(leaders) && (leaders?.ok !== false || !state.overviewLeaders)) state.overviewLeaders = leaders;
+      if (!isCancelledFinanceResult(losers) && (losers?.ok !== false || !state.overviewLosers)) state.overviewLosers = losers;
+      if (!isCancelledFinanceResult(volume) && (volume?.ok !== false || !state.overviewVolume)) state.overviewVolume = volume;
       renderOverview();
       if (state.aiInterpretation && state.aiResultRevision !== financeSnapshotRevision()) {
         retainFinanceInterpretation('行情已更新，显示上次解读');
@@ -1301,7 +1303,14 @@
     if (state.selectedAssetId === assetId) renderWatchlist();
     try {
       const result = await api.getFinanceFundamentals({ assetId, requestId });
-      if (generation === state.financeLoadGeneration) state.fundamentalsByAsset.set(assetId, { ...result, loading: false });
+      if (generation === state.financeLoadGeneration) {
+        if (isCancelledFinanceResult(result)) {
+          if (existing) state.fundamentalsByAsset.set(assetId, existing);
+          else state.fundamentalsByAsset.delete(assetId);
+        } else {
+          state.fundamentalsByAsset.set(assetId, { ...result, loading: false });
+        }
+      }
     } catch (error) {
       if (generation === state.financeLoadGeneration) state.fundamentalsByAsset.set(assetId, { ok: false, loading: false, error: error?.message || 'network_error' });
     } finally {
@@ -1324,7 +1333,14 @@
     if (state.selectedAssetId === assetId) renderWatchlist();
     try {
       const result = await api.getFinanceHistory({ assetId, days: safeDays, requestId });
-      if (generation === state.financeLoadGeneration) state.historyByAsset.set(assetId, { ...result, days: safeDays, loading: false });
+      if (generation === state.financeLoadGeneration) {
+        if (isCancelledFinanceResult(result)) {
+          if (existing) state.historyByAsset.set(assetId, existing);
+          else state.historyByAsset.delete(assetId);
+        } else {
+          state.historyByAsset.set(assetId, { ...result, days: safeDays, loading: false });
+        }
+      }
     } catch (error) {
       if (generation === state.financeLoadGeneration) state.historyByAsset.set(assetId, { ok: false, days: safeDays, loading: false, error: error?.message || 'network_error' });
     } finally {
@@ -1592,7 +1608,8 @@
     if (cachedSnapshot) elements.rankingState.textContent = '后台更新中 · 当前榜单仍可用';
     try {
       const result = await api.getFinanceRanking({ market, source, sort, page, pageSize: RANKING_PAGE_SIZE, requestId });
-      if (generation === state.financeLoadGeneration && market === state.rankingMarket && source === state.rankingSource && sort === state.rankingSort && page === state.rankingPage) {
+      if (!isCancelledFinanceResult(result)
+        && generation === state.financeLoadGeneration && market === state.rankingMarket && source === state.rankingSource && sort === state.rankingSort && page === state.rankingPage) {
         if (result?.ok !== false || !cachedSnapshot) {
           state.ranking = result;
           rememberRanking(cacheKey, result);
@@ -1643,7 +1660,7 @@
     }
     try {
       const result = await api.getFinanceQuotes({ assetIds, requestId });
-      if (generation !== state.financeLoadGeneration) return;
+      if (generation !== state.financeLoadGeneration || isCancelledFinanceResult(result)) return;
       applyQuoteResult(result);
     } catch (error) {
       if (generation === state.financeLoadGeneration) state.unavailableQuotes = new Map(assetIds.map((assetId) => [assetId, error?.message || 'network_error']));

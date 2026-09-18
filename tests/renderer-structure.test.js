@@ -247,7 +247,11 @@ test('finance IPC turns expected cancellation into a structured result', () => {
   assert.match(mainJs, /registerFinanceIpc\(/);
   assert.match(financeIpcJs, /async function handleFinanceRequest\(work\)/);
   assert.match(financeIpcJs, /error\?\.code === 'cancelled'/);
+  assert.match(financeIpcJs, /error\?\.name === 'AbortError'/);
+  assert.doesNotMatch(financeIpcJs, /\/cancel\/i/);
   assert.match(financeIpcJs, /finance:quotes.*handleFinanceRequest/);
+  assert.match(financeJs, /const isCancelledFinanceResult/);
+  assert.ok((financeJs.match(/isCancelledFinanceResult\(/g) || []).length >= 9);
 });
 
 test('finance is a provider-backed peer workspace with management isolated in settings', () => {

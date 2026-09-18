@@ -2,11 +2,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { registerFinanceIpc } = require('../main/ipc/finance');
 
-function createHarness({ rejectOverview = false } = {}) {
+function createHarness({ overviewError = null } = {}) {
   const handlers = new Map();
   const service = {
     overview: async (payload) => {
-      if (rejectOverview) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
+      if (overviewError) throw overviewError;
       return payload;
     },
     cancel: (requestId) => ({ requestId }),
@@ -37,8 +37,18 @@ test('finance IPC namespaces request ids by sender and rejects activity from oth
 });
 
 test('finance IPC cancellation is returned as structured data', async () => {
-  const { handlers } = createHarness({ rejectOverview: true });
+  const cancelled = Object.assign(new Error('cancelled'), { code: 'cancelled' });
+  const { handlers } = createHarness({ overviewError: cancelled });
   const event = { sender: { id: 2 } };
   assert.deepEqual(await handlers.get('finance:overview')(event, { requestId: 'one' }), { ok: false, error: 'cancelled' });
   assert.deepEqual(await handlers.get('finance:cancel')(event, 'one'), { requestId: '2:one' });
+
+  const aborted = createHarness({ overviewError: Object.assign(new Error('aborted'), { name: 'AbortError' }) });
+  assert.deepEqual(await aborted.handlers.get('finance:overview')(event, {}), { ok: false, error: 'cancelled' });
+});
+
+test('finance IPC does not hide provider failures whose message merely mentions cancellation', async () => {
+  const providerError = new Error('provider cancellation policy unavailable');
+  const { handlers } = createHarness({ overviewError: providerError });
+  await assert.rejects(handlers.get('finance:overview')({ sender: { id: 2 } }, {}), providerError);
 });
