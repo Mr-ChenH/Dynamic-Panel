@@ -351,3 +351,12 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 公共 URL 继续经过 DNS 与私网地址校验，本地路径继续要求绝对路径
 - macOS 麦克风权限仍通过既有 TCC 前台协调器请求
 - 新增 `tests/system-ipc.test.js`
+
+### 已完成：工作区 controller 与 IPC 拆分
+
+- 新增 `main/workspace-controller.js` 和 `main/ipc/workspace.js`
+- 将工作区根路径、目录迁移、portable snapshot 读写、媒体路径归一化和五个 `workspace:*` handler 移出 `main.js`
+- 保留 `workspace.json` schema v1、8MB 上限、未变化快照跳过写盘以及 `/` 分隔的录音和剪贴板图片相对路径
+- 更换工作区时继续阻止活动录音/录屏，先迁移截图与媒体资产，再更新设置并通知 renderer、capture service 和托盘
+- 新增 `tests/workspace-controller.test.js`
+- 完整 Node 测试为 304 项：303 通过，1 项按平台跳过

@@ -54,6 +54,8 @@ const { registerAiIpc } = require('./main/ipc/ai');
 const { registerTranscriptionIpc } = require('./main/ipc/transcription');
 const { registerHomeIpc } = require('./main/ipc/home');
 const { privacySettingsPanesFor, registerSystemIpc } = require('./main/ipc/system');
+const { createWorkspaceController } = require('./main/workspace-controller');
+const { registerWorkspaceIpc } = require('./main/ipc/workspace');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -1184,16 +1186,6 @@ function updateFinanceRefreshInterval(value) {
   return publicFinanceSettings();
 }
 
-function workspaceRoot() {
-  const settings = readJsonFile(getJsonSettingsPath(WORKSPACE_SETTINGS_FILE));
-  const configured = String(settings.path || '').trim();
-  return configured && path.isAbsolute(configured) ? configured : app.getPath('userData');
-}
-
-function workspacePath(name) {
-  return path.join(workspaceRoot(), name);
-}
-
 function showOwnedOpenDialog(options) {
   const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   if (owner) {
@@ -1210,58 +1202,38 @@ function showOwnedOpenDialog(options) {
   );
 }
 
-function copyWorkspaceAssets(sourceRoot, targetRoot) {
-  if (!sourceRoot || !targetRoot || path.resolve(sourceRoot) === path.resolve(targetRoot)) return;
-  for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME, NOTE_IMAGES_DIR_NAME]) {
-    const source = path.join(sourceRoot, directory);
-    const target = path.join(targetRoot, directory);
-    try {
-      if (!fs.existsSync(source) || !fs.lstatSync(source).isDirectory()) continue;
-      fs.mkdirSync(target, { recursive: true });
-      fs.cpSync(source, target, { recursive: true, force: false, errorOnExist: false });
-    } catch (error) {}
-  }
-  for (const filename of [WORKSPACE_DATA_FILE]) {
-    const source = path.join(sourceRoot, filename);
-    const target = path.join(targetRoot, filename);
-    try {
-      if (fs.existsSync(source) && fs.lstatSync(source).isFile() && !fs.existsSync(target)) {
-        fs.copyFileSync(source, target, fs.constants.COPYFILE_EXCL);
-      }
-    } catch (error) {}
-  }
-}
-
-async function chooseWorkspaceFolder() {
-  if (captureService?.busy()) {
-    await dialog.showMessageBox({ type: 'info', message: '请先结束录音或屏幕采集并等待保存，再更换数据文件夹。' });
-    return false;
-  }
-  const result = await showOwnedOpenDialog({
-    title: '选择 Dynamic Panel 数据文件夹',
-    properties: ['openDirectory', 'createDirectory'],
-  });
-  const selected = !result.canceled && result.filePaths && result.filePaths[0];
-  if (!selected) return false;
-  if (captureService?.busy()) return false;
-  const previousRoot = workspaceRoot();
-  try { copyCaptures(previousRoot, selected); }
-  catch (error) {
-    await dialog.showMessageBox({ type: 'error', message: '截图与录屏资料复制失败，数据文件夹未切换。', detail: '请检查目标目录权限、剩余空间及是否存在冲突文件。' });
-    return false;
-  }
-  copyWorkspaceAssets(previousRoot, selected);
-  if (!writeJsonFile(getJsonSettingsPath(WORKSPACE_SETTINGS_FILE), { path: selected })) return false;
-  aiContextGeneration += 1;
-  aiModelService?.cancelAll();
-  for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME, NOTE_IMAGES_DIR_NAME]) {
-    try { fs.mkdirSync(path.join(selected, directory), { recursive: true }); } catch (error) {}
-  }
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('workspace:changed', { path: selected });
-  captureService?.refresh();
-  refreshTrayMenu();
-  return true;
-}
+const workspaceController = createWorkspaceController({
+  fs,
+  path,
+  getUserDataPath: () => app.getPath('userData'),
+  getSettingsPath: getJsonSettingsPath,
+  readJsonFile,
+  writeJsonFile,
+  workspaceSettingsFile: WORKSPACE_SETTINGS_FILE,
+  workspaceDataFile: WORKSPACE_DATA_FILE,
+  recordingsDirName: RECORDINGS_DIR_NAME,
+  clipImagesDirName: CLIP_IMAGES_DIR_NAME,
+  noteImagesDirName: NOTE_IMAGES_DIR_NAME,
+  portableMediaPath: (directory, filePath) => platformPolicy.portableMediaPath(directory, filePath),
+  persistenceGate: workspacePersistenceGate,
+  copyCaptures,
+  isCaptureBusy: () => Boolean(captureService?.busy()),
+  showMessageBox: (options) => dialog.showMessageBox(options),
+  showOwnedOpenDialog,
+  openPath: (target) => shell.openPath(target),
+  onContextChanged: () => {
+    aiContextGeneration += 1;
+    aiModelService?.cancelAll();
+  },
+  onWorkspaceChanged: (selected) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('workspace:changed', { path: selected });
+    captureService?.refresh();
+    refreshTrayMenu();
+  },
+});
+const workspaceRoot = () => workspaceController.root();
+const workspacePath = (name) => workspaceController.path(name);
+const chooseWorkspaceFolder = () => workspaceController.choose();
 
 function applyFeatureServices(features) {
   const policy = clipboardServicePolicy(features);
@@ -1752,50 +1724,7 @@ ipcMain.handle('settings:set-shortcut', (event, payload) => {
   refreshTrayMenu();
   return { ok: true, action, shortcut: accelerator, settings };
 });
-ipcMain.handle('workspace:get', () => ({ path: workspaceRoot(), portable: workspaceRoot() !== app.getPath('userData') }));
-ipcMain.handle('workspace:load-data', () => {
-  const payload = readJsonFile(workspacePath(WORKSPACE_DATA_FILE), {});
-  return payload && payload.localStorage && typeof payload.localStorage === 'object'
-    ? payload.localStorage
-    : {};
-});
-
-function normalizePortableStorage(storage) {
-  const portable = { ...storage };
-  const normalizers = [
-    ['notch-recordings', 'audioPath', RECORDINGS_DIR_NAME],
-    ['notch-clip-history', 'imagePath', CLIP_IMAGES_DIR_NAME],
-  ];
-  for (const [storageKey, property, directory] of normalizers) {
-    try {
-      const rows = JSON.parse(portable[storageKey]);
-      if (!Array.isArray(rows)) continue;
-      portable[storageKey] = JSON.stringify(rows.map((row) => {
-        if (!row || typeof row !== 'object' || !row[property]) return row;
-        return { ...row, [property]: platformPolicy.portableMediaPath(directory, row[property]) };
-      }));
-    } catch (error) {}
-  }
-  return portable;
-}
-
-ipcMain.handle('workspace:save-data', (event, storage) => {
-  if (!storage || typeof storage !== 'object' || Array.isArray(storage)) return false;
-  const portableStorage = normalizePortableStorage(storage);
-  const serialized = JSON.stringify(portableStorage);
-  if (Buffer.byteLength(serialized) > 8 * 1024 * 1024) return false;
-  const destination = workspacePath(WORKSPACE_DATA_FILE);
-  if (!workspacePersistenceGate.shouldWrite(portableStorage, destination)) return true;
-  const written = writeJsonFile(destination, {
-    version: 1,
-    updatedAt: Date.now(),
-    localStorage: portableStorage,
-  });
-  if (written) workspacePersistenceGate.markWritten(portableStorage, destination);
-  return written;
-});
-ipcMain.handle('workspace:open', () => shell.openPath(workspaceRoot()));
-ipcMain.handle('workspace:choose', () => chooseWorkspaceFolder());
+registerWorkspaceIpc({ ipcMain, workspaceController });
 
 function getLayoutMetrics(display) {
   const d = display || getWindowDisplay();
