@@ -237,6 +237,12 @@ test('settings exposes every panel tab as a possible default opening page', () =
   assert.match(workspaceJs, /setDefaultTab/);
 });
 
+test('finance IPC turns expected cancellation into a structured result', () => {
+  assert.match(mainJs, /async function handleFinanceRequest\(work\)/);
+  assert.match(mainJs, /error\?\.code === 'cancelled'/);
+  assert.match(mainJs, /finance:quotes.*handleFinanceRequest/);
+});
+
 test('finance is a provider-backed peer workspace with management isolated in settings', () => {
   assert.match(html, /data-tab="finance"/);
   assert.match(html, /id="tab-finance"/);

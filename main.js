@@ -2181,12 +2181,25 @@ ipcMain.handle('finance:refresh', () => {
   getFinanceService().clearCache();
   return { ok: true };
 });
-ipcMain.handle('finance:overview', (event, payload) => getFinanceService().overview(financeRequestPayload(event, payload)));
-ipcMain.handle('finance:ranking', (event, payload) => getFinanceService().ranking(financeRequestPayload(event, payload)));
-ipcMain.handle('finance:quotes', (event, payload) => getFinanceService().quotes(financeRequestPayload(event, payload)));
-ipcMain.handle('finance:history', (event, payload) => getFinanceService().history(financeRequestPayload(event, payload)));
-ipcMain.handle('finance:fundamentals', (event, payload) => getFinanceService().fundamentals(financeRequestPayload(event, payload)));
-ipcMain.handle('finance:search', (event, payload) => getFinanceService().search(financeRequestPayload(event, payload)));
+
+async function handleFinanceRequest(work) {
+  try {
+    return await work();
+  } catch (error) {
+    // Cancellation is an expected renderer lifecycle event, not an IPC failure.
+    if (error?.code === 'cancelled' || /cancel/i.test(String(error?.message || ''))) {
+      return { ok: false, error: 'cancelled' };
+    }
+    throw error;
+  }
+}
+
+ipcMain.handle('finance:overview', (event, payload) => handleFinanceRequest(() => getFinanceService().overview(financeRequestPayload(event, payload))));
+ipcMain.handle('finance:ranking', (event, payload) => handleFinanceRequest(() => getFinanceService().ranking(financeRequestPayload(event, payload))));
+ipcMain.handle('finance:quotes', (event, payload) => handleFinanceRequest(() => getFinanceService().quotes(financeRequestPayload(event, payload))));
+ipcMain.handle('finance:history', (event, payload) => handleFinanceRequest(() => getFinanceService().history(financeRequestPayload(event, payload))));
+ipcMain.handle('finance:fundamentals', (event, payload) => handleFinanceRequest(() => getFinanceService().fundamentals(financeRequestPayload(event, payload))));
+ipcMain.handle('finance:search', (event, payload) => handleFinanceRequest(() => getFinanceService().search(financeRequestPayload(event, payload))));
 ipcMain.handle('finance:cancel', (event, requestId) => getFinanceService().cancel(financeRequestId(event.sender.id, requestId)));
 
 ipcMain.handle('smart:organize-material', async (event, payload) => {
