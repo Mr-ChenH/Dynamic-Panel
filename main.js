@@ -35,6 +35,7 @@ const { copyCaptures } = require('./captureStorage');
 const { createWindowGeometry } = require('./main/window-geometry');
 const { createNetworkSecurity } = require('./main/network-security');
 const { createLinkInspector } = require('./main/link-inspector');
+const { createWorkspaceFiles } = require('./main/workspace-files');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -3768,87 +3769,46 @@ function closeAllTranscriptionSessions() {
   }
 }
 
-// ============ 录音资料库 ============
-function getRecordingsDir() {
-  return workspacePath(RECORDINGS_DIR_NAME);
-}
-
-function ensureRecordingsDir() {
-  try {
-    fs.mkdirSync(getRecordingsDir(), { recursive: true });
-  } catch (error) {
-    // 目录不可用时由保存 IPC 返回失败。
-  }
-}
-
-function getSafeRecordingPath(value) {
-  if (typeof value !== 'string' || !value.trim()) return null;
-  const directory = path.resolve(getRecordingsDir());
-  const resolvedPath = path.isAbsolute(value)
-    ? path.resolve(value)
-    : path.resolve(workspaceRoot(), value);
-  if (path.dirname(resolvedPath) !== directory) return null;
-  if (!/^recording-[a-z0-9-]+\.(webm|m4a|ogg|wav)$/i.test(path.basename(resolvedPath))) {
-    return null;
-  }
-  try {
-    const directoryStat = fs.lstatSync(directory);
-    const fileStat = fs.lstatSync(resolvedPath);
-    if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) return null;
-    if (fileStat.isSymbolicLink() || !fileStat.isFile()) return null;
-    return resolvedPath;
-  } catch (error) {
-    return null;
-  }
-}
-
-ipcMain.handle('recordings:save', async (event, payload) => {
-  if (!payload || !payload.bytes) return { ok: false, error: 'empty_audio' };
-  let buffer;
-  try {
-    buffer = Buffer.from(payload.bytes);
-  } catch (error) {
-    return { ok: false, error: 'invalid_audio' };
-  }
-  if (!buffer.length || buffer.length > RECORDING_MAX_BYTES) {
-    return { ok: false, error: buffer.length ? 'audio_too_large' : 'empty_audio' };
-  }
-  ensureRecordingsDir();
-  const mimeType = String(payload.mimeType || 'audio/webm').slice(0, 80);
-  const extension = recordingExtension(mimeType);
-  const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-  const audioPath = path.join(getRecordingsDir(), `recording-${id}.${extension}`);
-  try {
-    await fs.promises.writeFile(audioPath, buffer, { flag: 'wx' });
-    return { ok: true, audioPath: platformPolicy.portableMediaPath(RECORDINGS_DIR_NAME, audioPath), mimeType };
-  } catch (error) {
-    return { ok: false, error: 'write_failed' };
-  }
+// ============ 工作区文件服务 ============
+const workspaceFiles = createWorkspaceFiles({
+  fs,
+  path,
+  crypto,
+  nativeImage,
+  workspaceRoot,
+  workspacePath,
+  platformPolicy,
+  validNoteId,
+  parseNoteImageReference,
+  recordingExtension,
+  recordingsDirName: RECORDINGS_DIR_NAME,
+  noteImagesDirName: NOTE_IMAGES_DIR_NAME,
+  clipImagesDirName: CLIP_IMAGES_DIR_NAME,
+  recordingMaxBytes: RECORDING_MAX_BYTES,
+  noteImageMaxBytes: NOTE_IMAGE_MAX_BYTES,
+  noteImageMaxEdge: NOTE_IMAGE_MAX_EDGE,
 });
+const {
+  getRecordingsDir,
+  ensureRecordingsDir,
+  getSafeRecordingPath,
+  saveRecording,
+  readRecording,
+  deleteRecording,
+  getNoteImagesDir,
+  getNoteImageDirectory,
+  portableNoteImagePath,
+  getSafeNoteImagePath,
+  persistNoteImage,
+  deleteNoteImages,
+  getClipImagesDir,
+  getSafeClipImagePath,
+  ensureClipImagesDir,
+} = workspaceFiles;
 
-ipcMain.handle('recordings:read', async (event, audioPath) => {
-  const safePath = getSafeRecordingPath(audioPath);
-  if (!safePath) return null;
-  try {
-    const bytes = await fs.promises.readFile(safePath);
-    const extension = path.extname(safePath).slice(1).toLowerCase();
-    const mimeType = extension === 'm4a' ? 'audio/mp4' : `audio/${extension || 'webm'}`;
-    return { bytes, mimeType };
-  } catch (error) {
-    return null;
-  }
-});
-
-ipcMain.handle('recordings:delete', async (event, audioPath) => {
-  const safePath = getSafeRecordingPath(audioPath);
-  if (!safePath) return false;
-  try {
-    await fs.promises.unlink(safePath);
-    return true;
-  } catch (error) {
-    return false;
-  }
-});
+ipcMain.handle('recordings:save', (event, payload) => saveRecording(payload));
+ipcMain.handle('recordings:read', (event, audioPath) => readRecording(audioPath));
+ipcMain.handle('recordings:delete', (event, audioPath) => deleteRecording(audioPath));
 
 ipcMain.handle('recordings:reveal', (event, audioPath) => {
   const safePath = getSafeRecordingPath(audioPath);
@@ -3858,85 +3818,6 @@ ipcMain.handle('recordings:reveal', (event, audioPath) => {
 });
 
 // ============ 笔记图片 ============
-
-function getNoteImagesDir() {
-  return workspacePath(NOTE_IMAGES_DIR_NAME);
-}
-
-function getNoteImageDirectory(noteId) {
-  return validNoteId(noteId) ? path.join(getNoteImagesDir(), String(noteId)) : null;
-}
-
-function portableNoteImagePath(filePath) {
-  return path.relative(workspaceRoot(), filePath).split(path.sep).join('/');
-}
-
-function getSafeNoteImagePath(imagePath) {
-  if (typeof imagePath !== 'string' || path.isAbsolute(imagePath)) return null;
-  const reference = parseNoteImageReference(imagePath);
-  if (!reference) return null;
-  const root = path.resolve(getNoteImagesDir());
-  const resolved = path.resolve(workspaceRoot(), reference.relativePath);
-  const relative = path.relative(root, resolved);
-  if (!relative || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return null;
-  try {
-    const rootStat = fs.lstatSync(root);
-    const noteDirStat = fs.lstatSync(path.dirname(resolved));
-    const fileStat = fs.lstatSync(resolved);
-    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) return null;
-    if (noteDirStat.isSymbolicLink() || !noteDirStat.isDirectory()) return null;
-    if (fileStat.isSymbolicLink() || !fileStat.isFile()) return null;
-    return resolved;
-  } catch (error) {
-    return null;
-  }
-}
-
-async function persistNoteImage(noteId, bytes) {
-  if (!validNoteId(noteId)) return { ok: false, error: 'invalid_note' };
-  let buffer;
-  try {
-    buffer = Buffer.from(bytes || []);
-  } catch (error) {
-    return { ok: false, error: 'invalid_image' };
-  }
-  if (!buffer.length || buffer.length > NOTE_IMAGE_MAX_BYTES) return { ok: false, error: 'invalid_image' };
-  const source = nativeImage.createFromBuffer(buffer);
-  if (source.isEmpty()) return { ok: false, error: 'invalid_image' };
-  const size = source.getSize();
-  if (!size.width || !size.height || size.width * size.height > 80_000_000) {
-    return { ok: false, error: 'image_too_large' };
-  }
-  const scale = Math.min(1, NOTE_IMAGE_MAX_EDGE / Math.max(size.width, size.height));
-  const output = scale < 1
-    ? source.resize({
-      width: Math.max(1, Math.round(size.width * scale)),
-      height: Math.max(1, Math.round(size.height * scale)),
-      quality: 'best',
-    }).toPNG()
-    : source.toPNG();
-  if (!output.length) return { ok: false, error: 'invalid_image' };
-  const directory = getNoteImageDirectory(noteId);
-  const filePath = path.join(directory, `image-${crypto.randomUUID()}.png`);
-  try {
-    await fs.promises.mkdir(directory, { recursive: true });
-    const rootStat = await fs.promises.lstat(getNoteImagesDir());
-    const directoryStat = await fs.promises.lstat(directory);
-    if (rootStat.isSymbolicLink() || !rootStat.isDirectory()
-      || directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
-      return { ok: false, error: 'unsafe_directory' };
-    }
-    await fs.promises.writeFile(filePath, output, { flag: 'wx' });
-    return {
-      ok: true,
-      imagePath: portableNoteImagePath(filePath),
-      width: Math.max(1, Math.round(size.width * scale)),
-      height: Math.max(1, Math.round(size.height * scale)),
-    };
-  } catch (error) {
-    return { ok: false, error: 'save_failed' };
-  }
-}
 
 ipcMain.handle('notes:save-image', async (event, payload) => (
   persistNoteImage(payload && payload.noteId, payload && payload.bytes)
@@ -3996,39 +3877,6 @@ ipcMain.handle('notes:delete-images', async (event, noteId) => {
 });
 
 // ============ 剪贴板历史 ============
-
-function getClipImagesDir() {
-  return workspacePath(CLIP_IMAGES_DIR_NAME);
-}
-
-// 图片记录使用扁平目录和固定文件名。拒绝子目录、符号链接和非普通文件，
-// 避免 localStorage 被篡改后通过 ../ 或 symlink 读写目录外文件。
-function getSafeClipImagePath(p) {
-  if (typeof p !== 'string' || !p.trim()) return false;
-  const dir = path.resolve(getClipImagesDir());
-  const resolvedPath = path.isAbsolute(p)
-    ? path.resolve(p)
-    : path.resolve(workspaceRoot(), p);
-  if (path.dirname(resolvedPath) !== dir) return null;
-  if (!/^clip-[a-z0-9]+\.png$/i.test(path.basename(resolvedPath))) return null;
-  try {
-    const dirStat = fs.lstatSync(dir);
-    const fileStat = fs.lstatSync(resolvedPath);
-    if (dirStat.isSymbolicLink() || !dirStat.isDirectory()) return null;
-    if (fileStat.isSymbolicLink() || !fileStat.isFile()) return null;
-    return resolvedPath;
-  } catch (e) {
-    return null;
-  }
-}
-
-function ensureClipImagesDir() {
-  try {
-    fs.mkdirSync(getClipImagesDir(), { recursive: true });
-  } catch (e) {
-    // 目录已存在或无权限，静默
-  }
-}
 
 async function readSystemClipboard(includeImage = false) {
   try {
