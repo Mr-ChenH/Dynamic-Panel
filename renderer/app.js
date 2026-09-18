@@ -4753,7 +4753,7 @@ renderClipList(); // 首屏确保 clip-list DOM 就绪时渲染一次（幂等�
 renderClipFavs(); // 首屏渲染收藏剪贴块
 initTab();
 
-window.NotchPanel = {
+window.NotchPanelHost = {
   isExpanded: () => isExpanded,
   busy: () => modeBusy,
   setNativeMode: ipcSetMode,
@@ -4764,7 +4764,7 @@ window.NotchPanel = {
     if (target.id && target.tab === 'links' && !window.NotchWorkspace.hasLink(target.id)) throw Error('链接已不存在');
   },
   async navigate(target) {
-    window.NotchPanel.validateTarget(target);
+    this.validateTarget(target);
     await setMode(true);
     await setActiveTab(target.tab || 'home');
     if (target.aiAction) { window.NotchAI?.openText?.(target.aiAction); return; }

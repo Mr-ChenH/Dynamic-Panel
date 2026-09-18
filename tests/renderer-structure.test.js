@@ -18,6 +18,7 @@ const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const workspaceWindowsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-windows.js'), 'utf8');
 const workspaceCredentialsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-credentials.js'), 'utf8');
+const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
@@ -30,6 +31,14 @@ const markdownJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'markd
 const chatContextJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-context.js'), 'utf8');
 const chatSessionsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-sessions.js'), 'utf8');
 const chatReaderJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-reader.js'), 'utf8');
+
+test('panel navigation is exposed by a dedicated controller through an injected host', () => {
+  assert.ok(html.indexOf('app.js') < html.indexOf('panel-controller.js'));
+  assert.match(appJs, /window\.NotchPanelHost\s*=/);
+  assert.match(panelControllerJs, /window\.NotchPanel\s*=\s*Object\.freeze/);
+  assert.match(panelControllerJs, /host\.navigate/);
+  assert.doesNotMatch(appJs, /window\.NotchPanel\s*=\s*\{/);
+});
 
 test('current windows keep their domain state outside the workspace coordinator', () => {
   assert.ok(html.indexOf('workspace-windows.js') < html.indexOf('workspace.js'));
