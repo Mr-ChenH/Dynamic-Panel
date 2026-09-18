@@ -108,6 +108,41 @@
 .weather-hour strong { color: var(--text-2); font-size: var(--fs-small); }
 .home-weather[data-weather-state='loading'] #home-weather-refresh { opacity: .55; }
 .home-weather[data-weather-state='error'] #home-weather-updated { color: #ffb16d; }
+
+/* Weather tones use dark atmospheric panels by default; map them to the
+   active workbench surfaces in the light theme while preserving accents. */
+:root[data-theme='light'] .home-weather,
+:root[data-theme='light'] .home-weather-detail {
+  --weather-panel: var(--surface-1);
+  --weather-border: var(--hairline);
+}
+
+:root[data-theme='light'] .home-weather,
+:root[data-theme='light'] .weather-detail-hero {
+  background: var(--surface-1);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .weather-detail-section,
+:root[data-theme='light'] #home-weather-results {
+  background: var(--surface-2);
+  border-color: var(--hairline);
+  box-shadow: 0 12px 30px var(--panel-shadow);
+}
+
+:root[data-theme='light'] #home-weather-results button {
+  color: var(--text-2);
+}
+
+:root[data-theme='light'] #home-weather-results button:hover,
+:root[data-theme='light'] .home-weather-detail button:hover {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .home-weather[data-weather-state='error'] #home-weather-updated {
+  color: #9f2018;
+}
 .home-media {
   --media-accent: #ef9279;
   --media-secondary: #73c8c0;

@@ -27,6 +27,13 @@ test('clipboard rows define both favorite icons before rendering entries', () =>
   assert.match(appJs, /const starFilledSvg\s*=/);
 });
 
+test('light theme covers weather surfaces and preserves weather accents', () => {
+  assert.match(homeCss, /:root\[data-theme='light'\] \.home-weather/);
+  assert.match(homeCss, /:root\[data-theme='light'\] \.weather-detail-hero/);
+  assert.match(homeCss, /:root\[data-theme='light'\] \.weather-detail-section/);
+  assert.match(homeCss, /:root\[data-theme='light'\] #home-weather-results/);
+});
+
 test('light theme covers recording and clipboard surfaces', () => {
   assert.match(stylesCss, /:root\[data-theme='light'\] \.recording-library/);
   assert.match(stylesCss, /:root\[data-theme='light'\] \.recording-detail/);
