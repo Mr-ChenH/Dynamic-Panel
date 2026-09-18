@@ -4636,23 +4636,39 @@ app.whenReady().then(() => {
       const mode = currentMode, display = getWindowDisplay();
       const visible = mainWindow?.isVisible();
       let exposedDuringRecording = false;
+      let interactionGuardReleased = false;
+      let restored = false;
       transientSystemInteractionRequests++;
       // A screen-saver level panel otherwise obscures the source picker and TCC dialogs.
       mainWindow?.hide();
-      const restore = () => {
+      const releaseInteractionGuard = () => {
+        if (interactionGuardReleased) return;
+        interactionGuardReleased = true;
         transientSystemInteractionRequests = Math.max(0, transientSystemInteractionRequests - 1);
+      };
+      const restore = () => {
+        if (restored) return;
+        restored = true;
+        releaseInteractionGuard();
         if (!mainWindow || mainWindow.isDestroyed() || captureQuitPending) return;
         mainWindow.setContentProtection(false);
-        const restoredDisplay = screen.getAllDisplays().find((candidate) => candidate.id === display.id) || getTargetDisplay();
-        applyMode(mode, restoredDisplay);
-        if (visible) mainWindow.show();
-        else mainWindow.hide();
+        if (visible) {
+          // Preserve the mode and display selected while the recording was live.
+          applyMode(currentMode, getWindowDisplay());
+          mainWindow.show();
+        } else {
+          applyMode(mode, display);
+          mainWindow.hide();
+        }
         refreshTrayMenu();
       };
       restore.showDuringRecording = () => {
-        if (exposedDuringRecording || !mainWindow || mainWindow.isDestroyed() || captureQuitPending) return;
+        if (exposedDuringRecording || restored || !mainWindow || mainWindow.isDestroyed() || captureQuitPending) return;
         exposedDuringRecording = true;
+        releaseInteractionGuard();
+        hideWhenCollapsed = false;
         mainWindow.setContentProtection(true);
+        applyMode(mode, getWindowDisplay());
         mainWindow.showInactive();
         refreshTrayMenu();
       };
