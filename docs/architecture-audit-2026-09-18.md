@@ -426,6 +426,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/todo-editor.css`，迁移截止时间触发器、日期编辑器、快捷日期、日历网格和时间选择基础样式；文件在 `styles.css` 前加载，保留后续紧凑弹层覆盖
 - 新增 `renderer/workspace-links-domain.js`，承接 `notch-link-groups` 的规范化、链接上下文和 AI 对话资料行生成；链接 UI 事件与渲染暂由 `workspace.js` 协调，后续可在此边界继续下沉
 - 新增 `renderer/workspace-links-renderer.js`，通过显式 host 注入迁移链接列表渲染、筛选侧栏、分组分页和行操作控件；编辑、拖拽和持久化事件仍由 `workspace.js` 管理
+- 新增 `renderer/workspace-links-controller.js`，迁移链接筛选重置、侧栏导航、全部折叠、顶部新增和批量删除监听；链接编辑、拖拽和 AI 操作继续由协调器处理
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 当前约 2840 行，直接 `ipcMain` 注册仅剩待办提醒控制器边界
 - 完整 `npm test` 当前为 321 项：320 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过

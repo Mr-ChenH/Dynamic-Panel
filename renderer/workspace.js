@@ -79,38 +79,10 @@
   let addingLinkGroupId = '';
   const linksSearch=document.getElementById('links-search'),groupFilter=document.getElementById('links-group-filter'),viewFilter=document.getElementById('links-view-filter'),tagFilter=document.getElementById('links-tag-filter');
   const linksSidebar=document.querySelector('.links-sidebar'),linksSidebarGroups=document.getElementById('links-sidebar-groups'),linksSidebarTags=document.getElementById('links-sidebar-tags');
+  const linksCollapseAll=document.getElementById('links-collapse-all');
+  const linksAddSubmit=document.getElementById('links-add-submit');
   const linkLimits=new Map();
   const LINK_PAGE_SIZE=40;
-  function resetLinkView(){linkLimits.clear();linkSelection.clear();linkSelectionAnchor=null;renderLinkGroups();linkGroupsEl.scrollTop=0;}
-  linksSearch?.addEventListener('input',resetLinkView);
-  groupFilter?.addEventListener('change',resetLinkView);
-  viewFilter?.addEventListener('change',resetLinkView);
-  tagFilter?.addEventListener('change',resetLinkView);
-  linksSidebar?.addEventListener('wheel',(event)=>{
-    if (!event.deltaY || event.ctrlKey) return;
-    const maxScroll=Math.max(0,linksSidebar.scrollHeight-linksSidebar.clientHeight);
-    if (!maxScroll) return;
-    const next=Math.max(0,Math.min(maxScroll,linksSidebar.scrollTop+event.deltaY));
-    if (next===linksSidebar.scrollTop) return;
-    event.preventDefault();
-    linksSidebar.scrollTop=next;
-  },{passive:false});
-  document.querySelector('.links-sidebar-nav')?.addEventListener('click',(event)=>{
-    const button=event.target.closest('[data-links-sidebar-view]');if(!button||!viewFilter)return;
-    viewFilter.value=button.dataset.linksSidebarView||'all';resetLinkView();
-  });
-  linksSidebarGroups?.addEventListener('click',(event)=>{
-    const button=event.target.closest('[data-links-sidebar-group]');if(!button||!groupFilter)return;
-    groupFilter.value=button.dataset.linksSidebarGroup||'';resetLinkView();
-  });
-  linksSidebarTags?.addEventListener('click',(event)=>{
-    const button=event.target.closest('[data-links-sidebar-tag]');if(!button||!tagFilter)return;
-    tagFilter.value=button.dataset.linksSidebarTag||'';resetLinkView();
-  });
-  document.getElementById('links-collapse-all')?.addEventListener('click',()=>{
-    const collapse=linkGroups.some(group=>!group.collapsed);
-    linkGroups.forEach(group=>{group.collapsed=collapse;});persistLinks();renderLinkGroups();
-  });
 
   function persistLinks() {
     return saveJson(LINKS_KEY, linkGroups);
@@ -243,21 +215,6 @@
       void syncWorkspaceData();
     }).catch(() => {});
     return true;
-  }
-
-  if (linkInput) {
-    linkInput.addEventListener('keydown', (event) => {
-      if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229 || event.repeat) return;
-      event.preventDefault();
-      const value = linkInput.value;
-      if (addLink(value)) linkInput.value = '';
-      linkInput.focus();
-    });
-    document.getElementById('links-add-submit')?.addEventListener('click', () => {
-      const value = linkInput.value;
-      if (addLink(value)) linkInput.value = '';
-      linkInput.focus();
-    });
   }
 
   function findLink(group, linkId) {
@@ -565,17 +522,41 @@
     }, true);
   }
 
-  linkBulkDelete?.addEventListener('click', () => {
-    if (!linkSelection.size) return;
-    linkGroups = linkGroups.map((group) => ({
-      ...group,
-      links: (group.links || []).filter((link) => !linkSelection.has(link.id)),
-    }));
-    linkSelection.clear();
-    linkSelectionAnchor = null;
-    persistLinks();
-    renderLinkGroups();
-    setLinksStatus('已删除所选链接');
+  window.NotchWorkspaceLinksController.createController({
+    elements: {
+      linkGroupsEl,
+      linkBulkDelete,
+      linkInput,
+      linksSearch,
+      groupFilter,
+      viewFilter,
+      tagFilter,
+      linksSidebar,
+      linksSidebarGroups,
+      linksSidebarTags,
+      linksCollapseAll,
+      linksAddSubmit,
+      linkGroups: linkGroupsEl,
+    },
+    getGroups: () => linkGroups,
+    getSelection: () => linkSelection,
+    clearSelection: () => linkSelection.clear(),
+    clearSelectionAnchor: () => { linkSelectionAnchor = null; },
+    clearLimits: () => linkLimits.clear(),
+    persist: persistLinks,
+    render: renderLinkGroups,
+    setStatus: setLinksStatus,
+    addLink,
+    deleteSelected: () => {
+      linkGroups = linkGroups.map((group) => ({
+        ...group,
+        links: (group.links || []).filter((link) => !linkSelection.has(link.id)),
+      }));
+      linkSelection.clear();
+      linkSelectionAnchor = null;
+      persistLinks();
+      renderLinkGroups();
+    },
   });
 
   // ============ 录音与转写 ============

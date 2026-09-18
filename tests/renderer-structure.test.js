@@ -20,6 +20,7 @@ const workspaceWindowsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer'
 const workspaceCredentialsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-credentials.js'), 'utf8');
 const workspaceLinksDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-domain.js'), 'utf8');
 const workspaceLinksRendererJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-renderer.js'), 'utf8');
+const workspaceLinksControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-controller.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -72,6 +73,15 @@ test('link list rendering stays in an injected renderer outside the workspace co
   assert.match(workspaceLinksRendererJs, /links-load-more/);
   assert.match(workspaceJs, /NotchWorkspaceLinksRenderer\.createRenderer/);
   assert.doesNotMatch(workspaceJs, /function renderLinkGroups\(/);
+});
+
+test('link view controls use a dedicated injected controller', () => {
+  assert.ok(html.indexOf('workspace-links-controller.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceLinksControllerJs, /resetView/);
+  assert.match(workspaceLinksControllerJs, /deleteSelected/);
+  assert.match(workspaceLinksControllerJs, /linksCollapseAll/);
+  assert.match(workspaceJs, /NotchWorkspaceLinksController\.createController/);
+  assert.doesNotMatch(workspaceJs, /linksSearch\?\.addEventListener\('input'/);
 });
 
 test('credential storage and selection state stay outside the workspace coordinator', () => {
