@@ -421,6 +421,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/workspace-credentials.js`，迁移本机密钥库的加载、保存、编辑、复制、删除和选择状态；`workspace.js` 不再持有密钥库私有状态
 - 新增 `renderer/panel-controller.js`，迁移 `NotchPanel` 公共导航控制器；`app.js` 仅通过 `NotchPanelHost` 注入内部模式、Tab 和目标校验能力
 - 新增 `renderer/credentials.css`，迁移密钥库布局、编辑态和亮色覆盖；`styles.css` 不再持有密钥库主样式块
+- 新增 `renderer/todo-planner.css`，迁移待办时间范围规划栏、范围计数和逾期跳转样式；待办四象限及截止时间弹层样式暂保留在覆盖层中
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 当前约 2840 行，直接 `ipcMain` 注册仅剩待办提醒控制器边界
 - 完整 `npm test` 当前为 321 项：320 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过

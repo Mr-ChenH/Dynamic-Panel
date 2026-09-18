@@ -22,6 +22,7 @@ const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer',
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
 const credentialsCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'credentials.css'), 'utf8');
+const todoPlannerCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-planner.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
 const aiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.js'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'settings.js'), 'utf8');
@@ -75,6 +76,14 @@ test('credential styles load as a dedicated module while shared theme selectors 
   assert.doesNotMatch(stylesCss, /\.credential-item\.editing \{/);
 });
 
+test('todo time-range planner styles load outside the shell stylesheet', () => {
+  assert.ok(html.indexOf('todo-planner.css') < html.indexOf('launcher.css'));
+  assert.match(todoPlannerCss, /\.todo-scope-control/);
+  assert.match(todoPlannerCss, /\.todo-overdue-jump/);
+  assert.doesNotMatch(stylesCss, /待办 · 时间范围 \+ P0–P3 四象限/);
+  assert.doesNotMatch(stylesCss, /\.todo-planner-bar \{/);
+});
+
 test('light theme covers weather surfaces and preserves weather accents', () => {
   assert.match(homeCss, /:root\[data-theme='light'\] \.home-weather/);
   assert.match(homeCss, /:root\[data-theme='light'\] \.weather-detail-hero/);
@@ -112,7 +121,7 @@ test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', (
   assert.match(appJs, /data-todo-completed-toggle/);
   assert.match(appJs, /defaultTodoDeadlineForScope\(todoTimeScope/);
   assert.match(appJs, /window\.addEventListener\('focus', refreshTodoTemporalView\)/);
-  assert.match(stylesCss, /\.todo-scope-control/);
+  assert.match(todoPlannerCss, /\.todo-scope-control/);
   assert.match(stylesCss, /\.todo-completed-disclosure/);
   assert.doesNotMatch(appJs, /localStorage\.setItem\([^\n]*todo-time-scope/);
 });
