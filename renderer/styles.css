@@ -6075,3 +6075,111 @@ textarea::placeholder { color: var(--text-4); opacity: 1; }
 :root[data-theme='light'] .settings-ai-migration button {
   color: #6e4c0b;
 }
+
+/* 录音与剪贴板早期组件保留了深色专用渐变；浅色主题统一回到工作台表面。 */
+:root[data-theme='light'] .recording-library,
+:root[data-theme='light'] .recording-detail,
+:root[data-theme='light'] .recording-item,
+:root[data-theme='light'] .recording-transcript-editor,
+:root[data-theme='light'] .recording-audio,
+:root[data-theme='light'] .record-control,
+:root[data-theme='light'] .api-settings-divider,
+:root[data-theme='light'] .clip-filter,
+:root[data-theme='light'] .clip-clear-btn,
+:root[data-theme='light'] .clip-item {
+  border-color: var(--hairline);
+  background: var(--surface-1);
+  color: var(--text-1);
+  box-shadow: none;
+}
+
+:root[data-theme='light'] .recording-library,
+:root[data-theme='light'] .recording-detail {
+  background: var(--surface-1);
+  box-shadow: inset 0 1px 0 var(--highlight-top), 0 10px 26px var(--panel-shadow);
+}
+
+:root[data-theme='light'] .recording-item:hover,
+:root[data-theme='light'] .recording-item.active,
+:root[data-theme='light'] .clip-item:hover,
+:root[data-theme='light'] .clip-filter:hover,
+:root[data-theme='light'] .clip-clear-btn:hover {
+  background: var(--surface-2);
+}
+
+:root[data-theme='light'] .recording-item.active {
+  box-shadow: inset 0 0 0 1px var(--focus-ring);
+}
+
+:root[data-theme='light'] .recording-transcript-editor,
+:root[data-theme='light'] .recording-audio {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .record-control {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .clip-filter.active,
+:root[data-theme='light'] .clip-clear-btn.confirming {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .clip-timeline-group::before {
+  background: var(--hairline);
+}
+
+:root[data-theme='light'] .clip-timeline-node {
+  border-color: var(--surface-1);
+  background: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+
+:root[data-theme='light'] .clip-copy-target,
+:root[data-theme='light'] .clip-time,
+:root[data-theme='light'] .clip-time-relative {
+  color: var(--text-3);
+}
+
+:root[data-theme='light'] .recording-item-delete,
+:root[data-theme='light'] .bulk-delete,
+:root[data-theme='light'] .clip-del-btn,
+:root[data-theme='light'] .clip-fav-btn {
+  color: var(--text-3);
+}
+
+:root[data-theme='light'] .tile-label,
+:root[data-theme='light'] .clip-timeline-heading,
+:root[data-theme='light'] .recording-library-head,
+:root[data-theme='light'] .recording-detail-head {
+  color: var(--text-2);
+}
+
+:root[data-theme='light'] .collapse-btn,
+:root[data-theme='light'] .workspace-button,
+:root[data-theme='light'] .record-control,
+:root[data-theme='light'] .tab-strip {
+  border-color: var(--hairline);
+  background: var(--surface-2);
+  color: var(--text-2);
+  box-shadow: inset 0 1px 0 var(--highlight-top), 0 4px 12px var(--panel-shadow);
+}
+
+:root[data-theme='light'] .collapse-btn:hover,
+:root[data-theme='light'] .workspace-button:hover,
+:root[data-theme='light'] .record-control:hover {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .add-row input,
+:root[data-theme='light'] .transcription-fields-row input,
+:root[data-theme='light'] .transcription-fields-row select,
+:root[data-theme='light'] .recording-transcript-editor {
+  border-color: var(--hairline);
+  background: var(--surface-2);
+  color: var(--text-1);
+}

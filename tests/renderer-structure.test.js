@@ -27,6 +27,15 @@ test('clipboard rows define both favorite icons before rendering entries', () =>
   assert.match(appJs, /const starFilledSvg\s*=/);
 });
 
+test('light theme covers recording and clipboard surfaces', () => {
+  assert.match(stylesCss, /:root\[data-theme='light'\] \.recording-library/);
+  assert.match(stylesCss, /:root\[data-theme='light'\] \.recording-detail/);
+  assert.match(stylesCss, /:root\[data-theme='light'\] \.recording-transcript-editor/);
+  assert.match(stylesCss, /:root\[data-theme='light'\] \.clip-clear-btn/);
+  assert.match(stylesCss, /:root\[data-theme='light'\] \.clip-item/);
+  assert.match(stylesCss, /:root\[data-theme='light'\] \.clip-timeline-node/);
+});
+
 test('clipboard history renders a dated timeline with filtered result counts', () => {
   assert.match(html, /id="clip-result-count"/);
   assert.match(appJs, /groupClipItemsByDay/);
