@@ -16,6 +16,7 @@ const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 
 const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-domain.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
+const workspaceWindowsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-windows.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
@@ -28,6 +29,16 @@ const markdownJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'markd
 const chatContextJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-context.js'), 'utf8');
 const chatSessionsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-sessions.js'), 'utf8');
 const chatReaderJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-reader.js'), 'utf8');
+
+test('current windows keep their domain state outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-windows.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceWindowsJs, /notchAPI\.listWindows/);
+  assert.match(workspaceWindowsJs, /notchAPI\?\.focusWindow/);
+  assert.match(workspaceWindowsJs, /notch-hidden-windows/);
+  assert.match(workspaceWindowsJs, /window\.NotchWorkspaceWindows/);
+  assert.doesNotMatch(workspaceJs, /function renderWindows\(/);
+  assert.doesNotMatch(workspaceJs, /function refreshWindows\(/);
+});
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
@@ -582,5 +593,5 @@ test('automatic AI naming sends stable source identities', () => {
 test('hidden visual widgets stop presentation-only background work', () => {
   assert.match(effectsJs, /setEnabled/);
   assert.match(effectsJs, /notch:home-modules-changed/);
-  assert.match(workspaceJs, /NotchHome\?\.isVisible/);
+  assert.match(workspaceWindowsJs, /NotchHome\?\.isVisible/);
 });

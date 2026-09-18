@@ -4,7 +4,6 @@
 
   const LINKS_KEY = 'notch-link-groups';
   const RECORDINGS_KEY = 'notch-recordings';
-  const HIDDEN_WINDOWS_KEY = 'notch-hidden-windows';
 
   const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
   const DELETE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12"/></svg>';
@@ -2706,233 +2705,7 @@
     renderRecordings();
   });
 
-  // ============ 当前窗口 ============
-  const windowsRefresh = document.getElementById('windows-refresh');
-  const windowsHidden = document.getElementById('windows-hidden');
-  const windowList = document.getElementById('window-list');
-  let windows = [];
-  let hiddenWindows = new Set(loadJson(HIDDEN_WINDOWS_KEY, []).filter((item) => typeof item === 'string'));
-  let windowsLoading = false;
-  let workspaceTab = document.querySelector('.tab.active')?.dataset.tab || 'home';
-  let workspaceExpanded = document.getElementById('app')?.classList.contains('expanded') || false;
-  let homeWindowsVisible = window.NotchHome?.isVisible?.('windows') !== false;
-  let windowDrag = null;
-  let suppressWindowClickUntil = 0;
 
-  function windowHideKey(windowInfo) {
-    return `${String(windowInfo.appName || '').trim()}\u0000${String(windowInfo.title || '').trim()}`;
-  }
-
-  function persistHiddenWindows() {
-    saveJson(HIDDEN_WINDOWS_KEY, [...hiddenWindows]);
-  }
-
-  function clearWindowDragVisuals() {
-    const drag = windowDrag;
-    windowDrag = null;
-    if (drag) {
-      clearTimeout(drag.timer);
-      try {
-        if (drag.item.hasPointerCapture?.(drag.pointerId)) drag.item.releasePointerCapture(drag.pointerId);
-      } catch (error) {}
-      drag.item.classList.remove('dragging', 'remove-ready');
-      drag.item.style.removeProperty('--window-drag-x');
-      drag.item.style.removeProperty('--window-drag-y');
-    }
-    document.querySelectorAll('.home-windows.drag-active').forEach((card) => {
-      card.classList.remove('drag-active');
-    });
-    return drag;
-  }
-
-  function renderWindows(error = '') {
-    if (!windowList) return;
-    // 轮询可能在长按过程中重建列表；先清理捕获与卡片移除态，避免红色区域残留。
-    clearWindowDragVisuals();
-    windowList.replaceChildren();
-    if (error) {
-      const empty = document.createElement('div');
-      empty.className = 'window-empty permission';
-      // 两种权限的现象完全一样（列表空），但要开的开关不同，必须分开说：
-      // 「屏幕录制」决定能不能读到窗口标题，「辅助功能」决定能不能枚举和聚焦窗口。
-      // 缺屏幕录制时系统既不报错也不弹提示，所以只能由这里告诉用户。
-      const screenRecording = error === 'screen_recording_permission_required';
-      const title = screenRecording ? '需要“屏幕录制”权限' : '需要“辅助功能”权限';
-      const pane = screenRecording ? '屏幕录制与系统录音' : '辅助功能';
-      const heading = document.createElement('strong');
-      heading.textContent = title;
-      const hint = document.createElement('span');
-      hint.textContent = `系统设置 → 隐私与安全性 → ${pane}，允许 Dynamic Panel 后重试。`;
-      const action = document.createElement('button');
-      action.type = 'button';
-      action.className = 'window-permission-open';
-      action.textContent = '打开系统设置';
-      action.addEventListener('click', () => {
-        if (window.notchAPI && typeof window.notchAPI.openPrivacySettings === 'function') {
-          window.notchAPI.openPrivacySettings(screenRecording ? 'screen-recording' : 'accessibility');
-        }
-      });
-      empty.append(heading, hint, action);
-      windowList.appendChild(empty);
-      return;
-    }
-    const visibleWindows = Domain.numberWindowLabels(
-      windows.filter((item) => !hiddenWindows.has(windowHideKey(item)))
-    );
-    if (windowsHidden) {
-      windowsHidden.hidden = hiddenWindows.size === 0;
-      windowsHidden.textContent = '隐藏';
-      windowsHidden.setAttribute('aria-label', `恢复已隐藏的 ${hiddenWindows.size} 个窗口`);
-    }
-    if (!visibleWindows.length) {
-      const empty = document.createElement('div');
-      empty.className = 'window-empty';
-      empty.textContent = windowsLoading
-        ? '正在读取当前窗口…'
-        : hiddenWindows.size
-          ? '窗口均已隐藏 · 点击上方恢复'
-          : '没有读取到可切换窗口';
-      windowList.appendChild(empty);
-      return;
-    }
-    visibleWindows.slice(0, 15).forEach((windowInfo) => {
-      const button = document.createElement('button');
-      button.className = 'window-item';
-      button.type = 'button';
-      button.dataset.id = windowInfo.id;
-      button.title = `${windowInfo.displayName}\n${windowInfo.title}\n长按后拖出卡片可隐藏`;
-      const mark = document.createElement('span');
-      mark.className = 'window-app-mark';
-      if (windowInfo.icon) {
-        const icon = document.createElement('img');
-        icon.src = windowInfo.icon;
-        icon.alt = '';
-        icon.draggable = false;
-        mark.appendChild(icon);
-      } else {
-        mark.textContent = (windowInfo.appName.charAt(0) || '·').toUpperCase();
-      }
-      const appName = document.createElement('strong');
-      appName.textContent = windowInfo.displayName;
-      button.append(mark, appName);
-      windowList.appendChild(button);
-    });
-  }
-
-  async function refreshWindows(force = false) {
-    if (document.getElementById('home-bento')?.hidden || !window.NotchHome?.isVisible?.('windows')) return;
-    if (windowsLoading || !window.notchAPI || (!force && (!workspaceExpanded || workspaceTab !== 'home'))) return;
-    windowsLoading = true;
-    renderWindows();
-    let result;
-    try {
-      result = await window.notchAPI.listWindows();
-    } catch (error) {
-      result = { items: [], error: 'accessibility_permission_required' };
-    }
-    windowsLoading = false;
-    windows = result && Array.isArray(result.items) ? result.items : [];
-    renderWindows(result && result.error);
-  }
-
-  if (windowsRefresh) windowsRefresh.addEventListener('click', () => refreshWindows(true));
-  if (windowsHidden) {
-    windowsHidden.addEventListener('click', () => {
-      hiddenWindows.clear();
-      persistHiddenWindows();
-      renderWindows();
-    });
-  }
-  if (windowList) {
-    windowList.addEventListener('click', (event) => {
-      if (Date.now() < suppressWindowClickUntil) return;
-      const item = event.target.closest('.window-item[data-id]');
-      if (item && window.notchAPI) window.notchAPI.focusWindow(item.dataset.id);
-    });
-    windowList.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0 || windowDrag) return;
-      const item = event.target.closest('.window-item[data-id]');
-      if (!item) return;
-      windowDrag = {
-        item,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        active: false,
-        removeReady: false,
-        timer: setTimeout(() => {
-          if (!windowDrag || windowDrag.item !== item) return;
-          windowDrag.active = true;
-          item.classList.add('dragging');
-          try { item.setPointerCapture(event.pointerId); } catch (error) {}
-          item.closest('.home-windows')?.classList.add('drag-active');
-        }, 460),
-      };
-    });
-    document.addEventListener('pointermove', (event) => {
-      if (!windowDrag || windowDrag.pointerId !== event.pointerId) return;
-      const dx = event.clientX - windowDrag.startX;
-      const dy = event.clientY - windowDrag.startY;
-      if (!windowDrag.active) {
-        if (Math.hypot(dx, dy) > 8) {
-          clearTimeout(windowDrag.timer);
-          windowDrag = null;
-        }
-        return;
-      }
-      event.preventDefault();
-      windowDrag.item.style.setProperty('--window-drag-x', `${dx}px`);
-      windowDrag.item.style.setProperty('--window-drag-y', `${dy}px`);
-      const bounds = windowList.closest('.home-windows').getBoundingClientRect();
-      windowDrag.removeReady = event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom;
-      windowDrag.item.classList.toggle('remove-ready', windowDrag.removeReady);
-    });
-    const finishWindowDrag = (event) => {
-      if (!windowDrag || (event.pointerId != null && windowDrag.pointerId !== event.pointerId)) return;
-      const drag = clearWindowDragVisuals();
-      if (!drag) return;
-      if (!drag.active) return;
-      suppressWindowClickUntil = Date.now() + 450;
-      if (drag.removeReady) {
-        const windowInfo = windows.find((item) => item.id === drag.item.dataset.id);
-        if (windowInfo) {
-          hiddenWindows.add(windowHideKey(windowInfo));
-          persistHiddenWindows();
-          renderWindows();
-        }
-      }
-    };
-    document.addEventListener('pointerup', finishWindowDrag);
-    document.addEventListener('pointercancel', finishWindowDrag);
-    windowList.addEventListener('lostpointercapture', () => clearWindowDragVisuals(), true);
-    window.addEventListener('blur', clearWindowDragVisuals);
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) clearWindowDragVisuals();
-    });
-  }
-
-  document.addEventListener('notch:tabchange', (event) => {
-    clearWindowDragVisuals();
-    workspaceTab = event.detail && event.detail.tab || 'home';
-    if (workspaceTab === 'home') refreshWindows();
-    if (workspaceTab === 'settings') refreshSettingsPanel();
-  });
-  document.addEventListener('notch:modechange', (event) => {
-    clearWindowDragVisuals();
-    workspaceExpanded = !!(event.detail && event.detail.expanded);
-    if (workspaceExpanded && workspaceTab === 'home') refreshWindows();
-  });
-  document.addEventListener('notch:home-modules-changed', (event) => {
-    const nextVisible = Array.isArray(event.detail?.visibleIds)
-      ? event.detail.visibleIds.includes('windows')
-      : window.NotchHome?.isVisible?.('windows') !== false;
-    const restored = !homeWindowsVisible && nextVisible;
-    homeWindowsVisible = nextVisible;
-    renderHomeModuleSettings();
-    if (restored && workspaceExpanded && workspaceTab === 'home') refreshWindows(true);
-  });
-  document.addEventListener('notch:recording-state-changed', renderHomeModuleSettings);
-  document.addEventListener('notch:home-view-changed', () => refreshWindows());
 
   // ============ 本机加密密钥库 ============
   const credentialService = document.getElementById('credential-service');
@@ -3226,8 +2999,6 @@
     renderCredentials();
   });
 
-  setInterval(() => refreshWindows(), 6000);
-
   window.addEventListener('beforeunload', () => {
     releaseAudioCapture();
     stopSpeechRecognition();
@@ -3239,11 +3010,15 @@
 
   renderLinkGroups();
   renderRecordings();
-  renderWindows();
   updateRecordingUi();
   loadTranscriptionConfig();
   refreshSettingsPanel();
   loadCredentials();
+
+  window.NotchWorkspaceWindowsHost = {
+    refreshSettingsPanel,
+    refreshHomeModuleSettings: renderHomeModuleSettings,
+  };
 
   window.NotchWorkspace = {
     hasLink: (id) => linkGroups.some((g) => (g.links || []).some((l) => String(l.id) === String(id))),
@@ -3353,7 +3128,7 @@
       renderLinkGroups();
       return { ok: true, workspaceSynced: await syncWorkspaceData() };
     },
-    refreshWindows,
+    refreshWindows: (...args) => window.NotchWorkspaceWindows?.refreshWindows?.(...args),
     startRecording,
     isRecordingActive: isRecordingBusy,
   };
