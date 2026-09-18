@@ -40,6 +40,7 @@ const { createClipboardService } = require('./main/clipboard-service');
 const { createTaskNotificationServer } = require('./main/task-notification-server');
 const { createTaskNotificationDomain } = require('./main/task-notification-domain');
 const { createTaskNotificationQueue } = require('./main/task-notification-queue');
+const { createTaskNotificationTimers } = require('./main/task-notification-timers');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -317,11 +318,7 @@ let notificationWindow = null;
 let notificationWindowReady = false;
 let activeTaskNotification = null;
 let taskNotificationLeaving = false;
-let taskNotificationTimer = null;
 let taskNotificationFallbackTimer = null;
-let taskNotificationTimerStartedAt = 0;
-let taskNotificationRemainingMs = TASK_NOTIFICATION_VISIBLE_MS;
-let taskNotificationPaused = false;
 let todoReminderTimer = null;
 let scheduledTodoReminders = [];
 
@@ -520,6 +517,13 @@ function hideWindowAfterCollapse() {
 const taskNotificationDomain = createTaskNotificationDomain({ taskNotificationIdentity });
 const { normalize: normalizeTaskNotification } = taskNotificationDomain;
 
+const taskNotificationTimers = createTaskNotificationTimers({
+  visibleMs: TASK_NOTIFICATION_VISIBLE_MS,
+  isActive: () => Boolean(activeTaskNotification),
+  isLeaving: () => taskNotificationLeaving,
+  onDismiss: () => beginTaskNotificationDismiss(),
+});
+
 const taskNotificationQueue = createTaskNotificationQueue({
   dedupeMs: TASK_NOTIFICATION_DEDUPE_MS,
   maxQueue: TASK_NOTIFICATION_MAX_QUEUE,
@@ -650,8 +654,7 @@ function recoverClosedTaskNotificationWindow(targetWindow) {
   notificationWindowReady = false;
   activeTaskNotification = null;
   taskNotificationLeaving = false;
-  taskNotificationPaused = false;
-  taskNotificationRemainingMs = TASK_NOTIFICATION_VISIBLE_MS;
+  taskNotificationTimers.reset();
   if (!isQuitting && interruptedNotification) {
     taskNotificationQueue.requeueFront(interruptedNotification);
   }
@@ -712,10 +715,7 @@ function createTaskNotificationWindow() {
 }
 
 function clearTaskNotificationTimers() {
-  if (taskNotificationTimer) {
-    clearTimeout(taskNotificationTimer);
-    taskNotificationTimer = null;
-  }
+  taskNotificationTimers.clear();
   if (taskNotificationFallbackTimer) {
     clearTimeout(taskNotificationFallbackTimer);
     taskNotificationFallbackTimer = null;
@@ -723,30 +723,11 @@ function clearTaskNotificationTimers() {
 }
 
 function scheduleTaskNotificationDismiss() {
-  if (!activeTaskNotification || taskNotificationLeaving || taskNotificationPaused) return;
-  if (taskNotificationTimer) clearTimeout(taskNotificationTimer);
-  taskNotificationTimerStartedAt = Date.now();
-  taskNotificationTimer = setTimeout(
-    beginTaskNotificationDismiss,
-    Math.max(0, taskNotificationRemainingMs)
-  );
+  taskNotificationTimers.schedule();
 }
 
 function setTaskNotificationPaused(paused) {
-  if (!activeTaskNotification || taskNotificationLeaving || taskNotificationPaused === paused) return;
-  taskNotificationPaused = paused;
-  if (paused) {
-    if (taskNotificationTimer) {
-      taskNotificationRemainingMs = Math.max(
-        0,
-        taskNotificationRemainingMs - (Date.now() - taskNotificationTimerStartedAt)
-      );
-      clearTimeout(taskNotificationTimer);
-      taskNotificationTimer = null;
-    }
-  } else {
-    scheduleTaskNotificationDismiss();
-  }
+  taskNotificationTimers.setPaused(paused);
 }
 
 function showNextTaskNotification() {
@@ -756,8 +737,7 @@ function showNextTaskNotification() {
 
   activeTaskNotification = taskNotificationQueue.takeNext();
   taskNotificationLeaving = false;
-  taskNotificationPaused = false;
-  taskNotificationRemainingMs = TASK_NOTIFICATION_VISIBLE_MS;
+  taskNotificationTimers.reset();
   targetWindow.setBounds(getTaskNotificationBounds(getTargetDisplay()));
   targetWindow.showInactive();
   targetWindow.webContents.send('task-notification:show', {
@@ -789,8 +769,7 @@ function finishTaskNotification(eventId) {
   if (completedWindow && !completedWindow.isDestroyed()) completedWindow.hide();
   activeTaskNotification = null;
   taskNotificationLeaving = false;
-  taskNotificationPaused = false;
-  taskNotificationRemainingMs = TASK_NOTIFICATION_VISIBLE_MS;
+  taskNotificationTimers.reset();
   setTimeout(() => {
     showNextTaskNotification();
     const policy = taskNotificationWindowPolicy({
