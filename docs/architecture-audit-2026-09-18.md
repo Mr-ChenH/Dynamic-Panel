@@ -248,7 +248,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 
 ## 当前结论
 
-目前最高风险是“开发环境正常、打包应用启动失败”的 `main/` 文件遗漏。其次是 Electron 面板收起集成测试不稳定，以及 `main.js` 中录音转录和 IPC 注册仍然高耦合。
+目前最高风险已从打包模块遗漏和启动顺序回归下降为 renderer 大文件维护成本、通知真实生命周期覆盖不足，以及 launcher/待办提醒 IPC 仍集中在 `main.js`。核心 Electron 启动、面板收起、工作区保留和 capture 验收当前均已通过。
 
 本报告之后的第一阶段重构应只处理发布完整性和检查覆盖，完成后再进入转录服务拆分，保证每一步可以独立回归和定位。
 
@@ -410,3 +410,4 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 窗口扫描、macOS JXA、图标缓存和最近扫描窗口 ID 仍由主进程领域代码管理；IPC 注册仅负责委托
 - 新增 `tests/windows-ipc.test.js`
 - `main.js` 当前约 2970 行，直接 IPC 注册减少至剩余待办提醒、通知事件和 launcher 领域
+- 完整 `npm test` 当前为 319 项：318 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
