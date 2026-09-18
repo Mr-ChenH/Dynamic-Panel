@@ -63,6 +63,7 @@ const { createCredentialsVault } = require('./main/credentials-vault');
 const { registerCredentialsIpc } = require('./main/ipc/credentials');
 const { registerLinksIpc } = require('./main/ipc/links');
 const { registerWindowIpc } = require('./main/ipc/window');
+const { registerWindowsIpc } = require('./main/ipc/windows');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -2038,18 +2039,18 @@ async function scanCurrentWindows() {
   }
 }
 
-ipcMain.handle('windows:list', async () => {
-  return scanCurrentWindows();
-});
-
-ipcMain.handle('windows:focus', async (event, windowId) => {
-  const target = windowScanCache.get(windowId);
-  if (!target || process.platform !== 'darwin') return false;
-  try {
-    return (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
-  } catch (error) {
-    return false;
-  }
+registerWindowsIpc({
+  ipcMain,
+  listWindows: scanCurrentWindows,
+  focusWindow: async (windowId) => {
+    const target = windowScanCache.get(windowId);
+    if (!target || process.platform !== 'darwin') return false;
+    try {
+      return (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
+    } catch (error) {
+      return false;
+    }
+  },
 });
 
 function taskWindowMatchScore(notification, target) {

@@ -403,3 +403,10 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 所有窗口 IPC 统一验证主窗口 sender；实际 BrowserWindow、几何、模式和快捷键状态通过依赖注入保留在主进程装配层
 - 新增 `tests/window-ipc.test.js`
 - `main.js` 当前约 2969 行，直接 `ipcMain` 注册降至窗口/窗口扫描等剩余领域
+
+### 已完成：当前窗口 IPC 注册拆分
+
+- 新增 `main/ipc/windows.js`，迁移 `windows:list` 和 `windows:focus`
+- 窗口扫描、macOS JXA、图标缓存和最近扫描窗口 ID 仍由主进程领域代码管理；IPC 注册仅负责委托
+- 新增 `tests/windows-ipc.test.js`
+- `main.js` 当前约 2970 行，直接 IPC 注册减少至剩余待办提醒、通知事件和 launcher 领域
