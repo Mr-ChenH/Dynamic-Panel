@@ -409,5 +409,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `main/ipc/windows.js`，迁移 `windows:list` 和 `windows:focus`
 - 窗口扫描、macOS JXA、图标缓存和最近扫描窗口 ID 仍由主进程领域代码管理；IPC 注册仅负责委托
 - 新增 `tests/windows-ipc.test.js`
-- `main.js` 当前约 2970 行，直接 IPC 注册减少至剩余待办提醒、通知事件和 launcher 领域
+- 新增 `main/ipc/task-notification.js`，迁移待办提醒、番茄钟、通知历史、hover、dismissed 和激活 IPC
+- 新增 `tests/task-notification-ipc.test.js`
+- `main.js` 当前约 3000 行，直接 `ipcMain` 注册仅剩待办提醒控制器和 launcher 专用装配边界
 - 完整 `npm test` 当前为 319 项：318 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过

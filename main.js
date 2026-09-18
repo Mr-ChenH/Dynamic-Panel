@@ -64,6 +64,7 @@ const { registerCredentialsIpc } = require('./main/ipc/credentials');
 const { registerLinksIpc } = require('./main/ipc/links');
 const { registerWindowIpc } = require('./main/ipc/window');
 const { registerWindowsIpc } = require('./main/ipc/windows');
+const { registerTaskNotificationIpc } = require('./main/ipc/task-notification');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -613,37 +614,6 @@ function scheduleNextTodoReminder() {
   }
 }
 
-ipcMain.handle('todos:schedule-reminders', (event, items) => {
-  scheduledTodoReminders = Array.isArray(items)
-    ? items
-      .filter((item) => item && typeof item === 'object')
-      .map((item) => ({
-        id: String(item.id || '').slice(0, 160),
-        text: String(item.text || '').trim().slice(0, 160),
-        deadline: String(item.deadline || ''),
-        done: item.done === true,
-        remindedAt: Math.max(0, Number(item.remindedAt) || 0),
-      }))
-      .filter((item) => item.id && item.text)
-    : [];
-  scheduleNextTodoReminder();
-  return { ok: true, count: scheduledTodoReminders.length };
-});
-
-ipcMain.handle('pomodoro:notify', (event, minutes) => {
-  const safeMinutes = Math.max(1, Math.min(120, Math.round(Number(minutes) || 25)));
-  const completedAt = Date.now();
-  const notification = {
-    eventId: `pomodoro-${completedAt}`,
-    taskId: `pomodoro-${completedAt}`,
-    source: 'pomodoro',
-    project: '番茄钟',
-    title: '专注完成',
-    body: `${safeMinutes} 分钟专注计时已结束`,
-    completedAt,
-  };
-  return { ok: true, result: enqueueTaskNotification(notification) };
-});
 
 function getTaskNotificationBounds(display) {
   const d = display || getTargetDisplay();
@@ -702,13 +672,6 @@ const taskNotificationServer = createTaskNotificationServer({
 const startTaskNotificationServer = () => taskNotificationServer.start();
 const stopTaskNotificationServer = () => taskNotificationServer.stop();
 
-ipcMain.on('task-notification:hover', (event, paused) => {
-  taskNotificationController.handleHover(event.sender, paused);
-});
-
-ipcMain.on('task-notification:dismissed', (event, eventId) => {
-  taskNotificationController.handleDismissed(event.sender, eventId);
-});
 
 function createWindow() {
   const initial = process.platform === 'win32'
@@ -1680,8 +1643,6 @@ async function requestMacMediaAccess(mediaType) {
   });
 }
 
-ipcMain.handle('tasks:recent', () => taskNotificationQueue.history());
-
 const networkSecurity = createNetworkSecurity({
   dns,
   https,
@@ -2082,9 +2043,46 @@ async function activateActiveTaskNotification(eventId = null) {
   }
 }
 
-ipcMain.handle('task-notification:activate', async (event, eventId) => {
-  if (!notificationWindow || notificationWindow.isDestroyed() || event.sender !== notificationWindow.webContents) return false;
-  return activateActiveTaskNotification(eventId);
+
+registerTaskNotificationIpc({
+  ipcMain,
+  scheduleReminders: (items) => {
+    scheduledTodoReminders = Array.isArray(items)
+      ? items
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => ({
+          id: String(item.id || '').slice(0, 160),
+          text: String(item.text || '').trim().slice(0, 160),
+          deadline: String(item.deadline || ''),
+          done: item.done === true,
+          remindedAt: Math.max(0, Number(item.remindedAt) || 0),
+        }))
+        .filter((item) => item.id && item.text)
+      : [];
+    scheduleNextTodoReminder();
+    return { ok: true, count: scheduledTodoReminders.length };
+  },
+  notifyPomodoro: (minutes) => {
+    const safeMinutes = Math.max(1, Math.min(120, Math.round(Number(minutes) || 25)));
+    const completedAt = Date.now();
+    const notification = {
+      eventId: `pomodoro-${completedAt}`,
+      taskId: `pomodoro-${completedAt}`,
+      source: 'pomodoro',
+      project: '番茄钟',
+      title: '专注完成',
+      body: `${safeMinutes} 分钟专注计时已结束`,
+      completedAt,
+    };
+    return { ok: true, result: enqueueTaskNotification(notification) };
+  },
+  getHistory: () => taskNotificationQueue.history(),
+  onHover: (sender, paused) => taskNotificationController.handleHover(sender, paused),
+  onDismissed: (sender, eventId) => taskNotificationController.handleDismissed(sender, eventId),
+  activate: async (sender, eventId) => {
+    if (!notificationWindow || notificationWindow.isDestroyed() || sender !== notificationWindow.webContents) return false;
+    return activateActiveTaskNotification(eventId);
+  },
 });
 
 // 当前窗口模块仍需要安全读取本机应用图标。
