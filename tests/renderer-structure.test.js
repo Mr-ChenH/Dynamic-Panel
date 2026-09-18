@@ -9,6 +9,7 @@ const financeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', '
 const financeBackgroundJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-background-refresh.js'), 'utf8');
 const homeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'home.js'), 'utf8');
 const systemIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'system.js'), 'utf8');
+const windowIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'window.js'), 'utf8');
 const shortcutServiceJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'shortcut-service.js'), 'utf8');
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
@@ -113,7 +114,7 @@ test('Windows collapsed notch stays compact and grows only on approach', () => {
   assert.match(preloadJs, /setCollapsedHover:.*window:set-collapsed-hover/);
   assert.match(appJs, /notch\.addEventListener\('mouseenter'.*setCollapsedHover/s);
   assert.match(appJs, /notch\.addEventListener\('mouseleave'.*setCollapsedHover/s);
-  assert.match(mainJs, /ipcMain\.on\('window:set-collapsed-hover'/);
+  assert.match(windowIpcJs, /ipcMain\.on\('window:set-collapsed-hover'/);
   assert.doesNotMatch(appJs, /native-resizing/);
 });
 

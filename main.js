@@ -62,6 +62,7 @@ const { createShortcutService } = require('./main/shortcut-service');
 const { createCredentialsVault } = require('./main/credentials-vault');
 const { registerCredentialsIpc } = require('./main/ipc/credentials');
 const { registerLinksIpc } = require('./main/ipc/links');
+const { registerWindowIpc } = require('./main/ipc/window');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -1592,29 +1593,6 @@ function createTray() {
   refreshTrayMenu();
 }
 
-ipcMain.handle('window:set-mode', async (event, mode) => {
-  if (mode === 'expanded') await rememberPasteTarget();
-  if (!mainWindow || event.sender !== mainWindow.webContents) return;
-  applyMode(mode === 'launcher' ? 'launcher' : mode === 'expanded' ? 'expanded' : 'collapsed', mode === 'launcher' ? getTargetDisplay() : undefined);
-});
-
-ipcMain.handle('window:begin-collapse', () => {
-  beginNativeCollapse();
-});
-
-ipcMain.on('window:set-collapsed-hover', (event, hovering) => {
-  if (
-    process.platform !== 'win32'
-    || !mainWindow
-    || mainWindow.isDestroyed()
-    || event.sender !== mainWindow.webContents
-    || currentMode !== 'collapsed'
-  ) return;
-  const next = hovering === true;
-  if (next === windowsCollapsedHovering) return;
-  windowsCollapsedHovering = next;
-  applyWindowGeometry('collapsed');
-});
 
 const settingsController = createSettingsController({
   readAppSettings,
@@ -1624,7 +1602,7 @@ const settingsController = createSettingsController({
   refreshTrayMenu,
   updateFeaturePreference,
   updateDefaultTabPreference,
-  isMainWindowSender: (sender) => Boolean(mainWindow && !mainWindow.isDestroyed() && sender === mainWindow.webContents),
+  isMainWindowSender,
   setAutoLaunch,
   isAutoLaunchEnabled,
   isValidPanelShortcut,
@@ -1641,31 +1619,49 @@ const settingsController = createSettingsController({
 registerSettingsIpc({ ipcMain, settingsController });
 registerWorkspaceIpc({ ipcMain, workspaceController });
 
+function isMainWindowSender(sender) {
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && sender === mainWindow.webContents);
+}
+
 function getLayoutMetrics(display) {
   const d = display || getWindowDisplay();
   return {
     stripHeight: getCollapsedHeight(d), // 折叠黑条总高（= 菜单栏高 = 物理刘海高，不含唇边）
-    menuBarHeight: getMenuBarHeight(d), // 折叠态菜单栏带高（折叠条上半部分被其拦截）
+    menuBarHeight: getMenuBarHeight(d), // 折叠态菜单栏带高（折叠态菜单栏带高）
     chromeY: EXPANDED_CHROME_Y,
     tabSizes: TAB_SIZES,
   };
 }
 
-ipcMain.handle('window:metrics', () => {
-  return getLayoutMetrics();
-});
-
-// Tab 仅改变内容；固定展开尺寸下不再触发原生窗口 resize。
-ipcMain.on('window:keep-open', (event) => {
-  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
-  cancelPanelBlurCollapse();
-  if (currentMode === 'expanded' && !mainWindow.isFocused()) mainWindow.focus();
-});
-
-ipcMain.handle('window:set-tab', (event, tab) => {
-  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
-  cancelPanelBlurCollapse();
-  currentTab = Object.prototype.hasOwnProperty.call(TAB_SIZES, tab) ? tab : 'home';
+registerWindowIpc({
+  ipcMain,
+  isMainWindowSender,
+  setMode: async (mode) => {
+    if (mode === 'expanded') await rememberPasteTarget();
+    const normalized = mode === 'launcher' ? 'launcher' : mode === 'expanded' ? 'expanded' : 'collapsed';
+    applyMode(normalized, normalized === 'launcher' ? getTargetDisplay() : undefined);
+  },
+  beginCollapse: beginNativeCollapse,
+  setCollapsedHover: (hovering) => {
+    if (process.platform !== 'win32' || currentMode !== 'collapsed' || hovering === windowsCollapsedHovering) return;
+    windowsCollapsedHovering = hovering;
+    applyWindowGeometry('collapsed');
+  },
+  getMetrics: getLayoutMetrics,
+  keepOpen: () => {
+    cancelPanelBlurCollapse();
+    if (currentMode === 'expanded' && !mainWindow.isFocused()) mainWindow.focus();
+  },
+  setTab: (tab) => {
+    cancelPanelBlurCollapse();
+    currentTab = Object.prototype.hasOwnProperty.call(TAB_SIZES, tab) ? tab : 'home';
+  },
+  getHoverSpaceStatus: () => ({
+    registered: shortcutService.state().hoverRegistered,
+    mode: currentMode,
+    cursor: screen.getCursorScreenPoint(),
+    bounds: getBoundsForMode(currentMode),
+  }),
 });
 
 async function requestMacMediaAccess(mediaType) {
@@ -2782,13 +2778,6 @@ function syncDisplayFollowPolling() {
   followCursorDisplay();
   if (!displayFollowTimer) displayFollowTimer = setInterval(followCursorDisplay, policy.intervalMs);
 }
-
-ipcMain.handle('shortcut:hover-space-status', () => ({
-  registered: shortcutService.state().hoverRegistered,
-  mode: currentMode,
-  cursor: screen.getCursorScreenPoint(),
-  bounds: mainWindow && !mainWindow.isDestroyed() ? getBoundsForMode(currentMode) : null,
-}));
 
 function waitForCollapsedPanel(timeoutMs = 950) {
   const deadline = Date.now() + timeoutMs;

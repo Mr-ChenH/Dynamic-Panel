@@ -380,3 +380,26 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 保留 `shortcut:hover-space-status` 返回结构、快速连按 Space 收起和 `will-quit` 清理行为
 - 新增 `tests/shortcut-service.test.js`，并更新 renderer 结构测试以检查迁移后的职责边界
 - 完整 Node 测试为 310 项：309 通过，1 项按平台跳过
+
+### 后续收尾：面板折叠与装配顺序修复
+
+- 修复分栏 Tab 容器横跨顶栏时，中央空白点击不能收起面板的问题；点击保护范围改为各个实际可见 Tab 按钮的矩形
+- 修复 `networkSecurity` 在 `registerSystemIpc` 之后初始化导致的启动期 TDZ `ReferenceError`
+- 为网络安全服务初始化顺序增加打包完整性回归测试
+- `notch-focus.electron.js` 和 `startup.electron.js` 当前均通过
+
+### 已完成：财务取消与密钥库、链接 IPC 拆分
+
+- 财务 IPC 仅把 `code === 'cancelled'` 或 `name === 'AbortError'` 归一化为取消，不再按错误消息文本猜测
+- 财务 renderer 的 overview、ranking、quotes、history、fundamentals 和 search 明确忽略结构化取消结果
+- 新增 `main/credentials-vault.js`、`main/ipc/credentials.js`，迁移安全存储、原子写盘、公开字段映射和五个 `credentials:*` handler
+- 新增 `main/ipc/links.js`，迁移 `links:inspect` 和 `smart:organize-material`
+- 新增 `tests/credentials-vault.test.js` 和 `tests/links-ipc.test.js`
+- `main.js` 当前约 2980 行
+
+### 已完成：窗口 IPC 注册拆分
+
+- 新增 `main/ipc/window.js`，迁移 `window:set-mode`、`window:begin-collapse`、`window:set-collapsed-hover`、`window:metrics`、`window:keep-open`、`window:set-tab` 和 `shortcut:hover-space-status`
+- 所有窗口 IPC 统一验证主窗口 sender；实际 BrowserWindow、几何、模式和快捷键状态通过依赖注入保留在主进程装配层
+- 新增 `tests/window-ipc.test.js`
+- `main.js` 当前约 2969 行，直接 `ipcMain` 注册降至窗口/窗口扫描等剩余领域
