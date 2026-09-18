@@ -36,8 +36,9 @@ async function main() {
   const execute = (code) => owner.webContents.executeJavaScript(code);
   const unwrap = (reply) => { assert.equal(reply.ok, true, JSON.stringify(reply)); return reply.value; };
   const recordingControl = () => BrowserWindow.getAllWindows().find((candidate) => candidate.getTitle() === '录屏状态 · TO-DO Panel');
-  async function open(mode, denied = false) {
-    unwrap(await execute(`window.notchAPI.openCapture('${mode}')`));
+  async function open(mode, denied = false, request = null) {
+    if (request) await service.open(request);
+    else unwrap(await execute(`window.notchAPI.openCapture('${mode}')`));
     const win = BrowserWindow.getAllWindows().find((candidate) => candidate !== owner);
     await until(() => win.webContents.executeJavaScript(`document.querySelectorAll('.source').length === 1`), 'Source picker did not populate');
     await win.webContents.executeJavaScript(`document.querySelector('.source').click()`);
@@ -121,6 +122,9 @@ async function main() {
   assert.equal(directImage.width, Math.ceil(directWidth * 3 / 4) - Math.floor(directWidth / 4));
   assert.equal(directImage.height, Math.ceil(directHeight * 3 / 4) - Math.floor(directHeight / 4));
   assert.deepEqual(copiedImages.at(-1), { width: directImage.width, height: directImage.height }, 'Edited direct selection must be sent to the clipboard writer');
+  const copiedBeforeLibraryAction = copiedImages.length;
+  unwrap(await execute(`window.notchAPI.copyCapture('${directImage.id}')`));
+  assert.equal(copiedImages.length, copiedBeforeLibraryAction + 1, 'Copy image action must write the saved screenshot to the clipboard');
   const beforeLibraryEdit = new CaptureStorage(root).list();
   unwrap(await execute(`window.notchAPI.editCapture('${directImage.id}')`));
   const libraryEditWindow = BrowserWindow.getAllWindows().find((candidate) => candidate !== owner);
@@ -201,8 +205,10 @@ async function main() {
   await repeatWindow.webContents.executeJavaScript(`document.getElementById('crop-save').click(); document.getElementById('annotation-save').click()`);
   await until(() => service.state().phase === 'idle', 'Repeat screenshot did not save');
   assert.equal(new CaptureStorage(root).list()[0].width, 320);
-  settings.countdown = 3;
-  const croppedWindow = await open('video');
+  settings.video = 'screen'; settings.countdown = 3;
+  const croppedWindow = await open('video', false, { mode: 'video', region: true });
+  assert.equal(await croppedWindow.webContents.executeJavaScript(`document.getElementById('type').value`), 'region', 'Recording shortcut must force region selection');
+  assert.equal(settings.video, 'screen', 'Recording shortcut must not replace the saved capture mode');
   await until(() => croppedWindow.webContents.executeJavaScript(`!document.getElementById('crop-save').disabled`), 'Video must reuse screenshot region');
   assert.equal(croppedWindow.isContentProtected(), true, 'The region picker must be excluded from its own frozen frame');
   await croppedWindow.webContents.executeJavaScript(`document.getElementById('crop-save').click()`);
@@ -223,7 +229,7 @@ async function main() {
   const overlayState = await regionRecordingControl.webContents.executeJavaScript(`({time:document.getElementById('recording-time').textContent,stop:!document.getElementById('recording-stop').disabled,discard:!document.getElementById('recording-discard').disabled})`);
   assert.match(overlayState.time, /^\d{2}:\d{2}$/); assert.equal(overlayState.stop, true); assert.equal(overlayState.discard, true);
   await pause(1300); await service.stop();
-  assert.equal(service.state().error, ''); settings.countdown = 0;
+  assert.equal(service.state().error, ''); settings.video = 'region'; settings.countdown = 0;
   const croppedVideo = new CaptureStorage(root).list()[0];
   assert.equal(croppedVideo.width, 320); assert.equal(croppedVideo.height, 180); assert.equal(croppedVideo.status, 'complete');
   const croppedUrl = unwrap(await execute(`window.notchAPI.previewCapture('${croppedVideo.id}')`));

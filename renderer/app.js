@@ -1117,11 +1117,12 @@ shortcutRecorderDisable?.addEventListener('click', () => { void saveRecordedShor
 shortcutRecorderCancel?.addEventListener('click', closeShortcutRecorder);
 function openShortcutRecorder(input = {}) {
   const detail = input?.detail && typeof input.detail === 'object' ? input.detail : input;
-  const action = ['panel', 'launcher', 'screenshot', 'audioRecording'].includes(detail?.action) ? detail.action : 'panel';
+  const action = ['panel', 'launcher', 'screenshot', 'screenRecording', 'audioRecording'].includes(detail?.action) ? detail.action : 'panel';
   const labels = {
     panel: '展开或收起面板',
     launcher: '搜索与启动器',
     screenshot: '区域截图',
+    screenRecording: '区域录屏',
     audioRecording: '开始或停止录音',
   };
   if (!isExpanded) setMode(true);

@@ -960,6 +960,8 @@
   const settingsLauncherShortcutChange = document.getElementById('settings-launcher-shortcut-change');
   const settingsScreenshotShortcutValue = document.getElementById('settings-screenshot-shortcut-value');
   const settingsScreenshotShortcutChange = document.getElementById('settings-screenshot-shortcut-change');
+  const settingsVideoShortcutValue = document.getElementById('settings-video-shortcut-value');
+  const settingsVideoShortcutChange = document.getElementById('settings-video-shortcut-change');
   const settingsAudioShortcutValue = document.getElementById('settings-audio-shortcut-value');
   const settingsAudioShortcutChange = document.getElementById('settings-audio-shortcut-change');
   const settingsDefaultTab = document.getElementById('settings-default-tab');
@@ -1445,6 +1447,7 @@
     if (settingsShortcutValue) settingsShortcutValue.textContent = shortcutLabel(summary.shortcut);
     if (settingsLauncherShortcutValue) settingsLauncherShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.launcher);
     if (settingsScreenshotShortcutValue) settingsScreenshotShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenshot);
+    if (settingsVideoShortcutValue) settingsVideoShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenRecording);
     if (settingsAudioShortcutValue) settingsAudioShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.audioRecording);
     if (settingsDefaultTab) {
       const visibleTabs = new Set(Domain.visiblePanelTabs(
@@ -2487,6 +2490,7 @@
     [settingsShortcutChange, 'panel', () => settingsAppSettings?.shortcut || 'Space'],
     [settingsLauncherShortcutChange, 'launcher', () => settingsAppSettings?.shortcuts?.launcher || ''],
     [settingsScreenshotShortcutChange, 'screenshot', () => settingsAppSettings?.shortcuts?.screenshot || ''],
+    [settingsVideoShortcutChange, 'screenRecording', () => settingsAppSettings?.shortcuts?.screenRecording || ''],
     [settingsAudioShortcutChange, 'audioRecording', () => settingsAppSettings?.shortcuts?.audioRecording || ''],
   ];
   shortcutControls.forEach(([button, action, current]) => button?.addEventListener('click', () => {

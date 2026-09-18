@@ -1,4 +1,4 @@
-const { BrowserWindow, ipcMain, desktopCapturer, session, protocol, screen, powerMonitor, dialog, shell, clipboard, nativeImage, systemPreferences } = require('electron');
+const { BrowserWindow, ipcMain, desktopCapturer, session, protocol, screen, powerMonitor, dialog, shell, clipboard, nativeImage, ClipboardItem, systemPreferences } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { randomUUID } = require('node:crypto');
@@ -22,7 +22,11 @@ function normalizeSettings(value = {}) {
   };
 }
 
-function createCaptureService({ getMainWindow, getRoot, getSettings, saveSettings, ensureMicrophone, suspendPanel, onChange, sourceProvider, screenshotProvider, clipboardWriter = (image) => clipboard.writeImage(image) }) {
+function writeImageToClipboard(image) {
+  return clipboard.write([new ClipboardItem({ 'image/png': new Blob([image.toPNG()], { type: 'image/png' }) })]);
+}
+
+function createCaptureService({ getMainWindow, getRoot, getSettings, saveSettings, ensureMicrophone, suspendPanel, onChange, sourceProvider, screenshotProvider, clipboardWriter = writeImageToClipboard }) {
   const captureSources = sourceProvider || createCaptureSources({ getSources: (options) => desktopCapturer.getSources(options) });
   let win = null, task = null, audioOwner = null, state = { phase: 'idle' }, restorePanel = null;
   let recordingOverlay = null, recordingBorders = [];
@@ -148,14 +152,16 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
   }
   const discard = () => stop('discard');
   async function open(request) {
-    const editId = request && typeof request === 'object' && request.mode === 'edit' ? request.id : '';
-    const mode = editId ? 'screenshot' : request;
+    const requestedMode = request && typeof request === 'object' ? request.mode : request;
+    const editId = requestedMode === 'edit' ? request.id : '';
+    const mode = editId ? 'screenshot' : requestedMode;
+    const forceRegion = mode === 'video' && request && typeof request === 'object' && request.region === true;
     if (!['screenshot', 'video'].includes(mode)) throw new Error('invalid_mode');
     if (busy()) throw new Error('busy');
     done = new Promise((resolve) => { resolveDone = resolve; });
     restorePanel = suspendPanel();
     const settings = normalizeSettings(getSettings());
-    taskSettings = settings;
+    taskSettings = forceRegion ? { ...settings, video: 'region' } : settings;
     regionFrame = null; activeRegion = null; directSnapshot = null; editingId = editId || ''; stopNotice = '';
     storageOperation = Promise.resolve();
     let target = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -304,12 +310,13 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     store().remove(id); previews.clear(); emit({});
   });
   handler('captures:reveal', mainOnly, (id) => shell.showItemInFolder(store().resolve(id).file));
-  handler('captures:copy', mainOnly, (id) => {
+  handler('captures:copy', mainOnly, async (id) => {
     const { item, file } = store().resolve(id, true);
     if (item.kind !== 'screenshot' || fs.statSync(file).size > LIMITS.image) throw new Error('invalid_image');
     const image = nativeImage.createFromPath(file);
     if (image.isEmpty()) throw new Error('invalid_image');
-    clipboard.writeImage(image);
+    await clipboardWriter(image);
+    return true;
   });
   handler('captures:export', mainOnly, async (id) => {
     const root = getRoot();
@@ -426,7 +433,7 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     const { file } = target.resolve(item.id, true);
     const image = nativeImage.createFromPath(file);
     if (image.isEmpty()) throw new Error('invalid_image');
-    try { clipboardWriter(image); } catch {}
+    try { await clipboardWriter(image); } catch {}
     if (!closing) await end('', item);
     return item;
   });
@@ -437,7 +444,7 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     const item = await storageOperation;
     const { file } = target.resolve(item.id, true), image = nativeImage.createFromPath(file);
     if (image.isEmpty()) throw new Error('invalid_image');
-    try { clipboardWriter(image); } catch {}
+    try { await clipboardWriter(image); } catch {}
     if (!closing) await end('', item);
     return item;
   });

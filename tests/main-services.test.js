@@ -236,10 +236,11 @@ test('global shortcut policy validates optional actions and detects in-app confl
   assert.equal(isValidShortcutAccelerator('CommandOrControl+Shift+S'), true);
   assert.equal(isValidShortcutAccelerator('S'), false);
   assert.equal(isValidShortcutAccelerator('CommandOrControl+Mouse1'), false);
-  const assignments = { panel: 'Space', launcher: 'CommandOrControl+Space', screenshot: 'CommandOrControl+Shift+S', audioRecording: '' };
+  const assignments = { panel: 'Space', launcher: 'CommandOrControl+Space', screenshot: 'CommandOrControl+Shift+S', screenRecording: '', audioRecording: '' };
+  assert.equal(shortcutAssignmentConflict(assignments, 'screenRecording', 'CommandOrControl+Shift+S'), true);
   assert.equal(shortcutAssignmentConflict(assignments, 'audioRecording', 'CommandOrControl+Shift+S'), true);
   assert.equal(shortcutAssignmentConflict(assignments, 'screenshot', 'CommandOrControl+Shift+S'), false);
-  assert.equal(shortcutAssignmentConflict(assignments, 'audioRecording', ''), false);
+  assert.equal(shortcutAssignmentConflict(assignments, 'screenRecording', ''), false);
 });
 
 test('isPrivateAddress blocks loopback, private, link-local and unique-local ranges', () => {

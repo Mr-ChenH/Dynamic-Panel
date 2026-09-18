@@ -31,7 +31,7 @@
 .settings-organized .settings-device-row strong { font-size: var(--fs-small); font-weight: 400; color: var(--text-3); white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 .settings-organized .settings-shortcut-list { border-bottom: 1px solid var(--hairline); }
 .settings-organized .settings-shortcut-list .settings-device-row:last-child { border-bottom: 0; }
-.settings-organized :is(#settings-shortcut-value, #settings-launcher-shortcut-value, #settings-screenshot-shortcut-value, #settings-audio-shortcut-value) { color: var(--text-1); font-family: var(--font-mono); }
+.settings-organized :is(#settings-shortcut-value, #settings-launcher-shortcut-value, #settings-screenshot-shortcut-value, #settings-video-shortcut-value, #settings-audio-shortcut-value) { color: var(--text-1); font-family: var(--font-mono); }
 .settings-organized .settings-device-row button, .settings-organized .settings-default-tab-row select { min-height: 32px; padding: 5px 12px; font-size: var(--fs-small); }
 .settings-organized .settings-workspace-path { max-width: none; }
 .settings-organized .settings-device-actions { flex-wrap: wrap; justify-content: flex-end; }

@@ -339,7 +339,7 @@ let panelBlurTimer = null;
 let panelBlurGeneration = 0;
 let configuredShortcut = '';
 let configuredLauncherShortcut = '';
-let configuredActionShortcuts = { screenshot: '', audioRecording: '' };
+let configuredActionShortcuts = { screenshot: '', screenRecording: '', audioRecording: '' };
 let launcherService;
 let launcherManaging = false;
 let previousPasteTarget = null;
@@ -1324,6 +1324,7 @@ function readAppSettings() {
     shortcut: isValidPanelShortcut(stored.shortcut) ? stored.shortcut : 'Space',
     shortcuts: {
       screenshot: isValidOptionalShortcut(shortcuts.screenshot) ? shortcuts.screenshot : '',
+      screenRecording: isValidOptionalShortcut(shortcuts.screenRecording) ? shortcuts.screenRecording : '',
       audioRecording: isValidOptionalShortcut(shortcuts.audioRecording) ? shortcuts.audioRecording : '',
     },
     defaultTab: normalizeDefaultTabPreference(stored.defaultTab, features),
@@ -1789,6 +1790,7 @@ function registeredShortcutConflict(action, shortcut) {
     panel: configuredShortcut,
     launcher: configuredLauncherShortcut,
     screenshot: configuredActionShortcuts.screenshot,
+    screenRecording: configuredActionShortcuts.screenRecording,
     audioRecording: configuredActionShortcuts.audioRecording,
   }, action, shortcut);
 }
@@ -1859,9 +1861,10 @@ function setLauncherShortcut(shortcut = launcherConfig().shortcut) {
 }
 
 function runConfiguredShortcutAction(action) {
-  if (action === 'screenshot') {
+  if (['screenshot', 'screenRecording'].includes(action)) {
     if (!captureService || captureService.busy()) return;
-    void captureService.open('screenshot').catch(() => {});
+    const request = action === 'screenRecording' ? { mode: 'video', region: true } : 'screenshot';
+    void captureService.open(request).catch(() => {});
     return;
   }
   if (action === 'audioRecording') openRendererPanel('shortcut:audio-recording');
@@ -2216,7 +2219,7 @@ ipcMain.handle('settings:set-auto-launch', (event, enabled) => {
 ipcMain.handle('settings:set-shortcut', (event, payload) => {
   const action = typeof payload === 'string' ? 'panel' : payload?.action;
   const accelerator = typeof payload === 'string' ? payload : payload?.accelerator;
-  if (!['panel', 'launcher', 'screenshot', 'audioRecording'].includes(action)
+  if (!['panel', 'launcher', 'screenshot', 'screenRecording', 'audioRecording'].includes(action)
     || typeof accelerator !== 'string'
     || (action === 'panel' ? !isValidPanelShortcut(accelerator) : !isValidOptionalShortcut(accelerator))) {
     return { ok: false, error: 'invalid' };

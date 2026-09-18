@@ -52,14 +52,16 @@ test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', (
   assert.doesNotMatch(appJs, /localStorage\.setItem\([^\n]*todo-time-scope/);
 });
 
-test('global shortcuts expose configurable panel, launcher, screenshot and audio actions', () => {
-  for (const id of ['settings-shortcut-value', 'settings-launcher-shortcut-value', 'settings-screenshot-shortcut-value', 'settings-audio-shortcut-value']) {
+test('global shortcuts expose configurable panel, launcher, screenshot, screen recording and audio actions', () => {
+  for (const id of ['settings-shortcut-value', 'settings-launcher-shortcut-value', 'settings-screenshot-shortcut-value', 'settings-video-shortcut-value', 'settings-audio-shortcut-value']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(preloadJs, /setShortcut:.*settings:set-shortcut/);
   assert.match(preloadJs, /onAudioRecordingShortcut:.*shortcut:audio-recording/);
   assert.match(mainJs, /runConfiguredShortcutAction/);
-  assert.match(mainJs, /captureService\.open\('screenshot'\)/);
+  assert.match(mainJs, /mode: 'video', region: true/);
+  assert.match(mainJs, /captureService\.open\(request\)/);
+  assert.match(workspaceJs, /settingsVideoShortcutChange/);
   assert.match(workspaceJs, /onAudioRecordingShortcut/);
   assert.match(workspaceJs, /await window\.NotchPanel\?\.navigate\(\{ tab: 'recordings' \}\)/);
   assert.match(appJs, /shortcutRecorderAction/);
