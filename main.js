@@ -38,6 +38,7 @@ const { createLinkInspector } = require('./main/link-inspector');
 const { createWorkspaceFiles } = require('./main/workspace-files');
 const { createClipboardService } = require('./main/clipboard-service');
 const { createTaskNotificationServer } = require('./main/task-notification-server');
+const { createTaskNotificationDomain } = require('./main/task-notification-domain');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -518,95 +519,8 @@ function hideWindowAfterCollapse() {
 // ============ Codex / Claude / GPT 任务完成提醒 ============
 // 使用独立的非激活窗口，避免打断主刘海窗口的展开、收起和焦点状态机。
 
-function pickTaskNotificationValue(payload, keys) {
-  for (const key of keys) {
-    const value = payload[key];
-    if ((typeof value === 'string' || typeof value === 'number') && String(value).trim()) {
-      return String(value);
-    }
-  }
-  return '';
-}
-
-function cleanTaskNotificationText(value, maxLength) {
-  if (typeof value !== 'string' && typeof value !== 'number') return '';
-  const firstLine = String(value)
-    .replace(/[\u202a-\u202e\u2066-\u2069]/g, '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
-  if (!firstLine) return '';
-  const cleaned = firstLine
-    .replace(/^[#>*`_~\-\s]+/, '')
-    .replace(/[`*_~]/g, '')
-    .replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const characters = Array.from(cleaned);
-  return characters.length > maxLength ? characters.slice(0, maxLength).join('') : cleaned;
-}
-
-function isSubagentNotification(payload) {
-  const agentType = pickTaskNotificationValue(payload, [
-    'agent_type',
-    'agent-type',
-    'agentType',
-  ]).toLowerCase();
-  const hookEvent = pickTaskNotificationValue(payload, [
-    'hook_event_name',
-    'hook-event-name',
-    'hookEventName',
-  ]).toLowerCase();
-  // Claude Code 的 agent_type 存的是子代理名（Explore / security-reviewer 等），
-  // 不含 subagent 字样，只有身处子代理时才带 agent_id，故以该字段存在为准。
-  const agentId = pickTaskNotificationValue(payload, ['agent_id', 'agent-id', 'agentId']);
-  return Boolean(agentId)
-    || hookEvent.includes('subagent')
-    || agentType.includes('subagent')
-    || payload.is_subagent === true
-    || payload.isSubagent === true;
-}
-
-function normalizeTaskNotification(payload, source) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-  if (isSubagentNotification(payload)) return null;
-  const identity = taskNotificationIdentity(payload, source);
-
-  const taskId = cleanTaskNotificationText(
-    pickTaskNotificationValue(payload, [
-      'turn_id',
-      'turn-id',
-      'turnId',
-      'thread_id',
-      'thread-id',
-      'threadId',
-      'session_id',
-      'session-id',
-      'sessionId',
-      'task_id',
-      'task-id',
-      'taskId',
-      'id',
-    ]),
-    160
-  );
-
-  const completedAtValue = Number(
-    pickTaskNotificationValue(payload, ['completed_at', 'completed-at', 'completedAt'])
-  );
-  const completedAt = Number.isFinite(completedAtValue) && completedAtValue > 0
-    ? completedAtValue
-    : Date.now();
-
-  return {
-    eventId: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
-    source,
-    taskId,
-    title: identity.title,
-    project: identity.project,
-    completedAt,
-  };
-}
+const taskNotificationDomain = createTaskNotificationDomain({ taskNotificationIdentity });
+const { normalize: normalizeTaskNotification } = taskNotificationDomain;
 
 function getPendingTaskNotificationCount() {
   return taskNotificationQueue.reduce(
