@@ -39,6 +39,7 @@ const { createWorkspaceFiles } = require('./main/workspace-files');
 const { createClipboardService } = require('./main/clipboard-service');
 const { createTaskNotificationServer } = require('./main/task-notification-server');
 const { createTaskNotificationDomain } = require('./main/task-notification-domain');
+const { createTaskNotificationQueue } = require('./main/task-notification-queue');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -321,9 +322,6 @@ let taskNotificationFallbackTimer = null;
 let taskNotificationTimerStartedAt = 0;
 let taskNotificationRemainingMs = TASK_NOTIFICATION_VISIBLE_MS;
 let taskNotificationPaused = false;
-const taskNotificationQueue = [];
-const recentTaskNotifications = new Map();
-const taskCompletionHistory = [];
 let todoReminderTimer = null;
 let scheduledTodoReminders = [];
 
@@ -522,14 +520,24 @@ function hideWindowAfterCollapse() {
 const taskNotificationDomain = createTaskNotificationDomain({ taskNotificationIdentity });
 const { normalize: normalizeTaskNotification } = taskNotificationDomain;
 
+const taskNotificationQueue = createTaskNotificationQueue({
+  dedupeMs: TASK_NOTIFICATION_DEDUPE_MS,
+  maxQueue: TASK_NOTIFICATION_MAX_QUEUE,
+  isActive: () => Boolean(activeTaskNotification),
+  onHistory: (notification) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('task-completion:new', notification);
+    }
+  },
+  onQueueChange: (count) => sendTaskNotificationQueueCount(count),
+  onIdle: () => showNextTaskNotification(),
+});
+
 function getPendingTaskNotificationCount() {
-  return taskNotificationQueue.reduce(
-    (total, item) => total + (item.summaryCount || 1),
-    0
-  );
+  return taskNotificationQueue.pendingCount();
 }
 
-function sendTaskNotificationQueueCount() {
+function sendTaskNotificationQueueCount(count = getPendingTaskNotificationCount()) {
   if (
     !notificationWindow ||
     notificationWindow.isDestroyed() ||
@@ -540,54 +548,12 @@ function sendTaskNotificationQueueCount() {
   }
   notificationWindow.webContents.send(
     'task-notification:queue',
-    getPendingTaskNotificationCount()
+    count
   );
 }
 
 function enqueueTaskNotification(notification) {
-  if (!notification) return 'ignored';
-  const now = Date.now();
-  for (const [key, seenAt] of recentTaskNotifications) {
-    if (now - seenAt > TASK_NOTIFICATION_DEDUPE_MS) recentTaskNotifications.delete(key);
-  }
-
-  const identity = notification.taskId || `${notification.title}:${notification.project}`;
-  const dedupeKey = `${notification.source}:${identity}`;
-  const lastSeenAt = recentTaskNotifications.get(dedupeKey);
-  if (lastSeenAt && now - lastSeenAt <= TASK_NOTIFICATION_DEDUPE_MS) return 'duplicate';
-  recentTaskNotifications.set(dedupeKey, now);
-
-  if (notification.source !== 'todo') {
-    taskCompletionHistory.unshift(notification);
-    if (taskCompletionHistory.length > 20) taskCompletionHistory.length = 20;
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('task-completion:new', notification);
-    }
-  }
-
-  if (taskNotificationQueue.length < TASK_NOTIFICATION_MAX_QUEUE) {
-    taskNotificationQueue.push(notification);
-  } else {
-    const lastIndex = taskNotificationQueue.length - 1;
-    const previous = taskNotificationQueue[lastIndex];
-    const summaryCount = previous.isSummary ? previous.summaryCount + 1 : 2;
-    taskNotificationQueue[lastIndex] = {
-      ...notification,
-      source: 'task',
-      taskId: '',
-      title: `另有 ${summaryCount} 个任务已完成`,
-      project: '',
-      isSummary: true,
-      summaryCount,
-    };
-  }
-
-  if (activeTaskNotification) {
-    sendTaskNotificationQueueCount();
-  } else {
-    showNextTaskNotification();
-  }
-  return 'queued';
+  return taskNotificationQueue.enqueue(notification);
 }
 
 function clearTodoReminderTimer() {
@@ -687,7 +653,7 @@ function recoverClosedTaskNotificationWindow(targetWindow) {
   taskNotificationPaused = false;
   taskNotificationRemainingMs = TASK_NOTIFICATION_VISIBLE_MS;
   if (!isQuitting && interruptedNotification) {
-    taskNotificationQueue.unshift(interruptedNotification);
+    taskNotificationQueue.requeueFront(interruptedNotification);
   }
   if (!isQuitting) setTimeout(showNextTaskNotification, 80);
 }
@@ -784,11 +750,11 @@ function setTaskNotificationPaused(paused) {
 }
 
 function showNextTaskNotification() {
-  if (activeTaskNotification || taskNotificationQueue.length === 0 || isQuitting) return;
+  if (activeTaskNotification || taskNotificationQueue.length() === 0 || isQuitting) return;
   const targetWindow = createTaskNotificationWindow();
   if (!notificationWindowReady || !targetWindow || targetWindow.isDestroyed()) return;
 
-  activeTaskNotification = taskNotificationQueue.shift();
+  activeTaskNotification = taskNotificationQueue.takeNext();
   taskNotificationLeaving = false;
   taskNotificationPaused = false;
   taskNotificationRemainingMs = TASK_NOTIFICATION_VISIBLE_MS;
@@ -829,7 +795,7 @@ function finishTaskNotification(eventId) {
     showNextTaskNotification();
     const policy = taskNotificationWindowPolicy({
       active: Boolean(activeTaskNotification),
-      queueLength: taskNotificationQueue.length,
+      queueLength: taskNotificationQueue.length(),
     });
     if (
       policy === 'dispose'
@@ -2092,7 +2058,7 @@ async function requestMacMediaAccess(mediaType) {
 // macOS 渲染层 getUserMedia 不会自动弹 TCC 授权，必须由主进程申请麦克风权限。
 ipcMain.handle('media:microphone', () => requestMacMediaAccess('microphone'));
 
-ipcMain.handle('tasks:recent', () => taskCompletionHistory);
+ipcMain.handle('tasks:recent', () => taskNotificationQueue.history());
 
 // 快捷链接：URL 走外部浏览器（仅 http/https），本地路径走系统打开（仅绝对路径）
 ipcMain.handle('shell:openExternal', async (event, value) => {
