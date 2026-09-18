@@ -23,6 +23,8 @@ const workspaceLinksRendererJs = fs.readFileSync(path.join(__dirname, '..', 'ren
 const workspaceLinksControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-controller.js'), 'utf8');
 const workspaceLinksActionsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-actions.js'), 'utf8');
 const workspaceLinksDragJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-drag.js'), 'utf8');
+const workspaceLinksApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-api.js'), 'utf8');
+const workspaceRecordingsApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-api.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -102,6 +104,19 @@ test('link drag lifecycle uses a dedicated controller', () => {
   assert.match(workspaceLinksDragJs, /moveLinkToPosition/);
   assert.match(workspaceJs, /NotchWorkspaceLinksDrag\.createController/);
   assert.doesNotMatch(workspaceJs, /linkGroupsEl\.addEventListener\('pointerdown'/);
+});
+
+test('workspace public APIs are split into link and recording adapters', () => {
+  assert.ok(html.indexOf('workspace-links-api.js') < html.indexOf('workspace.js'));
+  assert.ok(html.indexOf('workspace-recordings-api.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceLinksApiJs, /saveCapturedLink/);
+  assert.match(workspaceLinksApiJs, /applyAIName/);
+  assert.match(workspaceRecordingsApiJs, /recordingContext/);
+  assert.match(workspaceRecordingsApiJs, /recordingRows/);
+  assert.match(workspaceJs, /const linksApi =/);
+  assert.match(workspaceJs, /const recordingsApi =/);
+  assert.match(workspaceJs, /window\.NotchWorkspace = \{/);
+  assert.doesNotMatch(workspaceJs, /async saveCapturedLink\(rawValue\)/);
 });
 
 test('credential storage and selection state stay outside the workspace coordinator', () => {
@@ -544,7 +559,7 @@ test('home quick capture routes notes and links through explicit modes', () => {
   assert.match(homeJs, /NotchWorkspace\?\.saveCapturedLink/);
   assert.match(homeJs, /NotchNotes\.saveCaptured/);
   assert.match(appJs, /async saveCaptured\(content\)[\s\S]*?requestNoteTitle\(result\.note\)/);
-  assert.match(workspaceJs, /async saveCapturedLink\(rawValue\)/);
+  assert.match(workspaceLinksApiJs, /async saveCapturedLink\(rawValue\)/);
 });
 
 test('editable fields receive a native context menu without collapsing the panel', () => {

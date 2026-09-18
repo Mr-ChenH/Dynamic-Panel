@@ -2276,104 +2276,51 @@
     refreshHomeModuleSettings: renderHomeModuleSettings,
   };
 
-  window.NotchWorkspace = {
-    hasLink: (id) => linkGroups.some((g) => (g.links || []).some((l) => String(l.id) === String(id))),
-    async saveCapturedLink(rawValue) {
-      const normalized = Domain.normalizeHttpUrl(rawValue);
-      if (!normalized) return { ok: false, error: 'invalid_url' };
-      if (allLinks().some((link) => link.url === normalized)) return { ok: false, error: 'duplicate' };
-      if (!addLink(normalized)) return { ok: false, error: 'save_failed' };
-      return { ok: true, workspaceSynced: await syncWorkspaceData() };
-    },
-    selectLink(id) {
-      const group = linkGroups.find((g) => (g.links || []).some((l) => String(l.id) === String(id)));
-      if (!group) return false;
-      if(linksSearch)linksSearch.value='';if(groupFilter)groupFilter.value='';
-      const index=(group.links||[]).findIndex(link=>String(link.id)===String(id));
-      linkLimits.set(group.id,Math.max(LINK_PAGE_SIZE,Math.ceil((index+1)/LINK_PAGE_SIZE)*LINK_PAGE_SIZE));
-      group.collapsed = false; renderLinkGroups();
-      requestAnimationFrame(() => {
-        const row = document.querySelector(`[data-link-id="${CSS.escape(String(id))}"]`);
-        row?.scrollIntoView({ block: 'center' }); row?.querySelector('button')?.focus();
-      });
-      return true;
-    },
-    linkContext(id) {
-      return LinksDomain?.linkContext(linkGroups, id) || null;
-    },
-    recordingContext(id = selectedRecordingId) {
-      const recording = recordings.find((item) => item.id === id && !item.isDraft);
-      return recording ? { sourceType: 'recording', sourceId: recording.id, sourceTitle: recording.title, text: recording.transcript, createdAt: recording.createdAt } : null;
-    },
-    chatContexts() {
-      const links = LinksDomain?.chatRows(linkGroups) || [];
-      const recordingRows = recordings.filter((recording) => !recording.isDraft && recording.transcript.trim()).map((recording) => ({
-        sourceType: 'recording',
-        sourceId: recording.id,
-        sourceTitle: recording.title,
-        sourceRevision: String(recording.updatedAt || recording.createdAt || ''),
-        text: recording.transcript,
-        detail: recording.category || '未分类',
-        updatedAt: recording.updatedAt || recording.createdAt || 0,
-      }));
-      return [...recordingRows, ...links];
-    },
-    async applyAIName(source, titleValue, categoryValue, tagsValue = '') {
-      const title = String(titleValue || '').trim().slice(0, 80);
-      const category = String(categoryValue || '').trim().slice(0, source.sourceType === 'link' ? 14 : 24);
-      const suggestedTags = source.sourceType === 'link' && String(tagsValue || '').trim() ? Domain.normalizeLinkTags(tagsValue) : null;
-      if (!title) return { ok: false, error: 'missing_title' };
-      if (source.sourceType === 'recording') {
-        const recording = recordings.find((item) => item.id === source.sourceId && !item.isDraft);
-        if (!recording || recording.transcript.trim() !== source.text.trim() || recording.title !== source.sourceTitle) return { ok: false, error: 'source_changed' };
-        const undo = { sourceType: 'recording', id: recording.id, beforeTitle: recording.title, beforeCategory: recording.category, afterTitle: title, afterCategory: category || recording.category, expectedText: recording.transcript.trim() };
-        recording.title = undo.afterTitle; recording.category = undo.afterCategory;
-        if (!persistRecordings()) { recording.title = undo.beforeTitle; recording.category = undo.beforeCategory; return { ok: false, error: 'save_failed' }; }
-        renderRecordings();
-        return { ok: true, undo, workspaceSynced: await syncWorkspaceData() };
-      }
-      if (source.sourceType !== 'link') return { ok: false, error: 'invalid_source' };
-      const beforeGroup = linkGroups.find((group) => (group.links || []).some((item) => item.id === source.sourceId));
-      const link = beforeGroup && (beforeGroup.links || []).find((item) => item.id === source.sourceId);
-      if (!link || window.NotchWorkspace.linkContext(link.id)?.text.trim() !== source.text.trim() || link.title !== source.sourceTitle) return { ok: false, error: 'source_changed' };
-      const previousLinkGroups = structuredClone(linkGroups);
-      let targetGroup = category ? linkGroups.find((group) => group.name === category) : beforeGroup;
-      let createdGroupId = '';
-      if (!targetGroup) { targetGroup = { id: uid('group'), name: category, collapsed: false, links: [] }; createdGroupId = targetGroup.id; linkGroups.push(targetGroup); }
-      const nextTags = suggestedTags || Domain.normalizeLinkTags(link.tags);
-      const undo = { sourceType: 'link', id: link.id, url: link.url, beforeTitle: link.title, beforeTags: Domain.normalizeLinkTags(link.tags), beforeGroupId: beforeGroup.id, afterTitle: title, afterTags: nextTags, afterGroupId: targetGroup.id, createdGroupId };
-      link.title = title;
-      link.tags = nextTags;
-      if (targetGroup !== beforeGroup) { beforeGroup.links = beforeGroup.links.filter((item) => item.id !== link.id); targetGroup.links.push(link); }
-      if (!persistLinks()) { linkGroups = previousLinkGroups; return { ok: false, error: 'save_failed' }; }
-      renderLinkGroups();
-      return { ok: true, undo, workspaceSynced: await syncWorkspaceData() };
-    },
-    async undoAIName(token) {
-      if (token?.sourceType === 'recording') {
-        const recording = recordings.find((item) => item.id === token.id && !item.isDraft);
-        if (!recording || recording.title !== token.afterTitle || recording.category !== token.afterCategory || recording.transcript.trim() !== token.expectedText) return { ok: false, error: 'conflict' };
-        recording.title = token.beforeTitle; recording.category = token.beforeCategory;
-        if (!persistRecordings()) { recording.title = token.afterTitle; recording.category = token.afterCategory; return { ok: false, error: 'save_failed' }; }
-        renderRecordings();
-        return { ok: true, workspaceSynced: await syncWorkspaceData() };
-      }
-      if (token?.sourceType !== 'link') return { ok: false, error: 'invalid_source' };
-      const previousLinkGroups = structuredClone(linkGroups);
-      const afterGroup = linkGroups.find((group) => group.id === token.afterGroupId);
-      const link = afterGroup && (afterGroup.links || []).find((item) => item.id === token.id);
-      const beforeGroup = linkGroups.find((group) => group.id === token.beforeGroupId);
-      if (!link || !beforeGroup || link.title !== token.afterTitle || link.url !== token.url || JSON.stringify(Domain.normalizeLinkTags(link.tags)) !== JSON.stringify(Domain.normalizeLinkTags(token.afterTags))) return { ok: false, error: 'conflict' };
-      link.title = token.beforeTitle;
-      link.tags = Domain.normalizeLinkTags(token.beforeTags);
-      if (afterGroup !== beforeGroup) { afterGroup.links = afterGroup.links.filter((item) => item.id !== link.id); beforeGroup.links.push(link); }
-      if (token.createdGroupId && afterGroup.links.length === 0) linkGroups = linkGroups.filter((group) => group.id !== token.createdGroupId);
-      if (!persistLinks()) { linkGroups = previousLinkGroups; return { ok: false, error: 'save_failed' }; }
-      renderLinkGroups();
-      return { ok: true, workspaceSynced: await syncWorkspaceData() };
-    },
-    refreshWindows: (...args) => window.NotchWorkspaceWindows?.refreshWindows?.(...args),
+  const linksApi = window.NotchWorkspaceLinksApi.createApi({
+    Domain,
+    LinksDomain,
+    getGroups: () => linkGroups,
+    setGroups: (groups) => { linkGroups = groups; },
+    allLinks,
+    addLink,
+    persist: persistLinks,
+    render: renderLinkGroups,
+    syncWorkspaceData,
+    uid,
+    linkLimits,
+    pageSize: LINK_PAGE_SIZE,
+    elements: { linksSearch, groupFilter },
+  });
+  const recordingsApi = window.NotchWorkspaceRecordingsApi.createApi({
+    Domain,
+    getRecordings: () => recordings,
+    getSelectedRecordingId: () => selectedRecordingId,
+    persist: persistRecordings,
+    render: renderRecordings,
+    syncWorkspaceData,
+    getLinkContext: (id) => linksApi.linkContext(id),
     startRecording,
     isRecordingActive: isRecordingBusy,
+  });
+
+  window.NotchWorkspace = {
+    ...linksApi,
+    recordingContext: recordingsApi.recordingContext,
+    chatContexts() {
+      return [...recordingsApi.recordingRows(), ...(LinksDomain?.chatRows(linkGroups) || [])];
+    },
+    applyAIName(source, titleValue, categoryValue, tagsValue = '') {
+      return source?.sourceType === 'link'
+        ? linksApi.applyAIName(source, titleValue, categoryValue, tagsValue)
+        : recordingsApi.applyAIName(source, titleValue, categoryValue);
+    },
+    undoAIName(token) {
+      return token?.sourceType === 'link'
+        ? linksApi.undoAIName(token)
+        : recordingsApi.undoAIName(token);
+    },
+    refreshWindows: (...args) => window.NotchWorkspaceWindows?.refreshWindows?.(...args),
+    startRecording: recordingsApi.startRecording,
+    isRecordingActive: recordingsApi.isRecordingActive,
   };
 })();
