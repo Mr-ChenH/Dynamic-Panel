@@ -308,3 +308,11 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 保留单图 20MB 输入限制、最多 12 个文件、PNG 回读上限和笔记目录边界校验
 - 删除笔记图片时继续拒绝符号链接根目录、符号链接笔记目录和越界路径
 - 新增 `tests/notes-ipc.test.js`
+
+### 已完成：剪贴板 IPC 注册拆分
+
+- 新增 `main/ipc/clipboard.js`
+- 将 `clipboard:readImage`、`clipboard:deleteImages`、`clipboard:write` 和 `clipboard:paste` 移出 `main.js`
+- 保留图片路径边界校验、系统剪贴板写入、辅助功能权限降级和回到原应用粘贴流程
+- 将面板收起、原应用目标和粘贴执行器作为依赖注入，避免 IPC 模块持有窗口全局状态
+- 新增 `tests/clipboard-ipc.test.js`

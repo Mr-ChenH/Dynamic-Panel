@@ -49,6 +49,7 @@ const { createFinanceBackgroundRefresh } = require('./main/finance-background-re
 const { registerFinanceIpc } = require('./main/ipc/finance');
 const { registerRecordingsIpc } = require('./main/ipc/recordings');
 const { registerNotesIpc } = require('./main/ipc/notes');
+const { registerClipboardIpc } = require('./main/ipc/clipboard');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -3325,33 +3326,6 @@ ipcMain.handle('shortcut:hover-space-status', () => ({
   bounds: mainWindow && !mainWindow.isDestroyed() ? getBoundsForMode(currentMode) : null,
 }));
 
-// 渲染层请求把图片文件读成 dataURL 回显（contextIsolation 下 file:// 受限，走 IPC 读盘）
-ipcMain.handle('clipboard:readImage', async (event, imagePath) => {
-  const safePath = getSafeClipImagePath(imagePath);
-  if (!safePath) return null; // 只允许读自己的图片目录
-  try {
-    const buf = await fs.promises.readFile(safePath);
-    return `data:image/png;base64,${buf.toString('base64')}`;
-  } catch (e) {
-    return null;
-  }
-});
-
-// FIFO 淘汰 / 删除 / 清空时，连带删除本地图片文件（文件 I/O 归主进程）
-ipcMain.handle('clipboard:deleteImages', async (event, paths) => {
-  if (!Array.isArray(paths)) return;
-  for (const p of paths) {
-    const safePath = getSafeClipImagePath(p);
-    if (safePath) {
-      try {
-        await fs.promises.unlink(safePath);
-      } catch (e) {
-        // 文件已不存在等，静默
-      }
-    }
-  }
-});
-
 function waitForCollapsedPanel(timeoutMs = 950) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve) => {
@@ -3375,21 +3349,17 @@ function pasteToPreviousApp(target) {
   });
 }
 
-ipcMain.handle('clipboard:write', (event, entry) => writeClipboardEntry(entry));
-
-// 点击历史项后先收起灵动岛，再回到打开面板前的应用执行粘贴。
-// 若系统尚未授予辅助功能权限，内容仍保留在系统剪贴板作为可靠降级。
-ipcMain.handle('clipboard:paste', async (event, entry) => {
-  if (!await writeClipboardEntry(entry)) return { ok: false, pasted: false };
-  if (!PLATFORM_CAPABILITIES.automaticPaste) return { ok: true, pasted: false };
-  if (process.platform === 'darwin' && !systemPreferences.isTrustedAccessibilityClient(true)) {
-    return { ok: true, pasted: false, permissionRequired: true };
-  }
-  const target = previousPasteTarget;
-  requestRendererCollapse();
-  await waitForCollapsedPanel();
-  const pasted = await pasteToPreviousApp(target);
-  return { ok: true, pasted };
+registerClipboardIpc({
+  ipcMain,
+  fs,
+  getSafeClipImagePath,
+  writeClipboardEntry,
+  automaticPaste: PLATFORM_CAPABILITIES.automaticPaste,
+  isAccessibilityTrusted: () => process.platform !== 'darwin' || systemPreferences.isTrustedAccessibilityClient(true),
+  getPreviousPasteTarget: () => previousPasteTarget,
+  requestRendererCollapse,
+  waitForCollapsedPanel,
+  pasteToPreviousApp,
 });
 
 function ensureFirstRunAutoLaunch() {
