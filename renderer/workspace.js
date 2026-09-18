@@ -368,9 +368,6 @@
   let mediaStream = null;
   let mediaRecorder = null;
   let audioChunks = [];
-  let speechRecognition = null;
-  let speechRecognitionBlocked = false;
-  let speechRecognitionError = '';
   let recordingStatus = 'idle';
   let audioCaptureReserved = false;
   function releaseAudioCapture() {
@@ -417,13 +414,6 @@
   let removeAsrOnSave = false;
   let removeContentOnSave = false;
   let aiSettingsDirty = false;
-  let transcriptionStatus = 'idle';
-  let transcriptionStartPromise = null;
-  let transcriptionAudioContext = null;
-  let transcriptionAudioSource = null;
-  let transcriptionAudioProcessor = null;
-  let transcriptionAudioMute = null;
-  let transcriptionPcmQueue = [];
   let transcriptionFinishPromise = null;
   let strandsAudioContext = null;
   let strandsAudioSource = null;
@@ -1040,11 +1030,10 @@
     if (
       transcriptionConfig.configured
       && ['recording', 'paused'].includes(recordingStatus)
-      && !transcriptionStartPromise
+      && !transcriptionPipeline.hasCloudSession()
     ) {
-      stopSpeechRecognition();
-      transcriptionStatus = 'idle';
-      transcriptionStartPromise = startCloudTranscription();
+      transcriptionPipeline.stopBrowser();
+      transcriptionPipeline.startCloud(mediaStream);
     }
     updateRecordingUi();
     renderSettingsPanel();
@@ -1077,9 +1066,9 @@
     if (recordingCaptureIssue) return recordingCaptureIssue;
     if (recordingStatus === 'saving') return '正在保存录音…';
     if (transcriptionConfig.asrNeedsReentry) return '转写密钥已失效 · 请重新配置 API Key';
-    if (transcriptionStatus === 'browser-error') return '未配置转写 API · 音频仍在录制';
-    if (transcriptionStatus === 'error') return '转写连接失败 · 音频仍在录制';
-    if (transcriptionStatus === 'connecting') return '正在连接转写服务';
+    if (transcriptionPipeline.status() === 'browser-error') return '未配置转写 API · 音频仍在录制';
+    if (transcriptionPipeline.status() === 'error') return '转写连接失败 · 音频仍在录制';
+    if (transcriptionPipeline.status() === 'connecting') return '正在连接转写服务';
     if (recordingStatus === 'paused') return '录音已暂停';
     if (!transcriptionConfig.configured && !currentRecordingText()) return '未配置转写 API · 音频仍会保存在本机';
     return '正在录音';
@@ -1146,121 +1135,17 @@
     if (detailStop) detailStop.disabled = recordingStatus === 'saving';
   }
 
-  function stopTranscriptionAudioPipeline() {
-    if (transcriptionAudioProcessor) {
-      transcriptionAudioProcessor.onaudioprocess = null;
-      try { transcriptionAudioProcessor.disconnect(); } catch (error) {}
-    }
-    if (transcriptionAudioSource) {
-      try { transcriptionAudioSource.disconnect(); } catch (error) {}
-    }
-    if (transcriptionAudioMute) {
-      try { transcriptionAudioMute.disconnect(); } catch (error) {}
-    }
-    if (transcriptionAudioContext) transcriptionAudioContext.close().catch(() => {});
-    transcriptionAudioContext = null;
-    transcriptionAudioSource = null;
-    transcriptionAudioProcessor = null;
-    transcriptionAudioMute = null;
-    transcriptionPcmQueue = [];
-  }
-
-  function sendTranscriptionPcm(buffer) {
-    if (!buffer || !buffer.byteLength || !window.notchAPI) return;
-    if (transcriptionStatus === 'connected') {
-      window.notchAPI.sendTranscriptionAudio(buffer);
-      return;
-    }
-    if (transcriptionStatus === 'connecting') {
-      transcriptionPcmQueue.push(buffer);
-      if (transcriptionPcmQueue.length > 60) transcriptionPcmQueue.shift();
-    }
-  }
-
-  function startTranscriptionAudioPipeline(stream) {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContext || !stream) return false;
-    try {
-      transcriptionAudioContext = new AudioContext({ sampleRate: 16000 });
-      transcriptionAudioSource = transcriptionAudioContext.createMediaStreamSource(stream);
-      transcriptionAudioProcessor = transcriptionAudioContext.createScriptProcessor(4096, 1, 1);
-      transcriptionAudioMute = transcriptionAudioContext.createGain();
-      transcriptionAudioMute.gain.value = 0;
-      transcriptionAudioProcessor.onaudioprocess = (event) => {
-        if (recordingStatus !== 'recording') return;
-        const source = event.inputBuffer.getChannelData(0);
-        const pcm = Domain.resampleFloat32ToPcm16(source, transcriptionAudioContext.sampleRate, 16000);
-        sendTranscriptionPcm(pcm.buffer);
-      };
-      transcriptionAudioSource.connect(transcriptionAudioProcessor);
-      transcriptionAudioProcessor.connect(transcriptionAudioMute);
-      transcriptionAudioMute.connect(transcriptionAudioContext.destination);
-      return true;
-    } catch (error) {
-      stopTranscriptionAudioPipeline();
-      return false;
-    }
-  }
-
-  async function startCloudTranscription() {
-    if (!transcriptionConfig.configured || !window.notchAPI || !mediaStream) return { ok: false, error: 'not_configured' };
-    transcriptionStatus = 'connecting';
-    transcriptionPcmQueue = [];
-    startTranscriptionAudioPipeline(mediaStream);
-    updateRecordingUi();
-    let result;
-    try {
-      result = await window.notchAPI.startTranscription();
-    } catch (error) {
-      result = { ok: false, error: 'connection_failed' };
-    }
-    if (!result || !result.ok) {
-      transcriptionStatus = 'error';
-      stopTranscriptionAudioPipeline();
-      updateRecordingUi();
-      return result || { ok: false };
-    }
-    transcriptionStatus = 'connected';
-    const queued = transcriptionPcmQueue;
-    transcriptionPcmQueue = [];
-    queued.forEach((buffer) => window.notchAPI.sendTranscriptionAudio(buffer));
-    updateRecordingUi();
-    return result;
-  }
-
-  async function finishCloudTranscription() {
-    if (!transcriptionStartPromise) return { ok: false, error: 'not_active', transcript: recordingTranscript };
-    stopTranscriptionAudioPipeline();
-    await transcriptionStartPromise;
-    transcriptionStartPromise = null;
-    if (transcriptionStatus !== 'connected') return { ok: false, error: 'not_connected', transcript: recordingTranscript };
-    transcriptionStatus = 'finishing';
-    updateRecordingUi();
-    let result;
-    try {
-      result = await window.notchAPI.finishTranscription();
-    } catch (error) {
-      result = { ok: false, error: 'finish_failed', transcript: recordingTranscript };
-    }
-    if (result && result.transcript) recordingTranscript = result.transcript;
-    transcriptionStatus = result && result.ok ? 'idle' : 'error';
-    interimTranscript = '';
-    updateRecordingUi();
-    return result;
-  }
-
-  if (window.notchAPI && typeof window.notchAPI.onTranscriptionEvent === 'function') {
-    window.notchAPI.onTranscriptionEvent((event) => {
-      if (!event || !['recording', 'paused', 'saving'].includes(recordingStatus)) return;
-      if (event.type === 'transcript') {
-        recordingTranscript = String(event.final || '').trim();
-        interimTranscript = String(event.interim || '').trim();
-      } else if (event.type === 'error') {
-        transcriptionStatus = 'error';
-      }
-      updateRecordingUi();
-    });
-  }
+  const transcriptionPipeline = window.NotchWorkspaceTranscriptionPipeline.createPipeline({
+    Domain,
+    getConfig: () => transcriptionConfig,
+    getStream: () => mediaStream,
+    getRecordingStatus: () => recordingStatus,
+    getTranscript: () => recordingTranscript,
+    setTranscript: (value) => { recordingTranscript = value; },
+    getInterimTranscript: () => interimTranscript,
+    setInterimTranscript: (value) => { interimTranscript = value; },
+    updateUi: () => updateRecordingUi(),
+  });
 
   function updateRecordingUi() {
     const recordingActive = isRecordingActive();
@@ -1309,62 +1194,6 @@
     document.dispatchEvent(new CustomEvent('notch:recording-state-changed', {
       detail: { active: recordingBusy },
     }));
-  }
-
-  function stopSpeechRecognition() {
-    const recognition = speechRecognition;
-    speechRecognition = null;
-    if (recognition) {
-      try { recognition.stop(); } catch (error) {}
-    }
-    interimTranscript = '';
-  }
-
-  function startSpeechRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      transcriptionStatus = 'browser-error';
-      updateRecordingUi();
-      return;
-    }
-    if (speechRecognitionBlocked || recordingStatus !== 'recording') return;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'zh-CN';
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.onresult = (event) => {
-      interimTranscript = '';
-      for (let index = event.resultIndex; index < event.results.length; index++) {
-        const text = String(event.results[index][0] && event.results[index][0].transcript || '').trim();
-        if (!text) continue;
-        if (event.results[index].isFinal) {
-          recordingTranscript = `${recordingTranscript} ${text}`.trim();
-        } else {
-          interimTranscript = `${interimTranscript} ${text}`.trim();
-        }
-      }
-      updateRecordingUi();
-    };
-    recognition.onerror = (event) => {
-      interimTranscript = '';
-      speechRecognitionError = String(event && event.error || 'unknown');
-      if (['network', 'not-allowed', 'service-not-allowed', 'audio-capture'].includes(speechRecognitionError)) {
-        speechRecognitionBlocked = true;
-        transcriptionStatus = 'browser-error';
-      }
-      updateRecordingUi();
-    };
-    recognition.onend = () => {
-      if (speechRecognition !== recognition) return;
-      speechRecognition = null;
-      if (recordingStatus === 'recording' && !speechRecognitionBlocked) setTimeout(startSpeechRecognition, 180);
-    };
-    speechRecognition = recognition;
-    try {
-      recognition.start();
-    } catch (error) {
-      speechRecognition = null;
-    }
   }
 
   function stopMediaTracks() {
@@ -1500,8 +1329,7 @@
       audioChunks = [];
       recordingTranscript = '';
       interimTranscript = '';
-      speechRecognitionBlocked = false;
-      speechRecognitionError = '';
+      transcriptionPipeline.reset();
       recordingStartedAt = Date.now();
       recordingStopDurationMs = 0;
       pausedTotalMs = 0;
@@ -1524,14 +1352,12 @@
       };
       mediaRecorder.start(1000);
       recordingStatus = 'recording';
-      transcriptionStatus = 'idle';
-      transcriptionStartPromise = null;
       transcriptionFinishPromise = null;
       beginRecordingDraft();
       if (transcriptionConfig.configured) {
-        transcriptionStartPromise = startCloudTranscription();
+        transcriptionPipeline.startCloud(mediaStream);
       } else {
-        startSpeechRecognition();
+        transcriptionPipeline.startBrowser();
       }
       clearInterval(recordingTimer);
       recordingTimer = setInterval(updateRecordingUi, 500);
@@ -1560,13 +1386,13 @@
       mediaRecorder.pause();
       pausedAt = Date.now();
       recordingStatus = 'paused';
-      if (!transcriptionConfig.configured) stopSpeechRecognition();
+      if (!transcriptionConfig.configured) transcriptionPipeline.stopBrowser();
     } else if (recordingStatus === 'paused') {
       pausedTotalMs += Date.now() - pausedAt;
       pausedAt = 0;
       mediaRecorder.resume();
       recordingStatus = 'recording';
-      if (!transcriptionConfig.configured) startSpeechRecognition();
+      if (!transcriptionConfig.configured) transcriptionPipeline.startBrowser();
     }
     updateRecordingUi();
   }
@@ -1575,9 +1401,9 @@
     if (!mediaRecorder || !['recording', 'paused'].includes(recordingStatus)) return;
     recordingStopDurationMs = currentDuration();
     recordingStatus = 'saving';
-    stopSpeechRecognition();
-    transcriptionFinishPromise = transcriptionStartPromise
-      ? finishCloudTranscription()
+    transcriptionPipeline.stopBrowser();
+    transcriptionFinishPromise = transcriptionPipeline.hasCloudSession()
+      ? transcriptionPipeline.finishCloud()
       : Promise.resolve({ ok: false, error: 'not_active', transcript: recordingTranscript });
     clearInterval(recordingTimer);
     recordingTimer = null;
@@ -1992,9 +1818,7 @@
 
   window.addEventListener('beforeunload', () => {
     releaseAudioCapture();
-    stopSpeechRecognition();
-    stopTranscriptionAudioPipeline();
-    if (transcriptionStartPromise && window.notchAPI) window.notchAPI.finishTranscription().catch(() => {});
+    transcriptionPipeline.dispose();
     stopMediaTracks();
     recordingsView.dispose();
   });

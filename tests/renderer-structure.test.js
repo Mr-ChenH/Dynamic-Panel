@@ -26,6 +26,7 @@ const workspaceLinksDragJs = fs.readFileSync(path.join(__dirname, '..', 'rendere
 const workspaceLinksApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-api.js'), 'utf8');
 const workspaceRecordingsApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-api.js'), 'utf8');
 const workspaceRecordingsViewJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-view.js'), 'utf8');
+const workspaceTranscriptionPipelineJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-transcription-pipeline.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -128,6 +129,17 @@ test('recording library rendering and audio URL ownership stay outside the works
   assert.match(workspaceJs, /NotchWorkspaceRecordingsView\.createView/);
   assert.doesNotMatch(workspaceJs, /function renderRecordingDetail\(/);
   assert.doesNotMatch(workspaceJs, /let currentAudioUrl/);
+});
+
+test('cloud and browser transcription pipelines stay outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-transcription-pipeline.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceTranscriptionPipelineJs, /startAudioPipeline/);
+  assert.match(workspaceTranscriptionPipelineJs, /startCloud/);
+  assert.match(workspaceTranscriptionPipelineJs, /startBrowser/);
+  assert.match(workspaceTranscriptionPipelineJs, /onTranscriptionEvent/);
+  assert.match(workspaceJs, /NotchWorkspaceTranscriptionPipeline\.createPipeline/);
+  assert.doesNotMatch(workspaceJs, /function startCloudTranscription\(/);
+  assert.doesNotMatch(workspaceJs, /let speechRecognition/);
 });
 
 test('credential storage and selection state stay outside the workspace coordinator', () => {
