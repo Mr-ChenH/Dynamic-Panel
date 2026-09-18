@@ -23,6 +23,7 @@ const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effect
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
 const credentialsCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'credentials.css'), 'utf8');
 const todoPlannerCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-planner.css'), 'utf8');
+const todoListCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-list.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
 const aiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.js'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'settings.js'), 'utf8');
@@ -84,6 +85,15 @@ test('todo time-range planner styles load outside the shell stylesheet', () => {
   assert.doesNotMatch(stylesCss, /\.todo-planner-bar \{/);
 });
 
+test('todo list and completed disclosure styles load outside the shell stylesheet', () => {
+  assert.ok(html.indexOf('todo-list.css') < html.indexOf('launcher.css'));
+  assert.match(todoListCss, /\.todo-completed-disclosure/);
+  assert.match(todoListCss, /\.todo-reschedule-action/);
+  assert.match(todoListCss, /\.todo-add-button/);
+  assert.doesNotMatch(stylesCss, /DDL 与文字分两层/);
+  assert.doesNotMatch(stylesCss, /\.todo-completed-disclosure button \{/);
+});
+
 test('light theme covers weather surfaces and preserves weather accents', () => {
   assert.match(homeCss, /:root\[data-theme='light'\] \.home-weather/);
   assert.match(homeCss, /:root\[data-theme='light'\] \.weather-detail-hero/);
@@ -122,7 +132,7 @@ test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', (
   assert.match(appJs, /defaultTodoDeadlineForScope\(todoTimeScope/);
   assert.match(appJs, /window\.addEventListener\('focus', refreshTodoTemporalView\)/);
   assert.match(todoPlannerCss, /\.todo-scope-control/);
-  assert.match(stylesCss, /\.todo-completed-disclosure/);
+  assert.match(todoListCss, /\.todo-completed-disclosure/);
   assert.doesNotMatch(appJs, /localStorage\.setItem\([^\n]*todo-time-scope/);
 });
 
