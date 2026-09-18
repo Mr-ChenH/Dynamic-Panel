@@ -21,6 +21,7 @@ const workspaceCredentialsJs = fs.readFileSync(path.join(__dirname, '..', 'rende
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
+const credentialsCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'credentials.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
 const aiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.js'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'settings.js'), 'utf8');
@@ -63,6 +64,15 @@ test('credential storage and selection state stay outside the workspace coordina
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
   assert.match(appJs, /const starFilledSvg\s*=/);
+});
+
+test('credential styles load as a dedicated module while shared theme selectors remain in the shell stylesheet', () => {
+  assert.ok(html.indexOf('credentials.css') < html.indexOf('launcher.css'));
+  assert.match(credentialsCss, /\.credentials-page/);
+  assert.match(credentialsCss, /\.credential-item\.editing/);
+  assert.match(credentialsCss, /data-theme='light'/);
+  assert.doesNotMatch(stylesCss, /\/\* ============ 密钥库 ============ \*\//);
+  assert.doesNotMatch(stylesCss, /\.credential-item\.editing \{/);
 });
 
 test('light theme covers weather surfaces and preserves weather accents', () => {
