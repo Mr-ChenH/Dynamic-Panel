@@ -415,6 +415,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `tests/launcher-ipc.test.js`
 - 新增 `renderer/app-shell.js`，迁移工作区快照同步、恢复和全局 Toast；新增 `renderer/todo-data.js`，迁移待办 LocalStorage 规范化和提醒同步
 - 新增 `renderer/workspace-commands.js`，迁移常用指令列表、批量选择、编辑、复制和删除逻辑；workspace 主 IIFE 不再持有指令状态
+- 新增 `renderer/dock-effects.js`，迁移当前窗口 Dock 悬浮缩放与回位动效；`app.js` 不再持有无状态视觉动效实现
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 当前约 2840 行，直接 `ipcMain` 注册仅剩待办提醒控制器边界
 - 完整 `npm test` 当前为 321 项：320 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
