@@ -33,7 +33,8 @@
 .settings-organized .settings-shortcut-list .settings-device-row:last-child { border-bottom: 0; }
 .settings-organized :is(#settings-shortcut-value, #settings-launcher-shortcut-value, #settings-screenshot-shortcut-value, #settings-video-shortcut-value, #settings-audio-shortcut-value) { color: var(--text-1); font-family: var(--font-mono); }
 .settings-organized .settings-device-row button, .settings-organized .settings-default-tab-row select { min-height: 32px; padding: 5px 12px; font-size: var(--fs-small); }
-.settings-theme-switch { flex: 0 0 auto !important; display: inline-flex; flex-direction: row; align-items: stretch; gap: 0; padding: 3px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface-2); }
+.settings-theme-switch,
+.settings-organized .settings-device-row > .settings-theme-switch { flex: 0 0 auto !important; display: inline-flex; flex-direction: row; align-items: stretch; gap: 0; padding: 3px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface-2); }
 .settings-theme-switch button { min-width: 58px; border: 0; border-radius: 7px; background: transparent; color: var(--text-3); font: var(--fs-small) var(--font); cursor: pointer; transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease), box-shadow var(--d-fast) var(--ease); }
 .settings-theme-switch button:hover:not(:disabled) { color: var(--text-1); background: var(--surface-3); }
 .settings-theme-switch button[aria-pressed='true'] { background: var(--surface-1); color: var(--text-1); box-shadow: 0 1px 3px var(--panel-shadow); }
