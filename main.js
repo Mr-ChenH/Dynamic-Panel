@@ -32,6 +32,8 @@ const { createAIService } = require('./ai/service');
 const { createFinanceService } = require('./finance-service');
 const { registerCaptureScheme, createCaptureService } = require('./captureService');
 const { copyCaptures } = require('./captureStorage');
+const { createWindowGeometry } = require('./main/window-geometry');
+const { createNetworkSecurity } = require('./main/network-security');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -372,85 +374,29 @@ if (!gotTheLock) {
   });
 }
 
-// 多屏适配：定位到"鼠标当前所在屏"的物理顶端居中
-// 这样接上外接屏后，无论副屏在主屏的左/右/上/下，刘海都跟着用户视线走
-function getTargetDisplay() {
-  try {
-    const cursor = screen.getCursorScreenPoint();
-    return screen.getDisplayNearestPoint(cursor);
-  } catch (e) {
-    return screen.getPrimaryDisplay();
-  }
-}
-
-// 窗口当前所在屏：模式切换 / Tab 变形必须锚定在这块屏上。
-// 若跟随光标（getTargetDisplay），失焦收起瞬间会把刘海"瞬移"到光标所在的另一块屏。
-function getWindowDisplay() {
-  try {
-    if (mainWindow) return screen.getDisplayMatching(mainWindow.getBounds());
-  } catch (e) {
-    // fallthrough
-  }
-  return getTargetDisplay();
-}
-
-function getCenteredBounds(width, height, display) {
-  const d = display || getTargetDisplay();
-  const area = process.platform === 'win32' ? d.workArea : d.bounds;
-  return {
-    x: Math.round(area.x + (area.width - width) / 2),
-    y: area.y,
-    width,
-    height,
-  };
-}
-
-// macOS 菜单栏会拦截其高度带内的所有鼠标点击（即使窗口绘制在其上方），
-// 刘海屏机型菜单栏高约 37pt，等于物理刘海高度。
-function getMenuBarHeight(display) {
-  return Math.max(0, display.workArea.y - display.bounds.y);
-}
-
-function getCollapsedHeight(display) {
-  if (process.platform === 'win32') return COLLAPSED_MIN_HEIGHT;
-  const mb = getMenuBarHeight(display);
-  // 折叠条高度恰好等于菜单栏带（≈物理刘海高），一个像素都不超出物理刘海。
-  // 无刘海的外接屏 menuBarHeight 仍是真实菜单栏高，能正常露头；
-  // 异常取到 0 才回退兜底（COLLAPSED_MIN_HEIGHT = 38px）。
-  return mb > 0 ? mb : COLLAPSED_MIN_HEIGHT;
-}
-
-// 展开尺寸按当前 Tab 取值；宽度超出屏幕时 clamp 到工作区内。
-// 窗口从屏幕最顶垂下（y=0），内容直接顶到最上沿，高度不含菜单栏带。
-function getExpandedSize(display) {
-  const size = TAB_SIZES[currentTab] || TAB_SIZES.home;
-  return {
-    width: Math.min(size.width, display.workArea.width - SCREEN_MARGIN),
-    height: Math.min(
-      EXPANDED_CHROME_Y + size.panelHeight,
-      Math.max(getCollapsedHeight(display), display.bounds.height - SCREEN_MARGIN)
-    ),
-  };
-}
-
-// display 不传时锚定窗口当前所在屏；只有"召唤"类动作（启动/重新居中/显示）才传光标屏。
-// 一律瞬时 setBounds：系统动画 resize 会持续重绘 web 内容（卡顿）。
-// 原生窗口只提供透明画布，用户可见的岛体形变交给渲染层 CSS。
-function getBoundsForMode(mode, display) {
-  const d = display || getWindowDisplay();
-  if (mode === 'launcher') {
-    const area = process.platform === 'win32' ? d.workArea : d.bounds;
-    const canvas = process.platform === 'win32' ? platformPolicy.panelBounds('win32', d, true) : { width: area.width - 24, height: area.height - 24 };
-    const width = Math.max(1, Math.min(640, canvas.width));
-    return { x: Math.round(area.x + (area.width - width) / 2), y: area.y, width, height: Math.max(1, Math.min(520, canvas.height)) };
-  }
-  if (process.platform === 'win32') return platformPolicy.panelBounds(process.platform, d, mode === 'expanded');
-  if (mode === 'expanded') {
-    const { width, height } = getExpandedSize(d);
-    return getCenteredBounds(width, height, d);
-  }
-  return getCenteredBounds(COLLAPSED_WIDTH, getCollapsedHeight(d), d);
-}
+const windowGeometry = createWindowGeometry({
+  screen,
+  platformPolicy,
+  platform: process.platform,
+  collapsedWidth: COLLAPSED_WIDTH,
+  collapsedMinHeight: COLLAPSED_MIN_HEIGHT,
+  expandedChromeY: EXPANDED_CHROME_Y,
+  screenMargin: SCREEN_MARGIN,
+  tabSizes: TAB_SIZES,
+  getCurrentTab: () => currentTab,
+  getMainWindow: () => mainWindow,
+  isCollapsedHovering: () => windowsCollapsedHovering,
+});
+const {
+  getTargetDisplay,
+  getWindowDisplay,
+  getCenteredBounds,
+  getMenuBarHeight,
+  getCollapsedHeight,
+  getExpandedSize,
+  getBoundsForMode,
+  applyWindowGeometry,
+} = windowGeometry;
 
 function cancelCollapseWatchdog() {
   collapseGeneration++;
@@ -513,26 +459,6 @@ function repositionWindow(display) {
     applyWindowGeometry('collapsed', display);
     target.setOpacity(1);
   }, policy.settleDelayMs);
-}
-
-function applyWindowGeometry(mode, display) {
-  if (process.platform !== 'win32') {
-    mainWindow.setBounds(getBoundsForMode(mode, display));
-    return;
-  }
-  const layout = platformPolicy.windowsPanelLayout(
-    display || getWindowDisplay(),
-    mode === 'expanded',
-    mode === 'collapsed' && windowsCollapsedHovering
-  );
-  const current = mainWindow.getBounds();
-  if (['x', 'y', 'width', 'height'].some((key) => current[key] !== layout.bounds[key])) {
-    mainWindow.setBounds(layout.bounds, false);
-  }
-  if (mode === 'launcher') {
-    const launcherBounds = getBoundsForMode('launcher', display);
-    mainWindow.setShape([{ x: Math.round((layout.bounds.width - launcherBounds.width) / 2), y: 0, width: launcherBounds.width, height: launcherBounds.height }]);
-  } else mainWindow.setShape(layout.shape);
 }
 
 function beginNativeCollapse() {
@@ -2449,71 +2375,17 @@ async function promptForMissingPermissions() {
   shell.openExternal(PRIVACY_SETTINGS_PANES[missing[0]]);
 }
 
-async function validatePublicHttpUrl(value) {
-  let url;
-  try {
-    url = new URL(value);
-  } catch (error) {
-    return null;
-  }
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
-  const hostname = url.hostname.toLowerCase();
-  if (!hostname || hostname === 'localhost' || hostname.endsWith('.local')) return null;
-  let addresses;
-  try {
-    addresses = await dns.promises.lookup(hostname, { all: true, verbatim: true });
-  } catch (error) {
-    return null;
-  }
-  if (!addresses.length || addresses.some((item) => isPrivateAddress(item.address))) return null;
-  return url;
-}
-
-async function resolvePinnedAIEndpoint(value) {
-  let url;
-  try { url = new URL(value); } catch (error) { return null; }
-  if (url.protocol !== 'https:' || url.username || url.password) return null;
-  const hostname = url.hostname.toLowerCase();
-  if (!hostname || hostname === 'localhost' || hostname.endsWith('.local')) return null;
-  let addresses;
-  try { addresses = await dns.promises.lookup(hostname, { all: true, verbatim: true }); }
-  catch (error) { return null; }
-  const publicAddresses = addresses.filter((item) => !isPrivateAddress(item.address));
-  if (!publicAddresses.length || publicAddresses.length !== addresses.length) return null;
-  return { url: url.toString(), address: publicAddresses[0].address, family: publicAddresses[0].family };
-}
-
-function fetchPinnedAIEndpoint(endpoint, options = {}) {
-  if (!endpoint || typeof endpoint !== 'object' || !endpoint.url || !endpoint.address) return fetch(String(endpoint || ''), options);
-  const url = new URL(endpoint.url);
-  return new Promise((resolve, reject) => {
-    const request = https.request({
-      protocol: 'https:',
-      hostname: url.hostname,
-      port: url.port || 443,
-      path: `${url.pathname}${url.search}`,
-      method: options.method || 'GET',
-      headers: options.headers,
-      servername: url.hostname,
-      lookup: (_hostname, lookupOptions, callback) => {
-        if (lookupOptions?.all) callback(null, [{ address: endpoint.address, family: endpoint.family }]);
-        else callback(null, endpoint.address, endpoint.family);
-      },
-    }, (response) => {
-      const headers = { get: (name) => response.headers[String(name || '').toLowerCase()] || null };
-      resolve({ ok: response.statusCode >= 200 && response.statusCode < 300, status: response.statusCode || 0, headers, body: Readable.toWeb(response) });
-    });
-    request.once('error', reject);
-    const onAbort = () => request.destroy(Object.assign(new Error('aborted'), { name: 'AbortError' }));
-    if (options.signal) {
-      if (options.signal.aborted) { onAbort(); return; }
-      options.signal.addEventListener('abort', onAbort, { once: true });
-      request.once('close', () => options.signal.removeEventListener('abort', onAbort));
-    }
-    if (options.body) request.write(options.body);
-    request.end();
-  });
-}
+const networkSecurity = createNetworkSecurity({
+  dns,
+  https,
+  readable: Readable,
+  isPrivateAddress,
+});
+const {
+  validatePublicHttpUrl,
+  resolvePinnedAIEndpoint,
+  fetchPinnedAIEndpoint,
+} = networkSecurity;
 
 async function requestFinanceJson(value, options = {}) {
   let url;
