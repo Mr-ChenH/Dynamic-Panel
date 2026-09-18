@@ -1,4 +1,3 @@
-const STORAGE_KEY = 'notch-todo-data';
 const PRIORITIES = ['P0', 'P1', 'P2', 'P3'];
 const TODO_CATEGORY_KEY = 'notch-todo-category-names-v1';
 const TODO_CATEGORY_DEFAULTS = {
@@ -19,64 +18,7 @@ app.dataset.platform = window.notchAPI?.platform || 'darwin';
 const notch = document.getElementById('notch');
 const panel = document.getElementById('panel');
 
-function loadData() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { P0: [], P1: [], P2: [], P3: [] };
-    const parsed = JSON.parse(raw);
-    return {
-      P0: normalizeTodoItems(parsed && parsed.P0),
-      P1: normalizeTodoItems(parsed && parsed.P1),
-      P2: normalizeTodoItems(parsed && parsed.P2),
-      P3: normalizeTodoItems(parsed && parsed.P3),
-    };
-  } catch (e) {
-    return { P0: [], P1: [], P2: [], P3: [] };
-  }
-}
-
-function normalizeTodoItems(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (typeof item === 'string') {
-        const text = item.trim();
-        return text
-          ? { id: generateId(), text, done: false, createdAt: Date.now() }
-          : null;
-      }
-      if (!item || typeof item !== 'object' || typeof item.text !== 'string') return null;
-      const text = item.text.trim();
-      if (!text) return null;
-      return {
-        id: typeof item.id === 'string' && item.id ? item.id : generateId(),
-        text,
-        done: item.done === true,
-        createdAt: Number.isFinite(item.createdAt) ? item.createdAt : Date.now(),
-        deadline: Number.isFinite(Date.parse(String(item.deadline || '')))
-          ? new Date(Date.parse(String(item.deadline))).toISOString()
-          : '',
-        remindedAt: Math.max(0, Number(item.remindedAt) || 0),
-      };
-    })
-    .filter(Boolean);
-}
-
-function saveData(data) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    return false;
-  }
-  if (window.notchAPI && typeof window.notchAPI.scheduleTodoReminders === 'function') {
-    const reminders = PRIORITIES.flatMap((priority) => data[priority] || []);
-    window.notchAPI.scheduleTodoReminders(reminders).catch(() => {});
-  }
-  if (typeof renderTodoPlanner === 'function') renderTodoPlanner();
-  return true;
-}
-
-let data = loadData();
+var data = loadData();
 let todoCategoryNames = loadTodoCategoryNames();
 const todoSelections = Object.fromEntries(PRIORITIES.map((priority) => [priority, new Set()]));
 const todoSelectionAnchors = Object.fromEntries(PRIORITIES.map((priority) => [priority, null]));
@@ -88,10 +30,6 @@ const todoScopeButtons = Array.from(document.querySelectorAll('[data-todo-scope]
 const todoScopePeriod = document.getElementById('todo-scope-period');
 const todoOverdueJump = document.getElementById('todo-overdue-jump');
 const todoOverdueCount = document.getElementById('todo-overdue-count');
-
-function allTodoItems() {
-  return PRIORITIES.flatMap((priority) => data[priority] || []);
-}
 
 function loadTodoCategoryNames() {
   try {
