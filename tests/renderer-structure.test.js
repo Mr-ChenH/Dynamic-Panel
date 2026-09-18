@@ -25,6 +25,7 @@ const workspaceLinksActionsJs = fs.readFileSync(path.join(__dirname, '..', 'rend
 const workspaceLinksDragJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-drag.js'), 'utf8');
 const workspaceLinksApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-api.js'), 'utf8');
 const workspaceRecordingsApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-api.js'), 'utf8');
+const workspaceRecordingsViewJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-view.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -117,6 +118,16 @@ test('workspace public APIs are split into link and recording adapters', () => {
   assert.match(workspaceJs, /const recordingsApi =/);
   assert.match(workspaceJs, /window\.NotchWorkspace = \{/);
   assert.doesNotMatch(workspaceJs, /async saveCapturedLink\(rawValue\)/);
+});
+
+test('recording library rendering and audio URL ownership stay outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-recordings-view.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceRecordingsViewJs, /renderDetail/);
+  assert.match(workspaceRecordingsViewJs, /renderList/);
+  assert.match(workspaceRecordingsViewJs, /currentAudioUrl/);
+  assert.match(workspaceJs, /NotchWorkspaceRecordingsView\.createView/);
+  assert.doesNotMatch(workspaceJs, /function renderRecordingDetail\(/);
+  assert.doesNotMatch(workspaceJs, /let currentAudioUrl/);
 });
 
 test('credential storage and selection state stay outside the workspace coordinator', () => {
@@ -338,13 +349,13 @@ test('home scratch note keeps only the save action', () => {
 test('recordings expose in-page API settings and create a live draft while recording', () => {
   assert.match(html, /id="recording-configure"/);
   assert.match(workspaceJs, /function beginRecordingDraft\(\)/);
-  assert.match(workspaceJs, /recordingLiveTranscript/);
-  assert.match(workspaceJs, /configure-transcription/);
+  assert.match(workspaceRecordingsViewJs, /recordingLiveTranscript/);
+  assert.match(workspaceRecordingsViewJs, /configure-transcription/);
 });
 
 test('a live recording can be paused, resumed, and stopped from the recordings tab', () => {
-  assert.match(workspaceJs, /recording-live-pause/);
-  assert.match(workspaceJs, /recording-live-stop/);
+  assert.match(workspaceRecordingsViewJs, /recording-live-pause/);
+  assert.match(workspaceRecordingsViewJs, /recording-live-stop/);
   assert.match(workspaceJs, /togglePauseRecording/);
   assert.match(workspaceJs, /stopRecording/);
 });
