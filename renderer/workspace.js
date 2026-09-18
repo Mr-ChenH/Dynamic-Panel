@@ -1450,7 +1450,13 @@
     if (settingsScreenshotShortcutValue) settingsScreenshotShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenshot);
     if (settingsVideoShortcutValue) settingsVideoShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenRecording);
     if (settingsAudioShortcutValue) settingsAudioShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.audioRecording);
-    if (settingsTheme) settingsTheme.value = settingsAppSettings?.theme === 'light' ? 'light' : 'dark';
+    if (settingsTheme) {
+      const theme = settingsAppSettings?.theme === 'light' ? 'light' : 'dark';
+      settingsTheme.querySelectorAll('[data-theme-value]').forEach((button) => {
+        const selected = button.dataset.themeValue === theme;
+        button.setAttribute('aria-pressed', String(selected));
+      });
+    }
     if (settingsDefaultTab) {
       const visibleTabs = new Set(Domain.visiblePanelTabs(
         ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings'],
@@ -2498,19 +2504,22 @@
   shortcutControls.forEach(([button, action, current]) => button?.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('notch:record-shortcut', { detail: { action, current: current() } }));
   }));
-  settingsTheme?.addEventListener('change', async () => {
-    if (!window.notchAPI?.setTheme) return;
-    settingsTheme.disabled = true;
-    const result = await window.notchAPI.setTheme(settingsTheme.value).catch(() => ({ ok: false }));
-    settingsTheme.disabled = false;
+  settingsTheme?.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-theme-value]');
+    if (!button || button.disabled || !window.notchAPI?.setTheme) return;
+    const theme = button.dataset.themeValue === 'light' ? 'light' : 'dark';
+    const buttons = [...settingsTheme.querySelectorAll('[data-theme-value]')];
+    buttons.forEach((item) => { item.disabled = true; });
+    const result = await window.notchAPI.setTheme(theme).catch(() => ({ ok: false }));
+    buttons.forEach((item) => { item.disabled = false; });
     if (!result?.ok) {
-      settingsTheme.value = settingsAppSettings?.theme === 'light' ? 'light' : 'dark';
+      renderSettingsPanel();
       setSettingsNote('主题设置保存失败，请重试。', true);
       return;
     }
     settingsAppSettings = result.settings || settingsAppSettings;
     renderSettingsPanel();
-    setSettingsNote(settingsTheme.value === 'light' ? '已切换为亮色主题。' : '已切换为深色主题。');
+    setSettingsNote(theme === 'light' ? '已切换为亮色主题。' : '已切换为深色主题。');
   });
   settingsDefaultTab?.addEventListener('change', async () => {
     if (!window.notchAPI?.setDefaultTab) return;
