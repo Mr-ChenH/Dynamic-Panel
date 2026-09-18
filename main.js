@@ -41,6 +41,7 @@ const { createTaskNotificationServer } = require('./main/task-notification-serve
 const { createTaskNotificationDomain } = require('./main/task-notification-domain');
 const { createTaskNotificationQueue } = require('./main/task-notification-queue');
 const { createTaskNotificationTimers } = require('./main/task-notification-timers');
+const { createTaskNotificationWindowState } = require('./main/task-notification-window-state');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -315,9 +316,6 @@ let transientSystemInteractionRequests = 0;
 const mediaPermissionCoordinator = createForegroundMediaPermissionCoordinator();
 
 let notificationWindow = null;
-let notificationWindowReady = false;
-let activeTaskNotification = null;
-let taskNotificationLeaving = false;
 let taskNotificationFallbackTimer = null;
 let todoReminderTimer = null;
 let scheduledTodoReminders = [];
@@ -517,17 +515,19 @@ function hideWindowAfterCollapse() {
 const taskNotificationDomain = createTaskNotificationDomain({ taskNotificationIdentity });
 const { normalize: normalizeTaskNotification } = taskNotificationDomain;
 
+const taskNotificationWindowState = createTaskNotificationWindowState();
+
 const taskNotificationTimers = createTaskNotificationTimers({
   visibleMs: TASK_NOTIFICATION_VISIBLE_MS,
-  isActive: () => Boolean(activeTaskNotification),
-  isLeaving: () => taskNotificationLeaving,
+  isActive: () => Boolean(taskNotificationWindowState.active()),
+  isLeaving: () => taskNotificationWindowState.isLeaving(),
   onDismiss: () => beginTaskNotificationDismiss(),
 });
 
 const taskNotificationQueue = createTaskNotificationQueue({
   dedupeMs: TASK_NOTIFICATION_DEDUPE_MS,
   maxQueue: TASK_NOTIFICATION_MAX_QUEUE,
-  isActive: () => Boolean(activeTaskNotification),
+  isActive: () => Boolean(taskNotificationWindowState.active()),
   onHistory: (notification) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('task-completion:new', notification);
@@ -545,8 +545,8 @@ function sendTaskNotificationQueueCount(count = getPendingTaskNotificationCount(
   if (
     !notificationWindow ||
     notificationWindow.isDestroyed() ||
-    !notificationWindowReady ||
-    !activeTaskNotification
+    !taskNotificationWindowState.isReady() ||
+    !taskNotificationWindowState.active()
   ) {
     return;
   }
@@ -648,12 +648,10 @@ function getTaskNotificationBounds(display) {
 
 function recoverClosedTaskNotificationWindow(targetWindow) {
   if (notificationWindow !== targetWindow) return;
-  const interruptedNotification = activeTaskNotification;
+  const interruptedNotification = taskNotificationWindowState.active();
   clearTaskNotificationTimers();
+  taskNotificationWindowState.recover();
   notificationWindow = null;
-  notificationWindowReady = false;
-  activeTaskNotification = null;
-  taskNotificationLeaving = false;
   taskNotificationTimers.reset();
   if (!isQuitting && interruptedNotification) {
     taskNotificationQueue.requeueFront(interruptedNotification);
@@ -664,7 +662,7 @@ function recoverClosedTaskNotificationWindow(targetWindow) {
 function createTaskNotificationWindow() {
   if (notificationWindow && !notificationWindow.isDestroyed()) return notificationWindow;
   const bounds = getTaskNotificationBounds();
-  notificationWindowReady = false;
+  taskNotificationWindowState.markNotReady();
   notificationWindow = new BrowserWindow({
     ...bounds,
     frame: false,
@@ -701,7 +699,7 @@ function createTaskNotificationWindow() {
 
   targetWindow.webContents.once('did-finish-load', () => {
     if (notificationWindow !== targetWindow || targetWindow.isDestroyed()) return;
-    notificationWindowReady = true;
+    taskNotificationWindowState.markReady();
     showNextTaskNotification();
   });
 
@@ -731,17 +729,17 @@ function setTaskNotificationPaused(paused) {
 }
 
 function showNextTaskNotification() {
-  if (activeTaskNotification || taskNotificationQueue.length() === 0 || isQuitting) return;
+  if (taskNotificationWindowState.active() || taskNotificationQueue.length() === 0 || isQuitting) return;
   const targetWindow = createTaskNotificationWindow();
-  if (!notificationWindowReady || !targetWindow || targetWindow.isDestroyed()) return;
+  if (!taskNotificationWindowState.isReady() || !targetWindow || targetWindow.isDestroyed()) return;
 
-  activeTaskNotification = taskNotificationQueue.takeNext();
-  taskNotificationLeaving = false;
+  const nextNotification = taskNotificationQueue.takeNext();
+  if (!taskNotificationWindowState.start(nextNotification)) return;
   taskNotificationTimers.reset();
   targetWindow.setBounds(getTaskNotificationBounds(getTargetDisplay()));
   targetWindow.showInactive();
   targetWindow.webContents.send('task-notification:show', {
-    ...activeTaskNotification,
+    ...taskNotificationWindowState.active(),
     pendingCount: getPendingTaskNotificationCount(),
     visibleMs: TASK_NOTIFICATION_VISIBLE_MS,
   });
@@ -749,11 +747,10 @@ function showNextTaskNotification() {
 }
 
 function beginTaskNotificationDismiss() {
-  if (!activeTaskNotification || taskNotificationLeaving) return;
-  taskNotificationLeaving = true;
+  const eventId = taskNotificationWindowState.beginLeaving();
+  if (!eventId) return;
   clearTaskNotificationTimers();
-  const eventId = activeTaskNotification.eventId;
-  if (notificationWindow && !notificationWindow.isDestroyed() && notificationWindowReady) {
+  if (notificationWindow && !notificationWindow.isDestroyed() && taskNotificationWindowState.isReady()) {
     notificationWindow.webContents.send('task-notification:hide', eventId);
   }
   taskNotificationFallbackTimer = setTimeout(
@@ -763,17 +760,16 @@ function beginTaskNotificationDismiss() {
 }
 
 function finishTaskNotification(eventId) {
-  if (!activeTaskNotification || activeTaskNotification.eventId !== eventId) return;
+  if (taskNotificationWindowState.active()?.eventId !== eventId) return;
   clearTaskNotificationTimers();
   const completedWindow = notificationWindow;
   if (completedWindow && !completedWindow.isDestroyed()) completedWindow.hide();
-  activeTaskNotification = null;
-  taskNotificationLeaving = false;
+  taskNotificationWindowState.finish(eventId);
   taskNotificationTimers.reset();
   setTimeout(() => {
     showNextTaskNotification();
     const policy = taskNotificationWindowPolicy({
-      active: Boolean(activeTaskNotification),
+      active: Boolean(taskNotificationWindowState.active()),
       queueLength: taskNotificationQueue.length(),
     });
     if (
@@ -2493,8 +2489,7 @@ function taskWindowMatchScore(notification, target) {
 }
 
 async function activateActiveTaskNotification(eventId = null) {
-  const notification = activeTaskNotification;
-  if (!notification || (eventId && notification.eventId !== eventId) || notification.source === 'todo') return false;
+  const notification = taskNotificationWindowState.active();  if (!notification || (eventId && notification.eventId !== eventId) || notification.source === 'todo') return false;
   const result = await scanCurrentWindows();
   const target = (result.items || [])
     .map((item) => ({ item, score: taskWindowMatchScore(notification, item) }))
