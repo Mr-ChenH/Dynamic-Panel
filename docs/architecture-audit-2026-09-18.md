@@ -413,5 +413,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `tests/task-notification-ipc.test.js`
 - 新增 `main/ipc/launcher.js`，迁移 launcher 的 14 个 IPC 通道；service、扩展数据、图标缓存、动作执行和 sender 校验均通过依赖注入
 - 新增 `tests/launcher-ipc.test.js`
+- 新增 `renderer/app-shell.js`，迁移工作区快照同步、恢复和全局 Toast；新增 `renderer/todo-data.js`，迁移待办 LocalStorage 规范化和提醒同步
+- `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 当前约 2840 行，直接 `ipcMain` 注册仅剩待办提醒控制器边界
 - 完整 `npm test` 当前为 321 项：320 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
