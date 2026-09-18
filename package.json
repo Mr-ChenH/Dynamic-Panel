@@ -41,6 +41,7 @@
       "captureWindowsScreen.js",
       "capturePreload.js",
       "platform.js",
+      "main/**/*.js",
       "launcher/**/*.js",
       "ai/**/*.js",
       "build/to-do-panel-icon.png",
