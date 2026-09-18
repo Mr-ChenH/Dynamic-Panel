@@ -56,6 +56,8 @@ const { registerHomeIpc } = require('./main/ipc/home');
 const { privacySettingsPanesFor, registerSystemIpc } = require('./main/ipc/system');
 const { createWorkspaceController } = require('./main/workspace-controller');
 const { registerWorkspaceIpc } = require('./main/ipc/workspace');
+const { createSettingsController } = require('./main/settings-controller');
+const { registerSettingsIpc } = require('./main/ipc/settings');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -1654,76 +1656,29 @@ ipcMain.on('window:set-collapsed-hover', (event, hovering) => {
   applyWindowGeometry('collapsed');
 });
 
-ipcMain.handle('settings:get', () => publicAppSettings());
-ipcMain.handle('settings:set-feature', (event, payload) => {
-  const current = readAppSettings();
-  const features = updateFeaturePreference(current.features, payload && payload.featureId, payload && payload.enabled);
-  if (!features) return { ok: false, error: 'invalid_feature' };
-  const next = { ...current, features };
-  if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
-  applyAppSettings();
-  refreshTrayMenu();
-  return { ok: true, settings: publicAppSettings() };
+const settingsController = createSettingsController({
+  readAppSettings,
+  saveAppSettings,
+  publicAppSettings,
+  applyAppSettings,
+  refreshTrayMenu,
+  updateFeaturePreference,
+  updateDefaultTabPreference,
+  isMainWindowSender: (sender) => Boolean(mainWindow && !mainWindow.isDestroyed() && sender === mainWindow.webContents),
+  setAutoLaunch,
+  isAutoLaunchEnabled,
+  isValidPanelShortcut,
+  isValidOptionalShortcut,
+  launcherConfig,
+  writeLauncherSettings: (settings) => writeJsonFile(path.join(app.getPath('userData'), 'launcher-settings.json'), settings),
+  setLauncherShortcut,
+  setPanelShortcut,
+  setActionShortcut,
+  sendSettingsChanged: (settings) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', settings);
+  },
 });
-ipcMain.handle('settings:set-default-tab', (event, defaultTab) => {
-  const next = updateDefaultTabPreference(readAppSettings(), defaultTab);
-  if (!next) return { ok: false, error: 'invalid_default_tab' };
-  if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
-  applyAppSettings();
-  return { ok: true, settings: publicAppSettings() };
-});
-ipcMain.handle('settings:set-theme', (event, theme) => {
-  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'invalid_sender' };
-  if (!['dark', 'light'].includes(theme)) return { ok: false, error: 'invalid_theme' };
-  const next = { ...readAppSettings(), theme };
-  if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
-  applyAppSettings();
-  return { ok: true, settings: publicAppSettings() };
-});
-ipcMain.handle('settings:set-auto-launch', (event, enabled) => {
-  if (typeof enabled !== 'boolean') return { ok: false, error: 'invalid' };
-  if (!setAutoLaunch(enabled)) return { ok: false, error: 'save_failed', autoLaunch: isAutoLaunchEnabled() };
-  const settings = publicAppSettings();
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', settings);
-  refreshTrayMenu();
-  return { ok: true, autoLaunch: settings.autoLaunch };
-});
-ipcMain.handle('settings:set-shortcut', (event, payload) => {
-  const action = typeof payload === 'string' ? 'panel' : payload?.action;
-  const accelerator = typeof payload === 'string' ? payload : payload?.accelerator;
-  if (!['panel', 'launcher', 'screenshot', 'screenRecording', 'audioRecording'].includes(action)
-    || typeof accelerator !== 'string'
-    || (action === 'panel' ? !isValidPanelShortcut(accelerator) : !isValidOptionalShortcut(accelerator))) {
-    return { ok: false, error: 'invalid' };
-  }
-  if (action === 'launcher') {
-    const previous = launcherConfig();
-    if (!setLauncherShortcut(accelerator)) return { ok: false, error: 'occupied' };
-    const next = { ...previous, shortcut: accelerator };
-    if (!writeJsonFile(path.join(app.getPath('userData'), 'launcher-settings.json'), next)) {
-      setLauncherShortcut(previous.shortcut);
-      return { ok: false, error: 'save_failed' };
-    }
-  } else {
-    const next = readAppSettings();
-    const previous = action === 'panel' ? next.shortcut : next.shortcuts[action];
-    const registered = action === 'panel'
-      ? setPanelShortcut(accelerator)
-      : setActionShortcut(action, accelerator);
-    if (!registered) return { ok: false, error: 'occupied' };
-    if (action === 'panel') next.shortcut = accelerator;
-    else next.shortcuts[action] = accelerator;
-    if (!saveAppSettings(next)) {
-      if (action === 'panel') setPanelShortcut(previous);
-      else setActionShortcut(action, previous);
-      return { ok: false, error: 'save_failed' };
-    }
-  }
-  const settings = publicAppSettings();
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', settings);
-  refreshTrayMenu();
-  return { ok: true, action, shortcut: accelerator, settings };
-});
+registerSettingsIpc({ ipcMain, settingsController });
 registerWorkspaceIpc({ ipcMain, workspaceController });
 
 function getLayoutMetrics(display) {

@@ -360,3 +360,13 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 更换工作区时继续阻止活动录音/录屏，先迁移截图与媒体资产，再更新设置并通知 renderer、capture service 和托盘
 - 新增 `tests/workspace-controller.test.js`
 - 完整 Node 测试为 304 项：303 通过，1 项按平台跳过
+
+### 已完成：应用设置 controller 与 IPC 拆分
+
+- 新增 `main/settings-controller.js` 和 `main/ipc/settings.js`
+- 将功能显隐、默认 Tab、主题、开机启动和五类全局快捷键的六个 `settings:*` handler 移出 `main.js`
+- 快捷键继续执行“注册新值、持久化、保存失败恢复旧值”的事务；占用、无效输入和保存失败的返回结构不变
+- 主题写入继续校验主窗口 sender，功能显隐继续联动剪贴板采集服务和托盘菜单
+- 新增 `tests/settings-controller.test.js`
+- 完整 Node 测试为 307 项：306 通过，1 项按平台跳过
+- 完整 `npm test` 随后仍因既有 `tests/notch-focus.electron.js:406` 顶部空白点击未收起断言失败，重试结果相同
