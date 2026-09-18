@@ -878,7 +878,12 @@ const collapseBtn = document.getElementById('collapse-btn');
 let activeTab = 'home';
 let defaultOpenTab = 'home';
 
+function applyThemeSettings(settings) {
+  document.documentElement.dataset.theme = settings?.theme === 'light' ? 'light' : 'dark';
+}
+
 function applyFeatureSettings(settings) {
+  applyThemeSettings(settings);
   const features = { ...(settings && settings.features || {}), home: true, settings: true };
   document.querySelectorAll('.tab[data-tab]').forEach((button) => {
     const enabled = button.dataset.tab === 'home'

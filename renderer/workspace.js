@@ -965,6 +965,7 @@
   const settingsAudioShortcutValue = document.getElementById('settings-audio-shortcut-value');
   const settingsAudioShortcutChange = document.getElementById('settings-audio-shortcut-change');
   const settingsDefaultTab = document.getElementById('settings-default-tab');
+  const settingsTheme = document.getElementById('settings-theme');
   const settingsWorkspaceKind = document.getElementById('settings-workspace-kind');
   const settingsWorkspacePath = document.getElementById('settings-workspace-path');
   const settingsWorkspaceOpen = document.getElementById('settings-workspace-open');
@@ -1449,6 +1450,7 @@
     if (settingsScreenshotShortcutValue) settingsScreenshotShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenshot);
     if (settingsVideoShortcutValue) settingsVideoShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenRecording);
     if (settingsAudioShortcutValue) settingsAudioShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.audioRecording);
+    if (settingsTheme) settingsTheme.value = settingsAppSettings?.theme === 'light' ? 'light' : 'dark';
     if (settingsDefaultTab) {
       const visibleTabs = new Set(Domain.visiblePanelTabs(
         ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings'],
@@ -2496,6 +2498,20 @@
   shortcutControls.forEach(([button, action, current]) => button?.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('notch:record-shortcut', { detail: { action, current: current() } }));
   }));
+  settingsTheme?.addEventListener('change', async () => {
+    if (!window.notchAPI?.setTheme) return;
+    settingsTheme.disabled = true;
+    const result = await window.notchAPI.setTheme(settingsTheme.value).catch(() => ({ ok: false }));
+    settingsTheme.disabled = false;
+    if (!result?.ok) {
+      settingsTheme.value = settingsAppSettings?.theme === 'light' ? 'light' : 'dark';
+      setSettingsNote('主题设置保存失败，请重试。', true);
+      return;
+    }
+    settingsAppSettings = result.settings || settingsAppSettings;
+    renderSettingsPanel();
+    setSettingsNote(settingsTheme.value === 'light' ? '已切换为亮色主题。' : '已切换为深色主题。');
+  });
   settingsDefaultTab?.addEventListener('change', async () => {
     if (!window.notchAPI?.setDefaultTab) return;
     const previous = settingsAppSettings?.defaultTab || 'home';

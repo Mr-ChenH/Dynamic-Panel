@@ -5808,3 +5808,88 @@ textarea::placeholder { color: var(--text-4); opacity: 1; }
 .launcher-result-icon { flex: 0 0 24px; font-style: normal; font-size: 20px; text-align: center; color: var(--text-3); }
 .launcher-results::-webkit-scrollbar, .launcher-manager::-webkit-scrollbar { width: 4px; }
 .launcher-results::-webkit-scrollbar-thumb, .launcher-manager::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--r-pill); }
+
+/* ============ 亮色主题 ============ */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-base: #f8fafc;
+  --surface-1: #eef2f7;
+  --surface-2: #e5eaf1;
+  --surface-3: #d9e1eb;
+  --hairline: rgba(30, 43, 61, 0.13);
+  --hairline-soft: rgba(30, 43, 61, 0.08);
+  --highlight-top: rgba(255, 255, 255, 0.85);
+  --tile-highlight: rgba(255, 255, 255, 0.7);
+  --squircle-highlight: rgba(255, 255, 255, 0.95);
+  --text-1: #172033;
+  --text-2: #35445a;
+  --text-3: #5d6b7e;
+  --text-4: #788598;
+  --focus-ring: #3f72d8;
+  --scrollbar-thumb: rgba(30, 43, 61, 0.18);
+  --scrollbar-thumb-hover: rgba(30, 43, 61, 0.32);
+  --tooltip-bg: rgba(22, 31, 45, 0.94);
+  --item-hover: rgba(63, 114, 216, 0.08);
+  --panel-shadow: rgba(42, 58, 80, 0.18);
+  --clip-text: rgba(30, 43, 61, 0.42);
+  --clip-border-text: rgba(30, 43, 61, 0.13);
+  --clip-border-url: rgba(63, 114, 216, 0.28);
+  --clip-border-image: rgba(210, 112, 47, 0.26);
+}
+
+:root[data-theme='light'] .panel::before,
+:root[data-theme='light'] .launcher,
+:root[data-theme='light'] .settings-card,
+:root[data-theme='light'] .home-card,
+:root[data-theme='light'] .tile,
+:root[data-theme='light'] .links-sidebar,
+:root[data-theme='light'] .links-main .link-group,
+:root[data-theme='light'] .home-chat,
+:root[data-theme='light'] .home-chat-reader,
+:root[data-theme='light'] .home-chat-session-panel,
+:root[data-theme='light'] .home-chat-context-picker,
+:root[data-theme='light'] .home-chat-composer,
+:root[data-theme='light'] .home-media-discovery {
+  background: var(--surface-1);
+}
+
+:root[data-theme='light'] .links-main .link-group-head,
+:root[data-theme='light'] .home-chat-starters button,
+:root[data-theme='light'] .home-chat-message[data-role='user'],
+:root[data-theme='light'] .home-chat-message-body code,
+:root[data-theme='light'] .markdown-code,
+:root[data-theme='light'] .home-chat-session-search,
+:root[data-theme='light'] .home-chat-context-search {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .links-main .link-favicon,
+:root[data-theme='light'] .home-media-record,
+:root[data-theme='light'] .home-media-progress-track,
+:root[data-theme='light'] .launcher-manager input:not([type='checkbox']) {
+  background: var(--surface-3);
+}
+
+:root[data-theme='light'] .home-chat-message-body a,
+:root[data-theme='light'] .links-sidebar-nav button.active,
+:root[data-theme='light'] .links-sidebar-list button.active {
+  color: #275ab7;
+}
+
+:root[data-theme='light'] .links-sidebar-nav button.active,
+:root[data-theme='light'] .links-sidebar-list button.active,
+:root[data-theme='light'] .launcher-result.selected,
+:root[data-theme='light'] .launcher-result:hover {
+  background: rgba(63, 114, 216, 0.12);
+}
+
+:root[data-theme='light'] .markdown-code pre code {
+  color: #26364d;
+}
+
+:root[data-theme='light'] input,
+:root[data-theme='light'] textarea,
+:root[data-theme='light'] select {
+  color-scheme: light;
+}

@@ -1328,6 +1328,7 @@ function readAppSettings() {
       audioRecording: isValidOptionalShortcut(shortcuts.audioRecording) ? shortcuts.audioRecording : '',
     },
     defaultTab: normalizeDefaultTabPreference(stored.defaultTab, features),
+    theme: stored.theme === 'light' ? 'light' : 'dark',
   };
 }
 
@@ -2204,6 +2205,14 @@ ipcMain.handle('settings:set-feature', (event, payload) => {
 ipcMain.handle('settings:set-default-tab', (event, defaultTab) => {
   const next = updateDefaultTabPreference(readAppSettings(), defaultTab);
   if (!next) return { ok: false, error: 'invalid_default_tab' };
+  if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
+  applyAppSettings();
+  return { ok: true, settings: publicAppSettings() };
+});
+ipcMain.handle('settings:set-theme', (event, theme) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'invalid_sender' };
+  if (!['dark', 'light'].includes(theme)) return { ok: false, error: 'invalid_theme' };
+  const next = { ...readAppSettings(), theme };
   if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
   applyAppSettings();
   return { ok: true, settings: publicAppSettings() };

@@ -124,6 +124,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   getAppSettings: () => ipcRenderer.invoke('settings:get'),
   setFeature: (featureId, enabled) => ipcRenderer.invoke('settings:set-feature', { featureId, enabled }),
   setDefaultTab: (tab) => ipcRenderer.invoke('settings:set-default-tab', tab),
+  setTheme: (theme) => ipcRenderer.invoke('settings:set-theme', theme),
   setAutoLaunch: (enabled) => ipcRenderer.invoke('settings:set-auto-launch', enabled === true),
   setPanelShortcut: (accelerator) => ipcRenderer.invoke('settings:set-shortcut', { action: 'panel', accelerator }),
   setShortcut: (action, accelerator) => ipcRenderer.invoke('settings:set-shortcut', { action, accelerator }),
