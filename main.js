@@ -58,6 +58,7 @@ const { createWorkspaceController } = require('./main/workspace-controller');
 const { registerWorkspaceIpc } = require('./main/ipc/workspace');
 const { createSettingsController } = require('./main/settings-controller');
 const { registerSettingsIpc } = require('./main/ipc/settings');
+const { createShortcutService } = require('./main/shortcut-service');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -336,17 +337,12 @@ let taskNotificationController = null;
 let todoReminderTimer = null;
 let scheduledTodoReminders = [];
 
-let spaceShortcutTimer = null;
-let spaceShortcutRegistered = false;
 let windowsCollapsedHovering = false;
 let displayFollowTimer = null;
 let displayRelocationTimer = null;
 let displayRelocationGeneration = 0;
 let panelBlurTimer = null;
 let panelBlurGeneration = 0;
-let configuredShortcut = '';
-let configuredLauncherShortcut = '';
-let configuredActionShortcuts = { screenshot: '', screenRecording: '', audioRecording: '' };
 let launcherService;
 let launcherManaging = false;
 let previousPasteTarget = null;
@@ -1251,50 +1247,6 @@ function isValidOptionalShortcut(shortcut) {
   return isValidShortcutAccelerator(shortcut, { allowEmpty: true });
 }
 
-function registeredShortcutConflict(action, shortcut) {
-  return shortcutAssignmentConflict({
-    panel: configuredShortcut,
-    launcher: configuredLauncherShortcut,
-    screenshot: configuredActionShortcuts.screenshot,
-    screenRecording: configuredActionShortcuts.screenRecording,
-    audioRecording: configuredActionShortcuts.audioRecording,
-  }, action, shortcut);
-}
-
-function registerShortcut(accelerator, callback) {
-  try { return globalShortcut.register(accelerator, callback) === true; }
-  catch (error) { return false; }
-}
-
-function panelShortcutCallback() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  hideWhenCollapsed = false;
-  if (!mainWindow.isVisible()) mainWindow.show();
-  mainWindow.focus();
-  mainWindow.webContents.send('shortcut:toggle-panel');
-}
-
-function setPanelShortcut(shortcut) {
-  if (!isValidPanelShortcut(shortcut) || registeredShortcutConflict('panel', shortcut)) return false;
-  if (shortcut === configuredShortcut) return true;
-  const previousShortcut = configuredShortcut;
-  stopHoverSpaceShortcut();
-  if (previousShortcut && previousShortcut !== 'Space') globalShortcut.unregister(previousShortcut);
-  if (shortcut === 'Space') {
-    configuredShortcut = shortcut;
-    startHoverSpaceShortcut();
-    return true;
-  }
-  if (registerShortcut(shortcut, panelShortcutCallback)) {
-    configuredShortcut = shortcut;
-    return true;
-  }
-  configuredShortcut = previousShortcut;
-  if (previousShortcut === 'Space') startHoverSpaceShortcut();
-  else if (previousShortcut && !registerShortcut(previousShortcut, panelShortcutCallback)) configuredShortcut = '';
-  return false;
-}
-
 function launcherConfig() {
   const file=path.join(app.getPath('userData'),'launcher-settings.json');
   let candidate={}; try { if(fs.statSync(file).size<=65536) candidate=readJsonFile(file,{}); } catch {}
@@ -1303,57 +1255,62 @@ function launcherConfig() {
   const sources=Object.fromEntries(Object.entries(defaults).map(([key,value])=>[key,typeof stored.sources?.[key]==='boolean'?stored.sources[key]:value]));
   return { executeTimeoutMs: Math.max(500, Math.min(10000, Number(stored.executeTimeoutMs) || 5000)), queryTimeoutMs: Math.max(300, Math.min(5000, Number(stored.queryTimeoutMs) || 800)), shortcut: typeof stored.shortcut === 'string' && stored.shortcut.length <= 100 ? stored.shortcut : 'CommandOrControl+Space', sources };
 }
-function launcherShortcutCallback() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  launcherFocus.capture({ keepWhenOwned: currentMode === 'launcher' });
-  hideWhenCollapsed = false;
-  if (!mainWindow.isVisible()) mainWindow.show();
-  mainWindow.focus();
-  mainWindow.webContents.send('shortcut:toggle-launcher');
-}
 
-function setLauncherShortcut(shortcut = launcherConfig().shortcut) {
-  if (!isValidOptionalShortcut(shortcut) || registeredShortcutConflict('launcher', shortcut)) return false;
-  if (shortcut === configuredLauncherShortcut) return true;
-  const previousShortcut = configuredLauncherShortcut;
-  if (previousShortcut) globalShortcut.unregister(previousShortcut);
-  if (!shortcut || registerShortcut(shortcut, launcherShortcutCallback)) {
-    configuredLauncherShortcut = shortcut;
-    return true;
-  }
-  configuredLauncherShortcut = previousShortcut;
-  if (previousShortcut && !registerShortcut(previousShortcut, launcherShortcutCallback)) configuredLauncherShortcut = '';
-  return false;
-}
-
-function runConfiguredShortcutAction(action) {
-  if (['screenshot', 'screenRecording'].includes(action)) {
-    if (!captureService || captureService.busy()) return;
-    const request = action === 'screenRecording' ? { mode: 'video', region: true } : 'screenshot';
-    void captureService.open(request).catch(() => {});
-    return;
-  }
-  if (action === 'audioRecording') openRendererPanel('shortcut:audio-recording');
-}
-
-function setActionShortcut(action, shortcut) {
-  if (!Object.hasOwn(configuredActionShortcuts, action)
-    || !isValidOptionalShortcut(shortcut)
-    || registeredShortcutConflict(action, shortcut)) return false;
-  if (shortcut === configuredActionShortcuts[action]) return true;
-  const previousShortcut = configuredActionShortcuts[action];
-  if (previousShortcut) globalShortcut.unregister(previousShortcut);
-  const callback = () => runConfiguredShortcutAction(action);
-  if (!shortcut || registerShortcut(shortcut, callback)) {
-    configuredActionShortcuts = { ...configuredActionShortcuts, [action]: shortcut };
-    return true;
-  }
-  configuredActionShortcuts = { ...configuredActionShortcuts, [action]: previousShortcut };
-  if (previousShortcut && !registerShortcut(previousShortcut, callback)) {
-    configuredActionShortcuts = { ...configuredActionShortcuts, [action]: '' };
-  }
-  return false;
-}
+const shortcutService = createShortcutService({
+  globalShortcut,
+  isValidPanelShortcut,
+  isValidOptionalShortcut,
+  shortcutAssignmentConflict,
+  hoverSpacePollingPolicy,
+  getPanelState: () => ({
+    visible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
+    mode: currentMode,
+  }),
+  getCursorPoint: () => screen.getCursorScreenPoint(),
+  getCollapsedBounds: () => getBoundsForMode('collapsed'),
+  onPanelShortcut: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    hideWhenCollapsed = false;
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('shortcut:toggle-panel');
+  },
+  onHoverSpaceShortcut: async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    // A second Space can arrive before expanded mode disables the temporary registration.
+    if (currentMode === 'expanded') {
+      mainWindow.webContents.send('shortcut:toggle-panel');
+      return;
+    }
+    await rememberPasteTarget();
+    hideWhenCollapsed = false;
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('shortcut:toggle-panel');
+  },
+  onLauncherShortcut: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    launcherFocus.capture({ keepWhenOwned: currentMode === 'launcher' });
+    hideWhenCollapsed = false;
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('shortcut:toggle-launcher');
+  },
+  onActionShortcut: (action) => {
+    if (['screenshot', 'screenRecording'].includes(action)) {
+      if (!captureService || captureService.busy()) return;
+      const request = action === 'screenRecording' ? { mode: 'video', region: true } : 'screenshot';
+      void captureService.open(request).catch(() => {});
+      return;
+    }
+    if (action === 'audioRecording') openRendererPanel('shortcut:audio-recording');
+  },
+});
+const setPanelShortcut = (shortcut) => shortcutService.setPanelShortcut(shortcut);
+const setLauncherShortcut = (shortcut = launcherConfig().shortcut) => shortcutService.setLauncherShortcut(shortcut);
+const setActionShortcut = (action, shortcut) => shortcutService.setActionShortcut(action, shortcut);
+const syncHoverSpacePolling = () => shortcutService.syncHoverSpacePolling();
+const stopHoverSpaceShortcut = () => shortcutService.stopHoverSpacePolling();
 
 function getLauncherService() {
   if (!launcherService) launcherService = createLauncherService({ dataRoot: app.getPath('userData'), executable: process.execPath, getSettings: launcherConfig, readShortcut: (file) => shell.readShortcutLink(file) });
@@ -1366,7 +1323,7 @@ function launcherHandler(channel, handler) {
   });
 }
 launcherHandler('launcher:focus', (payload) => ({ok:true, restored: payload?.restore === true ? launcherFocus.restore() : (launcherFocus.discard(),false)}));
-launcherHandler('launcher:settings', () => ({ ok: true, ...launcherConfig(), registered: Boolean(configuredLauncherShortcut) }));
+launcherHandler('launcher:settings', () => ({ ok: true, ...launcherConfig(), registered: Boolean(shortcutService.state().launcher) }));
 launcherHandler('launcher:save-settings', (payload) => {
   if (!payload || typeof payload.shortcut !== 'string' || !payload.sources || typeof payload.sources !== 'object') throw Error('invalid_settings');
   const executeTimeoutMs = payload.executeTimeoutMs ?? 5000;
@@ -1513,7 +1470,7 @@ function applyAppSettings() {
     setPanelShortcut('Space');
   }
   setLauncherShortcut();
-  for (const action of Object.keys(configuredActionShortcuts)) {
+  for (const action of shortcutService.actionNames()) {
     if (setActionShortcut(action, settings.shortcuts[action])) continue;
     settings.shortcuts[action] = '';
     changed = true;
@@ -2901,76 +2858,6 @@ registerNotesIpc({
 
 // ============ 剪贴板历史 ============
 
-function setHoverSpaceShortcut(enabled) {
-  if (enabled === spaceShortcutRegistered) return;
-  if (!enabled) {
-    if (globalShortcut.isRegistered('Space')) globalShortcut.unregister('Space');
-    spaceShortcutRegistered = false;
-    return;
-  }
-  try {
-    const ok = globalShortcut.register('Space', async () => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      // 展开动作后的极短窗口内，全局 Space 还未来得及注销；这时也要把第二次
-      // Space 作为收起处理，避免快速连按被吞掉。
-      if (currentMode === 'expanded') {
-        mainWindow.webContents.send('shortcut:toggle-panel');
-        return;
-      }
-      await rememberPasteTarget();
-      hideWhenCollapsed = false;
-      if (!mainWindow.isVisible()) mainWindow.show();
-      mainWindow.focus();
-      mainWindow.webContents.send('shortcut:toggle-panel');
-    });
-    spaceShortcutRegistered = ok && globalShortcut.isRegistered('Space');
-  } catch (error) {
-    spaceShortcutRegistered = false;
-  }
-}
-
-function startHoverSpaceShortcut() {
-  const policy = hoverSpacePollingPolicy({
-    shortcut: configuredShortcut,
-    visible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
-    mode: currentMode,
-  });
-  if (!policy.enabled) return;
-  if (spaceShortcutTimer) return;
-  spaceShortcutTimer = setInterval(() => {
-    const currentPolicy = hoverSpacePollingPolicy({
-      shortcut: configuredShortcut,
-      visible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
-      mode: currentMode,
-    });
-    if (!currentPolicy.enabled) {
-      stopHoverSpaceShortcut();
-      return;
-    }
-    const point = screen.getCursorScreenPoint();
-    const bounds = getBoundsForMode('collapsed');
-    const hovering = point.x >= bounds.x && point.x < bounds.x + bounds.width
-      && point.y >= bounds.y && point.y < bounds.y + bounds.height;
-    setHoverSpaceShortcut(hovering);
-  }, policy.intervalMs);
-}
-
-function stopHoverSpaceShortcut() {
-  if (spaceShortcutTimer) clearInterval(spaceShortcutTimer);
-  spaceShortcutTimer = null;
-  setHoverSpaceShortcut(false);
-}
-
-function syncHoverSpacePolling() {
-  const policy = hoverSpacePollingPolicy({
-    shortcut: configuredShortcut,
-    visible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),
-    mode: currentMode,
-  });
-  if (policy.enabled) startHoverSpaceShortcut();
-  else stopHoverSpaceShortcut();
-}
-
 function followCursorDisplay() {
   if (!mainWindow || mainWindow.isDestroyed() || currentMode !== 'collapsed') return;
   const targetDisplay = getTargetDisplay();
@@ -2998,7 +2885,7 @@ function syncDisplayFollowPolling() {
 }
 
 ipcMain.handle('shortcut:hover-space-status', () => ({
-  registered: spaceShortcutRegistered && globalShortcut.isRegistered('Space'),
+  registered: shortcutService.state().hoverRegistered,
   mode: currentMode,
   cursor: screen.getCursorScreenPoint(),
   bounds: mainWindow && !mainWindow.isDestroyed() ? getBoundsForMode(currentMode) : null,

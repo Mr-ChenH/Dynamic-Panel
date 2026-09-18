@@ -9,6 +9,7 @@ const financeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', '
 const financeBackgroundJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-background-refresh.js'), 'utf8');
 const homeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'home.js'), 'utf8');
 const systemIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'system.js'), 'utf8');
+const shortcutServiceJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'shortcut-service.js'), 'utf8');
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
@@ -85,7 +86,8 @@ test('global shortcuts expose configurable panel, launcher, screenshot, screen r
   }
   assert.match(preloadJs, /setShortcut:.*settings:set-shortcut/);
   assert.match(preloadJs, /onAudioRecordingShortcut:.*shortcut:audio-recording/);
-  assert.match(mainJs, /runConfiguredShortcutAction/);
+  assert.match(shortcutServiceJs, /onActionShortcut\(action\)/);
+  assert.match(mainJs, /onActionShortcut: \(action\)/);
   assert.match(mainJs, /mode: 'video', region: true/);
   assert.match(mainJs, /captureService\.open\(request\)/);
   assert.match(workspaceJs, /settingsVideoShortcutChange/);

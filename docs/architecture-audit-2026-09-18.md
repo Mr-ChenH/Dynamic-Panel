@@ -370,3 +370,13 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `tests/settings-controller.test.js`
 - 完整 Node 测试为 307 项：306 通过，1 项按平台跳过
 - 完整 `npm test` 随后仍因既有 `tests/notch-focus.electron.js:406` 顶部空白点击未收起断言失败，重试结果相同
+
+### 已完成：全局快捷键服务拆分
+
+- 新增 `main/shortcut-service.js`
+- 将面板、启动器、截图、录屏和录音快捷键的注册状态、冲突检测、系统注册失败恢复移出 `main.js`
+- 将 Hover + Space 的轮询 timer、鼠标命中检测和临时 Space 注册统一纳入快捷键服务
+- Electron 窗口显示、启动器焦点捕获和采集动作继续由 `main.js` 以回调注入，服务不直接持有 BrowserWindow 或 capture service
+- 保留 `shortcut:hover-space-status` 返回结构、快速连按 Space 收起和 `will-quit` 清理行为
+- 新增 `tests/shortcut-service.test.js`，并更新 renderer 结构测试以检查迁移后的职责边界
+- 完整 Node 测试为 310 项：309 通过，1 项按平台跳过
