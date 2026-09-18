@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="build/to-do-panel-icon.png" width="112" alt="TO-DO Panel 图标" />
-  <h1>TO-DO Panel</h1>
+  <img src="build/to-do-panel-icon.png" width="112" alt="Dynamic Panel 图标" />
+  <h1>Dynamic Panel</h1>
   <p><strong>Mac 与 Windows 的贴顶工作台。</strong></p>
   <p>待办、随笔记、链接、录音与本机 AI 提醒，始终贴顶待命。</p>
   <p>
@@ -23,13 +23,13 @@
   </p>
 </div>
 
-![TO-DO Panel 首页](docs/screenshots/home.png)
+![Dynamic Panel 首页](docs/screenshots/home.png)
 
-![TO-DO Panel 待办](docs/screenshots/todo.png)
+![Dynamic Panel 待办](docs/screenshots/todo.png)
 
 ## 它是什么
 
-TO-DO Panel 是一个常驻 macOS / Windows 屏幕顶部的本地工作台。Mac 默认折叠成物理刘海大小；Windows 显示为贴顶的紧凑悬浮条，常态为 160 × 8 逻辑像素，鼠标移入时平滑增至 184 × 30，移出后自动恢复；原生输入区域只跟随当前可见岛体，周围透明画布不会拦截下方窗口，并避开顶部任务栏。连接多块屏幕时，折叠条会跟随鼠标当前所在屏并保持顶部居中；展开后固定在该屏，避免操作期间跳动。点击后从顶部展开。
+Dynamic Panel 是一个常驻 macOS / Windows 屏幕顶部的本地工作台。Mac 默认折叠成物理刘海大小；Windows 显示为贴顶的紧凑悬浮条，常态为 160 × 8 逻辑像素，鼠标移入时平滑增至 184 × 30，移出后自动恢复；原生输入区域只跟随当前可见岛体，周围透明画布不会拦截下方窗口，并避开顶部任务栏。连接多块屏幕时，折叠条会跟随鼠标当前所在屏并保持顶部居中；展开后固定在该屏，避免操作期间跳动。点击后从顶部展开。
 
 | 页面 | 解决什么问题 |
 | --- | --- |
@@ -50,7 +50,7 @@ TO-DO Panel 是一个常驻 macOS / Windows 屏幕顶部的本地工作台。Mac
 
 行情联网由主进程 `FinanceService` 统一负责，渲染层只接收规范化结果。CoinGecko 公共 REST 默认提供真实的加密市场总值、市场宽度样本、榜单、搜索、批量自选报价和历史序列；若账户计划支持 `/global/market_cap_chart`，总览显示全球总市值曲线，否则明确降级为真实 BTC 7 日价格市场代理。Binance Public REST 无需密钥，作为加密货币的可选数据源提供单独标注的 USDT 现货榜单、批量报价、搜索和 1D/7D/30D 历史序列；Alpha Vantage 使用用户自己的 API Key 提供美股涨跌榜和成交榜；免费榜单按日终数据处理并至少复用 12 小时缓存，手动刷新也不绕过低配额保护。Alpaca 使用用户自己的 Key/Secret 并明确区分 IEX 或 SIP feed，其中 Basic IEX 仅代表单一交易所、不是全市场 SIP，目前提供美股精确代码搜索和批量快照。可选 Twelve Data 使用用户 API Key 提供最多 8 个未由 Alpaca 解析标的的报价、名称搜索和 1D/7D/30D 历史，Basic feed 明确标为非 SIP 且不用于需要 Pro 的 market movers。可选 SEC EDGAR 使用带联系邮箱的 Fair Access User-Agent，从官方 XBRL 申报补充最近可用的资产、负债、权益、收入和净利润；每项同时显示表单、期间和披露日，不作为实时行情或估值。自选详情不伪造缺失字段。A 股通过用户自己的 QuantDash API Key，以及可在设置中分别启停的腾讯、东方财富、新浪公开接口提供行情：QuantDash Free 实时快照每分钟 10 次、每次最多 5 只；日 K 线每分钟 10 次、每次仅 1 只，支持 1D / 1W / 1M。东方财富公开接口用于 A 股列表、榜单分页、按代码报价和日 K 历史；腾讯和新浪公开接口用于按代码批量实时快照。系统按 QuantDash → 腾讯 → 东方财富 → 新浪优先回退并按证券代码去重，任何源失败都显示明确状态，不把公开接口包装成稳定 SLA。QuantDash 全市场榜单仍依赖 `CN_Stock` 标的池权限，Free 账户不能生成完整 A 股排名；当前行情响应没有全市场市值字段，因此 A 股市值榜明确标记为不支持。名称搜索使用 QuantDash 已取得的目录或当前进程已加载的东方财富榜单页，未取得时要求输入 6 位代码。设置中的连接测试会分别显示实时快照、K 线、元数据与全市场权限。应用启动后会由主进程执行一次受限的行情预热，将总览、当前榜单和自选资产写入进程内存缓存；该预热不激活行情页、不启动隐藏页的周期请求，也不写入 LocalStorage。之后定时刷新仍按「设置 → 金融与行情」中的频率运行，仅在行情页展开、可见且激活时预取；点击页面和榜单筛选会立即保留并显示已有快照，后台成功后再替换。凭据仅从环境变量或 Electron `safeStorage` 读取，不进入 LocalStorage 和工作区导出；金融数据源支持 `COINGECKO_API_KEY`、`ALPHA_VANTAGE_API_KEY`、`ALPACA_API_KEY_ID`、`ALPACA_API_SECRET_KEY`、`TWELVE_DATA_API_KEY`、`SEC_EDGAR_CONTACT` 和 `QUANTDASH_API_KEY`。请求固定为 CoinGecko / Binance / Alpha Vantage / Alpaca / Twelve Data / SEC EDGAR / QuantDash / 腾讯 / 东方财富 / 新浪的公开 HTTPS 主机，拒绝重定向，使用 DNS 固定、10 秒超时和 2 MB 响应上限；短时 provider 故障可显示有明确缓存状态的最近结果。公开 A 股接口只作为用户可控的兼容源，主进程负责 GBK/JSON 解码、响应大小限制、批量边界、取消和错误降级；它们的字段、限流、稳定性和显示/再分发权以各上游条款与实际响应为准。QuantDash adapter 只使用用户自己的 API Key，请求头为 `X-API-Key`，用户仍须确认其账户套餐和协议允许当前显示用途。QuantDash 服务协议允许按套餐用于个人研究或商业用途，但 API Key 不得共享或转让，未经授权不得对外提供数据转售服务。
 
-首页默认使用个人工作台：今日重点展示最多 3 条今天到期或逾期的未完成任务，继续工作展示最近编辑的 5 篇笔记；快速收集默认自动识别完整公开网址与普通文字，分别保存到链接库或独立笔记，也可手动固定目标类型。链接继续经过安全校验和网页信息补全，启用链接 AI 自动整理后还会生成名称、分类与标签。天气需手动搜索并选择城市，不自动定位；首页显示当前天气、体感、未来 6 小时最高降雨概率、湿度和风，详情提供未来 12 小时与 7 天预报；使用 Open-Meteo 免费非商业接口，显示来源，15 分钟内复用缓存，失败时标记旧缓存。商业分发前须配置符合服务条款的接口。音乐由应用内播放器负责，不依赖系统媒体会话。设置页可选择一个或多个本地 MP3、M4A、AAC、WAV、OGG、Opus、FLAC 或 WebM，也可递归导入音乐文件夹、保存公开 HTTPS 音频直链，或连接本机运行的 [go-music-dl](https://github.com/guohuiyuan/go-music-dl) 服务；首页和设置页均可切换音乐源与歌单，并在当前歌单内执行上一首、播放/暂停、下一首、随机播放和自动续播。播放源读取失败时会停止播放；切换到音乐设置面板不会中断当前播放。go-music-dl 默认地址为 `http://127.0.0.1:8080/music`，TO-DO Panel 会把“我的歌单”和平台在线歌单分开：既能读取已收藏或已导入的歌单，也能按平台浏览分类、每日推荐、搜索歌单并打开在线歌单详情；网易云、QQ、酷狗等平台的可用性、登录 Cookie 和换源解析由 go-music-dl 负责。文件夹导入忽略符号链接，最多扫描 10,000 个目录项和 20 层子目录；公开网络音频由主进程校验公网地址并限制为 128 MB 后加载，聚合服务只允许无凭据的回环 HTTP 地址并固定连接本机，均拒绝重定向和超限响应。
+首页默认使用个人工作台：今日重点展示最多 3 条今天到期或逾期的未完成任务，继续工作展示最近编辑的 5 篇笔记；快速收集默认自动识别完整公开网址与普通文字，分别保存到链接库或独立笔记，也可手动固定目标类型。链接继续经过安全校验和网页信息补全，启用链接 AI 自动整理后还会生成名称、分类与标签。天气需手动搜索并选择城市，不自动定位；首页显示当前天气、体感、未来 6 小时最高降雨概率、湿度和风，详情提供未来 12 小时与 7 天预报；使用 Open-Meteo 免费非商业接口，显示来源，15 分钟内复用缓存，失败时标记旧缓存。商业分发前须配置符合服务条款的接口。音乐由应用内播放器负责，不依赖系统媒体会话。设置页可选择一个或多个本地 MP3、M4A、AAC、WAV、OGG、Opus、FLAC 或 WebM，也可递归导入音乐文件夹、保存公开 HTTPS 音频直链，或连接本机运行的 [go-music-dl](https://github.com/guohuiyuan/go-music-dl) 服务；首页和设置页均可切换音乐源与歌单，并在当前歌单内执行上一首、播放/暂停、下一首、随机播放和自动续播。播放源读取失败时会停止播放；切换到音乐设置面板不会中断当前播放。go-music-dl 默认地址为 `http://127.0.0.1:8080/music`，Dynamic Panel 会把“我的歌单”和平台在线歌单分开：既能读取已收藏或已导入的歌单，也能按平台浏览分类、每日推荐、搜索歌单并打开在线歌单详情；网易云、QQ、酷狗等平台的可用性、登录 Cookie 和换源解析由 go-music-dl 负责。文件夹导入忽略符号链接，最多扫描 10,000 个目录项和 20 层子目录；公开网络音频由主进程校验公网地址并限制为 128 MB 后加载，聚合服务只允许无凭据的回环 HTTP 地址并固定连接本机，均拒绝重定向和超限响应。
 
 首页 AI 对话复用「设置 → AI 与转写」中的默认内容模型，并在顶栏显示当前厂商和模型；只在主动发送时调用，支持安全 Markdown、代码复制、停止、原位重试、新建对话、复制回复和手动保存为笔记。每条消息可从笔记、录音、待办、链接和文字剪贴板中显式选择最多 3 份本地参考资料，输入区持续显示可移除标签；图片剪贴板不会进入资料列表，应用也不会自动附加任何工作区内容。资料在发送时冻结为本轮快照，停止、失败和重试仍绑定该快照。成功回答最多使用最近 6 轮，问题、资料和历史合计限制 12,000 字符，过大资料不会静默截断。对话默认仅存在于当前窗口内存；用户确认保存后，可在当前工作区中搜索、切换、重命名和删除最多 30 个会话，后续稳定轮次自动保存。保存记录包含消息、回答和已选资料的冻结文字快照，不包含附件、图片、音频、API Key 或本地绝对路径。完整的长回答可进入独立阅读工作台，通过标题大纲定位、复制全文或选区、保存为笔记，或将全文/选区送入现有待办候选预览；超过 12,000 字符的全文必须先显式选择较小范围，停止、失败和生成中的回答没有此入口。应用不会联网搜索、执行操作或自动保存为笔记。
 
@@ -100,13 +100,13 @@ Windows 的窗口来源使用名称列表，不为所有窗口预先采集缩略
 
 | 平台 | 在上方 GitHub Releases 下载对应安装包 |
 | --- | --- |
-| Mac | [TO-DO-Panel-1.1.0-arm64.dmg](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/TO-DO-Panel-1.1.0-arm64.dmg) |
-| Windows | [TO-DO-Panel-1.1.0-windows-x64-setup.exe](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/TO-DO-Panel-1.1.0-windows-x64-setup.exe) |
+| Mac | [Dynamic-Panel-1.1.0-arm64.dmg](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/Dynamic-Panel-1.1.0-arm64.dmg) |
+| Windows | [Dynamic-Panel-1.1.0-windows-x64-setup.exe](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/Dynamic-Panel-1.1.0-windows-x64-setup.exe) |
 
 ### macOS
 
-1. 前往 [GitHub Releases](https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest) 下载 `TO-DO-Panel-*-arm64.dmg`。
-2. 打开 DMG，将 `TO-DO Panel.app` 拖入「应用程序」。
+1. 前往 [GitHub Releases](https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest) 下载 `Dynamic-Panel-*-arm64.dmg`。
+2. 打开 DMG，将 `Dynamic Panel.app` 拖入「应用程序」。
 3. 首次启动若被 macOS 拦截，前往「系统设置 → 隐私与安全性」，点击「仍要打开」。
 4. 再次启动，根据需要授予辅助功能、屏幕录制或麦克风权限。
 
@@ -114,7 +114,7 @@ Windows 的窗口来源使用名称列表，不为所有窗口预先采集缩略
 
 ### Windows
 
-下载 `TO-DO-Panel-*-windows-x64-setup.exe`，运行安装向导，再从桌面或开始菜单启动。默认仅安装给当前用户，无需管理员权限，卸载保留本机工作区数据。托盘菜单可设置功能或退出，面板设置中可开启开机启动。
+下载 `Dynamic-Panel-*-windows-x64-setup.exe`，运行安装向导，再从桌面或开始菜单启动。默认仅安装给当前用户，无需管理员权限，卸载保留本机工作区数据。托盘菜单可设置功能或退出，面板设置中可开启开机启动。
 
 安装包暂无商业代码签名，可能出现 SmartScreen 提示。请核对来源与 `.sha256` 校验码，确认后通过「更多信息 → 仍要运行」安装；企业策略可能需要管理员批准。
 
@@ -138,7 +138,7 @@ Windows 版在 GitHub Windows runner 上自动验证安装、启动、数据保�
 
 ## 本机 AI 完成提醒
 
-TO-DO Panel 只在 `127.0.0.1:43821` 监听通知接口，来源限 `codex`、`claude` 与 `gpt`：
+Dynamic Panel 只在 `127.0.0.1:43821` 监听通知接口，来源限 `codex`、`claude` 与 `gpt`：
 
 ```bash
 curl -X POST http://127.0.0.1:43821/notify/codex \
@@ -149,8 +149,8 @@ curl -X POST http://127.0.0.1:43821/notify/codex \
 仓库已提供 [Codex 转发脚本](scripts/codex-notify.js) 和 [Claude Code 转发脚本](scripts/claude-notify.js)。通过 DMG 安装后，脚本路径为：
 
 ```text
-/Applications/TO-DO Panel.app/Contents/Resources/app/scripts/codex-notify.js
-/Applications/TO-DO Panel.app/Contents/Resources/app/scripts/claude-notify.js
+/Applications/Dynamic Panel.app/Contents/Resources/app/scripts/codex-notify.js
+/Applications/Dynamic Panel.app/Contents/Resources/app/scripts/claude-notify.js
 ```
 
 Windows 安装后的两个脚本位于安装目录的 `resources/app/scripts/` 中，可用 Node.js 调用；应用本身无需用户安装 Node.js。

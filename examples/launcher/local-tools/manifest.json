@@ -4,11 +4,11 @@
   "name": "本地工具示例",
   "version": "0.1.0",
   "description": "演示声明式复制、动态查询和执行，不访问网络。",
-  "author": "TO-DO Panel",
+  "author": "Dynamic Panel",
   "permissions": ["clipboard"],
   "runtime": { "type": "node", "entry": "index.js" },
   "commands": [
-    { "id": "hello", "title": "复制问候", "description": "声明式命令示例", "mode": "declarative", "action": { "type": "copy-text", "text": "你好，TO-DO Panel！" } },
+    { "id": "hello", "title": "复制问候", "description": "声明式命令示例", "mode": "declarative", "action": { "type": "copy-text", "text": "你好，Dynamic Panel！" } },
     { "id": "upper", "title": "大写转换", "description": "输入 大写转换 加空格和文本", "mode": "process", "keywords": ["uppercase"] }
   ]
 }

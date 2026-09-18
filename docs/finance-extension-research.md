@@ -2,7 +2,7 @@
 
 > 研究日期：2026-09-14
 >
-> 目标：为 TO-DO Panel 设计一个可以添加 A 股、美股、加密货币等资产的本地金融扩展。本文先确定交互和技术边界，不直接承诺实时行情或交易能力。
+> 目标：为 Dynamic Panel 设计一个可以添加 A 股、美股、加密货币等资产的本地金融扩展。本文先确定交互和技术边界，不直接承诺实时行情或交易能力。
 
 ## 结论
 
@@ -21,7 +21,7 @@
 
 ### Apple Stocks
 
-Apple Stocks 的交互最适合 TO-DO Panel 的紧凑工作台：侧边栏承载自选列表，搜索结果展示名称、代码、交易所和货币，点击结果旁的添加按钮即可加入当前列表；一个标的可以被加入多个用户列表。列表项通常保持名称、走势图、价格和变化值的稳定排列，用户可以在价格变化、百分比变化和市值之间切换显示。
+Apple Stocks 的交互最适合 Dynamic Panel 的紧凑工作台：侧边栏承载自选列表，搜索结果展示名称、代码、交易所和货币，点击结果旁的添加按钮即可加入当前列表；一个标的可以被加入多个用户列表。列表项通常保持名称、走势图、价格和变化值的稳定排列，用户可以在价格变化、百分比变化和市值之间切换显示。
 
 可借鉴的规则：
 
@@ -78,7 +78,7 @@ CoinGecko 的 Portfolio 将“观察”和“持仓记录”分开。用户可�
 
 `achannarasappa/ticker` 采用配置文件保存 watchlist、分组和多笔成本记录，列表可以显示币种、交易所、报价延迟、基本面、汇总和持仓；它支持股票、加密货币和衍生品。它证明“一个统一资产列表 + 分组 + 可选字段”适合跨市场观察，但终端配置不适合直接复制到桌面 UI。
 
-`go-stock`、`MarketLens` 和 `tick-stock-panel` 展示了中文用户对 A 股、港股、美股、ETF、概念标签、K 线、新闻、资金流向和 AI 分析的需求。它们的功能范围明显大于 TO-DO Panel 的顶部工作台，尤其是实时行情、市场数据授权、K 线绘图和 AI 数据工具，适合作为后续能力地图，而不是第一版的实现范围。
+`go-stock`、`MarketLens` 和 `tick-stock-panel` 展示了中文用户对 A 股、港股、美股、ETF、概念标签、K 线、新闻、资金流向和 AI 分析的需求。它们的功能范围明显大于 Dynamic Panel 的顶部工作台，尤其是实时行情、市场数据授权、K 线绘图和 AI 数据工具，适合作为后续能力地图，而不是第一版的实现范围。
 
 来源：[ticker](https://github.com/achannarasappa/ticker)、[go-stock](https://github.com/ArvinLovegood/go-stock)、[MarketLens](https://github.com/DevQQQQQ/MarketLens)、[tick-stock-panel](https://github.com/shy3130/tick-stock-panel)。
 

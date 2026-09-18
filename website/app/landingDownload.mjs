@@ -2,7 +2,7 @@ export const LATEST_RELEASE_API_URL = "https://api.github.com/repos/xiaopu-ai/TO
 
 export function selectWindowsDownloadUrl(release) {
   if (!release || !Array.isArray(release.assets) || typeof release.tag_name !== 'string') return null;
-  const name = `TO-DO-Panel-${release.tag_name.replace(/^v/, '')}-windows-x64-setup.exe`;
+  const name = `Dynamic-Panel-${release.tag_name.replace(/^v/, '')}-windows-x64-setup.exe`;
   return release.assets.find((asset) => asset?.name === name && asset.state === 'uploaded'
     && typeof asset.browser_download_url === 'string')?.browser_download_url ?? null;
 }
@@ -20,7 +20,7 @@ export function selectMacDownloadUrl(release) {
     ? release.tag_name.replace(/^v/, "")
     : "";
   const expectedAssetName = releaseVersion
-    ? `TO-DO-Panel-${releaseVersion}-arm64.dmg`
+    ? `Dynamic-Panel-${releaseVersion}-arm64.dmg`
     : "";
   const asset = installableAssets.find((candidate) => candidate.name === expectedAssetName)
     ?? installableAssets[0];

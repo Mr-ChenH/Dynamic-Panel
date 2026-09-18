@@ -348,7 +348,7 @@ renderer 通过 preload 只接收规范化对象，例如：
 
 - **先看整体，再看个体**：TradingView 的 Market Overview 和 Heatmap 先用指数、市场范围、相对涨跌和权重回答“哪里在动”；Yahoo Finance 把市场总览、热力图和 watchlist 分开；东方财富把指数、板块、排行、自选和个股行情分层。面板首屏不应只放几张孤立指标卡。
 - **曲线必须有时间范围和对象**：Apple Stocks 将交互式价格曲线作为 ticker 详情核心；TradingView 将图表和 watchlist 选中项联动。曲线需要明确是全球总市值、指数，还是某个资产的价格，不能用无标签的装饰性 sparkline。
-- **颜色提供扫描线索，数字提供证据**：TradingView Heatmap 用面积表示权重、颜色表示变化；watchlist 同时保留价格、涨跌、成交量等数值。TO-DO Panel 不接入交易终端级热力图，但采用同一原则：市场宽度显示 provider 返回样本的上涨/横盘/下跌数量，曲线使用 provider 的时间戳序列。
+- **颜色提供扫描线索，数字提供证据**：TradingView Heatmap 用面积表示权重、颜色表示变化；watchlist 同时保留价格、涨跌、成交量等数值。Dynamic Panel 不接入交易终端级热力图，但采用同一原则：市场宽度显示 provider 返回样本的上涨/横盘/下跌数量，曲线使用 provider 的时间戳序列。
 
 对应的实现调整如下：
 
@@ -411,7 +411,7 @@ renderer 通过 preload 只接收规范化对象，例如：
 
 ## 结论
 
-适合 TO-DO Panel 的产品不是一个交易终端，也不是一张无限长的股票表，而是一个本地、只读、来源透明的市场观察台：
+适合 Dynamic Panel 的产品不是一个交易终端，也不是一张无限长的股票表，而是一个本地、只读、来源透明的市场观察台：
 
 - 默认可以创建 provider 模板，但不共享密钥。
 - 加密货币可以先用 CoinGecko REST 真实运行。

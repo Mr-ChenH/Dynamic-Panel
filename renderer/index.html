@@ -7,7 +7,7 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: capture-media:; media-src 'self' blob: capture-media:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TO-DO Panel</title>
+    <title>Dynamic Panel</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="launcher.css" />
     <link rel="stylesheet" href="settings.css" />
@@ -25,7 +25,7 @@
         class="notch"
         role="button"
         tabindex="0"
-        aria-label="展开 TO-DO Panel"
+        aria-label="展开 Dynamic Panel"
         aria-expanded="false"
         aria-controls="panel"
       >
@@ -641,7 +641,7 @@
           </section>
 
           <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true" inert>
-            <div class="settings-page" id="settings-page" aria-label="TO-DO Panel 设置">
+            <div class="settings-page" id="settings-page" aria-label="Dynamic Panel 设置">
               <section class="tile settings-card settings-capture-card">
                 <div class="settings-card-heading"><div><span class="tile-label">本地画面采集</span><strong>截图与录屏</strong></div><small>仅在主动开始后采集</small></div>
                 <form id="capture-settings-form" class="capture-settings-form">
@@ -908,7 +908,7 @@
                     </span>
                   </div>
                   <label class="settings-device-row settings-auto-launch-row">
-                    <div><span>开机自动启动</span><strong>登录后自动运行 TO-DO Panel</strong></div>
+                    <div><span>开机自动启动</span><strong>登录后自动运行 Dynamic Panel</strong></div>
                     <input id="settings-auto-launch" type="checkbox" aria-label="开机自动启动" />
                     <i aria-hidden="true"></i>
                   </label>

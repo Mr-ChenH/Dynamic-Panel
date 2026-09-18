@@ -1,4 +1,4 @@
-# TO-DO Panel 打包质量门禁审查
+# Dynamic Panel 打包质量门禁审查
 
 日期：2026-08-30
 

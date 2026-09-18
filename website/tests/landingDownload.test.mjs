@@ -8,13 +8,13 @@ test("Windows download selects only the current x64 installer in a mixed release
   const { selectWindowsDownloadUrl } = await import(moduleUrl.href);
   const asset = (name) => ({ name, state: 'uploaded', browser_download_url: `https://example.com/${name}` });
   const release = { tag_name: 'v1.1.0', assets: [
-    asset('TO-DO-Panel-1.0.7-windows-x64-setup.exe'),
-    asset('TO-DO-Panel-1.1.0-arm64.dmg'),
-    asset('TO-DO-Panel-1.1.0-windows-x64-setup.exe.sha256'),
-    asset('TO-DO-Panel-1.1.0-windows-arm64-setup.exe'),
-    asset('TO-DO-Panel-1.1.0-windows-x64-setup.exe'),
+    asset('Dynamic-Panel-1.0.7-windows-x64-setup.exe'),
+    asset('Dynamic-Panel-1.1.0-arm64.dmg'),
+    asset('Dynamic-Panel-1.1.0-windows-x64-setup.exe.sha256'),
+    asset('Dynamic-Panel-1.1.0-windows-arm64-setup.exe'),
+    asset('Dynamic-Panel-1.1.0-windows-x64-setup.exe'),
   ] };
-  assert.equal(selectWindowsDownloadUrl(release), 'https://example.com/TO-DO-Panel-1.1.0-windows-x64-setup.exe');
+  assert.equal(selectWindowsDownloadUrl(release), 'https://example.com/Dynamic-Panel-1.1.0-windows-x64-setup.exe');
   assert.equal(selectWindowsDownloadUrl({ ...release, assets: release.assets.slice(0, 4) }), null);
   assert.equal(selectWindowsDownloadUrl(null), null);
   assert.equal(selectWindowsDownloadUrl({ ...release, assets: [{ ...release.assets[4], state: 'new' }] }), null);
@@ -27,27 +27,27 @@ test("latest release selection returns the installable Apple Silicon DMG", async
     tag_name: "v1.0.4",
     assets: [
       {
-        name: "TO-DO-Panel-1.0.2-arm64.dmg.sha256",
+        name: "Dynamic-Panel-1.0.2-arm64.dmg.sha256",
         content_type: "application/octet-stream",
         state: "uploaded",
         browser_download_url: "https://example.com/checksum",
       },
       {
-        name: "TO-DO-Panel-1.0.2-arm64.dmg",
+        name: "Dynamic-Panel-1.0.2-arm64.dmg",
         content_type: "application/x-apple-diskimage",
         state: "uploaded",
-        browser_download_url: "https://example.com/TO-DO-Panel-1.0.2-arm64.dmg",
+        browser_download_url: "https://example.com/Dynamic-Panel-1.0.2-arm64.dmg",
       },
       {
-        name: "TO-DO-Panel-1.0.4-arm64.dmg",
+        name: "Dynamic-Panel-1.0.4-arm64.dmg",
         content_type: "application/x-apple-diskimage",
         state: "uploaded",
-        browser_download_url: "https://example.com/TO-DO-Panel-1.0.4-arm64.dmg",
+        browser_download_url: "https://example.com/Dynamic-Panel-1.0.4-arm64.dmg",
       },
     ],
   };
 
-  assert.equal(selectMacDownloadUrl(release), "https://example.com/TO-DO-Panel-1.0.4-arm64.dmg");
+  assert.equal(selectMacDownloadUrl(release), "https://example.com/Dynamic-Panel-1.0.4-arm64.dmg");
 });
 
 test("latest release selection safely falls back when no DMG is published", async () => {

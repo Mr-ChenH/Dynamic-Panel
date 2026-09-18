@@ -657,10 +657,10 @@ test('editing a saved note updates content and timestamp without losing its iden
 
 test('note search and category filters compose without changing archive order', () => {
   const notes = normalizeNoteArchive([
-    { id: 'one', title: 'TO-DO Panel 设计', titleSource: 'model', categoryId: 'product', tagId: 'research', content: '正文没有产品英文名', createdAt: 100, updatedAt: 300 },
+    { id: 'one', title: 'Dynamic Panel 设计', titleSource: 'model', categoryId: 'product', tagId: 'research', content: '正文没有产品英文名', createdAt: 100, updatedAt: 300 },
     { id: 'two', content: '会议备忘\n下周交付录制功能', createdAt: 200, updatedAt: 200 },
   ]);
-  assert.deepEqual(filterNotes(notes, 'to-do').map((note) => note.id), ['one']);
+  assert.deepEqual(filterNotes(notes, 'dynamic').map((note) => note.id), ['one']);
   assert.deepEqual(filterNotes(notes, '录制').map((note) => note.id), ['two']);
   assert.deepEqual(filterNotes(notes, '', 'product').map((note) => note.id), ['one']);
   assert.deepEqual(filterNotes(notes, '', 'product', 'research').map((note) => note.id), ['one']);

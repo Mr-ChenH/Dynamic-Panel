@@ -1,7 +1,7 @@
 {
   "name": "to-do-panel",
   "version": "1.1.0",
-  "description": "TO-DO Panel - a local desktop workspace for macOS and Windows",
+  "description": "Dynamic Panel - a local desktop workspace for macOS and Windows",
   "main": "main.js",
   "author": "xiaopu-ai",
   "license": "MIT",
@@ -20,8 +20,8 @@
   },
   "build": {
     "appId": "com.dynamicpanel.app",
-    "productName": "TO-DO Panel",
-    "artifactName": "TO-DO-Panel-${version}-${arch}.${ext}",
+    "productName": "Dynamic Panel",
+    "artifactName": "Dynamic-Panel-${version}-${arch}.${ext}",
     "copyright": "© 2026 xiaopu-ai",
     "asar": false,
     "directories": {
@@ -74,15 +74,15 @@
       "extendInfo": {
         "LSUIElement": true,
         "NSHighResolutionCapable": true,
-        "CFBundleDisplayName": "TO-DO Panel",
-        "NSMicrophoneUsageDescription": "TO-DO Panel 需要使用麦克风来录音并生成转写文本。",
-        "NSAppleEventsUsageDescription": "TO-DO Panel 需要控制「系统事件」来枚举并聚焦当前窗口。"
+        "CFBundleDisplayName": "Dynamic Panel",
+        "NSMicrophoneUsageDescription": "Dynamic Panel 需要使用麦克风来录音并生成转写文本。",
+        "NSAppleEventsUsageDescription": "Dynamic Panel 需要控制「系统事件」来枚举并聚焦当前窗口。"
       }
     },
     "win": {
       "icon": "build/to-do-panel-icon.png",
       "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "artifactName": "TO-DO-Panel-${version}-windows-${arch}-setup.${ext}"
+      "artifactName": "Dynamic-Panel-${version}-windows-${arch}-setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -95,7 +95,7 @@
       "deleteAppDataOnUninstall": false
     },
     "dmg": {
-      "title": "TO-DO Panel ${version}",
+      "title": "Dynamic Panel ${version}",
       "iconSize": 100,
       "contents": [
         {

@@ -142,7 +142,7 @@ export default function HeroSection() {
         transition={{ duration: 0.6, delay: contentVisible ? 0.12 : 0, ease: [0.22, 1, 0.36, 1] }}
       >
         <EchoText
-          text="TO-DO PANEL"
+          text="DYNAMIC PANEL"
           tint="#181ecb"
           fontSize="inherit"
           fontWeight="inherit"
@@ -191,14 +191,14 @@ export default function HeroSection() {
             >
               {/* Product UI is shown only through real screenshots from the running app. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="hero-panel-image hero-panel-image-expanded" src={assetPath("/product-captures/home.jpg")} alt="TO-DO Panel 真实首页展开态" />
+              <img className="hero-panel-image hero-panel-image-expanded" src={assetPath("/product-captures/home.jpg")} alt="Dynamic Panel 真实首页展开态" />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img className="hero-panel-image hero-panel-image-collapsed" src={assetPath("/hero/panel-collapsed.png")} alt="TO-DO Panel 真实折叠态" />
+              <img className="hero-panel-image hero-panel-image-collapsed" src={assetPath("/hero/panel-collapsed.png")} alt="Dynamic Panel 真实折叠态" />
               <button
                 className="hero-panel-trigger"
                 type="button"
                 aria-expanded={expanded}
-                aria-label={expanded ? "折叠 TO-DO Panel" : "展开 TO-DO Panel"}
+                aria-label={expanded ? "折叠 Dynamic Panel" : "展开 Dynamic Panel"}
                 aria-disabled={!entranceComplete}
                 onClick={togglePanel}
               />
@@ -227,7 +227,7 @@ export default function HeroSection() {
         <a className="brand-lockup" href="#top">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={assetPath("/favicon.png")} alt="" width="34" height="34" />
-          <span>TO-DO PANEL</span>
+          <span>DYNAMIC PANEL</span>
         </a>
         <div className="hero-nav-links">
           {NAV_ITEMS.map(([label, href]) => (

@@ -92,7 +92,7 @@ const {
 // Keep the historical data directory so upgrading users retain notes, links,
 // recordings and encrypted settings after the public product rename.
 const LEGACY_USER_DATA_PATH = path.join(app.getPath('appData'), 'Dynamic Panel');
-app.setName('TO-DO Panel');
+app.setName('Dynamic Panel');
 // Honor Electron's standard profile switch for isolated automated tests.
 app.setPath('userData', app.commandLine.getSwitchValue('user-data-dir') || LEGACY_USER_DATA_PATH);
 
@@ -1746,7 +1746,7 @@ async function chooseWorkspaceFolder() {
     return false;
   }
   const result = await showOwnedOpenDialog({
-    title: '选择 TO-DO Panel 数据文件夹',
+    title: '选择 Dynamic Panel 数据文件夹',
     properties: ['openDirectory', 'createDirectory'],
   });
   const selected = !result.canceled && result.filePaths && result.filePaths[0];
@@ -2128,8 +2128,8 @@ function refreshTrayMenu() {
       click: () => {
         dialog.showMessageBox({
           type: 'info',
-          title: '关于 TO-DO Panel',
-          message: 'TO-DO Panel',
+          title: '关于 Dynamic Panel',
+          message: 'Dynamic Panel',
           detail:
             `版本 ${app.getVersion()}\n\n一个开源、常驻屏幕顶部的本地工作台。工作区数据默认保存在本机；账号密码与 API Key 由系统安全存储加密。\n\nMIT License`,
           buttons: ['查看 GitHub', '好'],
@@ -2153,7 +2153,7 @@ function refreshTrayMenu() {
 
 function createTray() {
   tray = new Tray(createNotchTrayIcon());
-  tray.setToolTip('TO-DO Panel');
+  tray.setToolTip('Dynamic Panel');
   tray.on('click', () => {
     if (!mainWindow) return;
     if (!mainWindow.isVisible()) {
@@ -2407,11 +2407,11 @@ async function promptForMissingPermissions() {
   const names = missing.map((key) => (key === 'accessibility' ? '辅助功能' : '屏幕录制'));
   const { response, checkboxChecked } = await dialog.showMessageBox({
     type: 'info',
-    message: `TO-DO Panel 需要「${names.join('」和「')}」权限`,
+    message: `Dynamic Panel 需要「${names.join('」和「')}」权限`,
     detail: [
       '缺少这些权限时，「当前窗口」会读不到任何窗口，汽水音乐的播放控制也不会生效。',
       '',
-      '授权后需要重新启动 TO-DO Panel 才会生效。',
+      '授权后需要重新启动 Dynamic Panel 才会生效。',
       'ad-hoc 签名的应用每次重新打包都要重新授权一次，这是没有开发者账号分发的固有限制。',
     ].join('\n'),
     buttons: ['打开系统设置', '以后再说'],
@@ -2427,7 +2427,7 @@ async function promptForMissingPermissions() {
   if (response !== 0) return;
 
   // 顺带用 true 触发一次系统的辅助功能提示：这一步会把应用登记进系统设置的列表里，
-  // 否则用户打开设置面板可能找不到 TO-DO Panel 这一项、只能手动拖进去。
+  // 否则用户打开设置面板可能找不到 Dynamic Panel 这一项、只能手动拖进去。
   if (missing.includes('accessibility')) systemPreferences.isTrustedAccessibilityClient(true);
   shell.openExternal(PRIVACY_SETTINGS_PANES[missing[0]]);
 }

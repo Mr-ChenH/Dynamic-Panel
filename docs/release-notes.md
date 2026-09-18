@@ -2,8 +2,8 @@
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Mac · Apple Silicon · macOS 13+ | [下载 macOS 安装包（.dmg）](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/TO-DO-Panel-1.1.0-arm64.dmg) | 打开 DMG，将应用拖入「应用程序」 |
-| Windows 10/11 · Intel / AMD 64 位（x64） | [下载 Windows 安装包（.exe）](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/TO-DO-Panel-1.1.0-windows-x64-setup.exe) | 双击 EXE，按安装向导完成安装 |
+| Mac · Apple Silicon · macOS 13+ | [下载 macOS 安装包（.dmg）](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/Dynamic-Panel-1.1.0-arm64.dmg) | 打开 DMG，将应用拖入「应用程序」 |
+| Windows 10/11 · Intel / AMD 64 位（x64） | [下载 Windows 安装包（.exe）](https://github.com/xiaopu-ai/TO-DO-Panel/releases/download/v1.1.0/Dynamic-Panel-1.1.0-windows-x64-setup.exe) | 双击 EXE，按安装向导完成安装 |
 
 `.sha256` 是对应文件的完整性校验码，不是安装包。官网提供 macOS 与 Windows 两个下载入口。
 

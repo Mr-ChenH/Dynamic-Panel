@@ -1,8 +1,8 @@
 # 双平台发布流程
 
 每个版本在同一 GitHub Release 提供两个独立安装包和各自 SHA-256：
-- Mac：`TO-DO-Panel-<版本>-arm64.dmg`，macOS 13+ Apple Silicon，ad-hoc 签名。
-- Windows：`TO-DO-Panel-<版本>-windows-x64-setup.exe`，Windows 10/11 x64，NSIS 当前用户安装，暂无商业代码签名。
+- Mac：`Dynamic-Panel-<版本>-arm64.dmg`，macOS 13+ Apple Silicon，ad-hoc 签名。
+- Windows：`Dynamic-Panel-<版本>-windows-x64-setup.exe`，Windows 10/11 x64，NSIS 当前用户安装，暂无商业代码签名。
 
 ## 发布前
 
@@ -29,7 +29,7 @@
 
 `npm run build` 生成 Mac DMG；`npm run build:win` 生成 Windows EXE。使用对应系统构建最稳妥，CI 可从 Mac 发起并在 Windows 执行。安装包不要求终端用户安装 Node.js；通知转发脚本由相应 AI 工具的 Node 环境调用。
 
-Windows 默认安装路径为 `%LOCALAPPDATA%/Programs/TO-DO Panel`（以安装向导为准），通知脚本位于安装目录的 `resources/app/scripts/`。普通工作区可复制迁移，系统加密密钥不能跨用户或操作系统直接解密，应重新输入。卸载默认保留工作区。
+Windows 默认安装路径为 `%LOCALAPPDATA%/Programs/Dynamic Panel`（以安装向导为准），通知脚本位于安装目录的 `resources/app/scripts/`。普通工作区可复制迁移，系统加密密钥不能跨用户或操作系统直接解密，应重新输入。卸载默认保留工作区。
 
 ## 测试边界
 

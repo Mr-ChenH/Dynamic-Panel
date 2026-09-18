@@ -209,7 +209,7 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
       width: direct ? target.bounds.width : Math.min(900, target.workArea.width - 24), height: direct ? target.bounds.height : Math.min(640, target.workArea.height - 24),
       x: direct ? target.bounds.x : target.workArea.x + Math.max(12, Math.round((target.workArea.width - 900) / 2)),
       y: direct ? target.bounds.y : target.workArea.y + Math.max(12, Math.round((target.workArea.height - 640) / 2)),
-      title: mode === 'video' ? '录屏 · TO-DO Panel' : '截图 · TO-DO Panel',
+      title: mode === 'video' ? '录屏 · Dynamic Panel' : '截图 · Dynamic Panel',
       frame: false, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, show: false,
       backgroundColor: '#151719', alwaysOnTop: true,
       webPreferences: { preload: path.join(__dirname, 'capturePreload.js'), session: captureSession, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },

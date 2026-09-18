@@ -33,10 +33,10 @@ jobs:
         shell: bash
         run: |
           version=$(node -p "require('./package.json').version")
-          codesign --verify --deep --strict 'dist.noindex/mac-arm64/TO-DO Panel.app'
-          hdiutil verify "dist.noindex/TO-DO-Panel-${version}-arm64.dmg"
+          codesign --verify --deep --strict 'dist.noindex/mac-arm64/Dynamic Panel.app'
+          hdiutil verify "dist.noindex/Dynamic-Panel-${version}-arm64.dmg"
           cd dist.noindex
-          shasum -a 256 "TO-DO-Panel-${version}-arm64.dmg" > "TO-DO-Panel-${version}-arm64.dmg.sha256"
+          shasum -a 256 "Dynamic-Panel-${version}-arm64.dmg" > "Dynamic-Panel-${version}-arm64.dmg.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: mac-installer
@@ -100,4 +100,4 @@ jobs:
           cd release-assets
           sha256sum --check *.sha256
           cd ..
-          gh release create "${GITHUB_REF_NAME}" release-assets/*.dmg release-assets/*.exe release-assets/*.sha256 --title "TO-DO Panel ${GITHUB_REF_NAME}" --notes-file docs/release-notes.md
+          gh release create "${GITHUB_REF_NAME}" release-assets/*.dmg release-assets/*.exe release-assets/*.sha256 --title "Dynamic Panel ${GITHUB_REF_NAME}" --notes-file docs/release-notes.md

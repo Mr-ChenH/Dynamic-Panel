@@ -264,7 +264,7 @@ function downloadRemoteAudio(endpoint) {
     const request = https.request({
       protocol: 'https:', hostname: endpoint.url.hostname, port: endpoint.url.port || 443,
       path: `${endpoint.url.pathname}${endpoint.url.search}`, method: 'GET', servername: endpoint.url.hostname,
-      headers: { Accept: 'audio/*,application/octet-stream;q=0.5', 'User-Agent': 'TO-DO-Panel/1.1' },
+      headers: { Accept: 'audio/*,application/octet-stream;q=0.5', 'User-Agent': 'Dynamic-Panel/1.1' },
       lookup: (_hostname, options, callback) => options?.all
         ? callback(null, [{ address: endpoint.address, family: endpoint.family }])
         : callback(null, endpoint.address, endpoint.family),
@@ -307,7 +307,7 @@ function requestLoopbackCatalog(baseUrl, route, { maxBytes = MAX_CATALOG_JSON_BY
     const request = http.request({
       protocol: 'http:', hostname: connectHost, family: connectHost === '::1' ? 6 : 4, port: base.port || 80,
       path: requestPath, method: 'GET',
-      headers: { Host: base.host, Accept: responseType === 'json' ? 'application/json' : 'audio/*,application/octet-stream;q=0.5', 'User-Agent': 'TO-DO-Panel/1.1' },
+      headers: { Host: base.host, Accept: responseType === 'json' ? 'application/json' : 'audio/*,application/octet-stream;q=0.5', 'User-Agent': 'Dynamic-Panel/1.1' },
     }, (response) => {
       if (response.statusCode !== 200) { response.resume(); finish(reject, Error('catalog_unavailable')); return; }
       const declared = Number(response.headers['content-length'] || 0);

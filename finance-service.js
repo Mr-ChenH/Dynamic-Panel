@@ -998,7 +998,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
   }
 
   function coinGeckoHeaders(config) {
-    const headers = { Accept: 'application/json', 'User-Agent': 'TO-DO-Panel/1.1' };
+    const headers = { Accept: 'application/json', 'User-Agent': 'Dynamic-Panel/1.1' };
     if (config.coingecko?.apiKey) headers['x-cg-demo-api-key'] = config.coingecko.apiKey;
     return headers;
   }
@@ -1019,7 +1019,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
       Accept: 'application/json',
       'APCA-API-KEY-ID': config.alpaca?.keyId || '',
       'APCA-API-SECRET-KEY': config.alpaca?.secretKey || '',
-      'User-Agent': 'TO-DO-Panel/1.1',
+      'User-Agent': 'Dynamic-Panel/1.1',
     };
   }
 
@@ -1031,7 +1031,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
 
   function twelveDataHeaders(config) {
     requireTwelveDataConfig(config);
-    return { Accept: 'application/json', Authorization: `apikey ${config.twelveData.apiKey}`, 'User-Agent': 'TO-DO-Panel/1.1' };
+    return { Accept: 'application/json', Authorization: `apikey ${config.twelveData.apiKey}`, 'User-Agent': 'Dynamic-Panel/1.1' };
   }
 
   function twelveDataRows(payload) {
@@ -1055,7 +1055,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
 
   function secEdgarHeaders(config) {
     const settings = requireSecEdgarConfig(config);
-    return { Accept: 'application/json', 'User-Agent': `TO-DO-Panel/1.1 ${settings.contact}` };
+    return { Accept: 'application/json', 'User-Agent': `Dynamic-Panel/1.1 ${settings.contact}` };
   }
 
   function requireQuantdashConfig(config) {
@@ -1065,7 +1065,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
   }
 
   function quantdashHeaders(config) {
-    return { Accept: 'application/json', 'X-API-Key': config.cnStock.apiKey, 'User-Agent': 'TO-DO-Panel/1.1' };
+    return { Accept: 'application/json', 'X-API-Key': config.cnStock.apiKey, 'User-Agent': 'Dynamic-Panel/1.1' };
   }
 
   function quantdashQuery(params) {
@@ -1184,7 +1184,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
   }
 
   function publicCnHeaders(providerId) {
-    const common = { Accept: '*/*', 'User-Agent': 'Mozilla/5.0 (TO-DO-Panel)' };
+    const common = { Accept: '*/*', 'User-Agent': 'Mozilla/5.0 (Dynamic-Panel)' };
     if (providerId === 'cn-eastmoney') return { ...common, Referer: 'https://quote.eastmoney.com/' };
     if (providerId === 'cn-sina') return { ...common, Referer: 'https://stock.finance.sina.com.cn/' };
     return common;
@@ -1362,7 +1362,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
   async function binanceMarkets({ signal = null, force = false } = {}) {
     const config = getConfig();
     if (config.binance?.enabled === false) throw Object.assign(new Error('provider_disabled'), { code: 'provider_disabled' });
-    const response = await cached('binance:markets:24h', 45_000, (requestSignal) => requestJson(`${BINANCE_ORIGIN}/api/v3/ticker/24hr?type=MINI`, { headers: { Accept: 'application/json', 'User-Agent': 'TO-DO-Panel/1.1' }, signal: requestSignal }), signal, force);
+    const response = await cached('binance:markets:24h', 45_000, (requestSignal) => requestJson(`${BINANCE_ORIGIN}/api/v3/ticker/24hr?type=MINI`, { headers: { Accept: 'application/json', 'User-Agent': 'Dynamic-Panel/1.1' }, signal: requestSignal }), signal, force);
     const retrievedAt = new Date(response.storedAt).toISOString();
     const rows = (Array.isArray(response.value) ? response.value : [])
       .filter((row) => String(row?.symbol || '').toUpperCase().endsWith('USDT'))
@@ -1378,7 +1378,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
     const safeSymbols = [...new Set(symbols.map((symbol) => boundedText(symbol, 32).toUpperCase()).filter((symbol) => /^[A-Z0-9]{1,32}USDT$/.test(symbol)))].slice(0, MAX_IDS_PER_REQUEST);
     if (!safeSymbols.length) return [];
     const query = `symbols=${encodeURIComponent(JSON.stringify(safeSymbols))}&type=FULL`;
-    const response = await cached(`binance:quotes:${safeSymbols.slice().sort().join(',')}`, 20_000, (requestSignal) => requestJson(`${BINANCE_ORIGIN}/api/v3/ticker/24hr?${query}`, { headers: { Accept: 'application/json', 'User-Agent': 'TO-DO-Panel/1.1' }, signal: requestSignal }), signal, force);
+    const response = await cached(`binance:quotes:${safeSymbols.slice().sort().join(',')}`, 20_000, (requestSignal) => requestJson(`${BINANCE_ORIGIN}/api/v3/ticker/24hr?${query}`, { headers: { Accept: 'application/json', 'User-Agent': 'Dynamic-Panel/1.1' }, signal: requestSignal }), signal, force);
     const retrievedAt = new Date(response.storedAt).toISOString();
     return (Array.isArray(response.value) ? response.value : []).map((row) => normalizeBinanceMarket(row, retrievedAt)).filter(Boolean).map((row) => ({ ...row, stale: response.stale === true }));
   }
@@ -1388,7 +1388,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
     if (config.alphaVantage?.enabled !== true || !config.alphaVantage.apiKey) throw Object.assign(new Error('not_configured'), { code: 'not_configured' });
     // 免费层每日额度很低；手动刷新和后台刷新都复用半日快照，只有配置变更才清除此缓存。
     const response = await cached('quota:alpha-vantage:movers', ALPHA_VANTAGE_MOVERS_TTL_MS, async (requestSignal) => {
-      const value = await requestJson(`${ALPHA_VANTAGE_ORIGIN}/query?function=TOP_GAINERS_LOSERS&apikey=${alphaVantageKey(config)}`, { headers: { Accept: 'application/json', 'User-Agent': 'TO-DO-Panel/1.1' }, signal: requestSignal });
+      const value = await requestJson(`${ALPHA_VANTAGE_ORIGIN}/query?function=TOP_GAINERS_LOSERS&apikey=${alphaVantageKey(config)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Dynamic-Panel/1.1' }, signal: requestSignal });
       if (value?.Note || value?.Information) throw alphaVantageError(value.Note || value.Information);
       return value;
     }, signal, false);
@@ -1561,7 +1561,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
         const interval = days === 1 ? '1h' : '1d';
         const limit = Math.max(2, Math.min(MAX_HISTORY_POINTS, days === 1 ? 24 : days));
         try {
-          const response = await cached(`binance:history:${providerAssetId}:${days}`, 45_000, (requestSignal) => requestJson(`${BINANCE_ORIGIN}/api/v3/klines?symbol=${encodeURIComponent(providerAssetId)}&interval=${interval}&limit=${limit}`, { headers: { Accept: 'application/json', 'User-Agent': 'TO-DO-Panel/1.1' }, signal: requestSignal }), signal);
+          const response = await cached(`binance:history:${providerAssetId}:${days}`, 45_000, (requestSignal) => requestJson(`${BINANCE_ORIGIN}/api/v3/klines?symbol=${encodeURIComponent(providerAssetId)}&interval=${interval}&limit=${limit}`, { headers: { Accept: 'application/json', 'User-Agent': 'Dynamic-Panel/1.1' }, signal: requestSignal }), signal);
           const retrievedAt = new Date(response.storedAt).toISOString();
           const result = normalizeBinanceHistory(response.value, assetId, retrievedAt, days);
           if (!result) throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' });
@@ -1905,7 +1905,7 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
     if (exactSymbol && config.binance?.enabled !== false) {
       try {
         const providerAssetId = exactSymbol.endsWith('USDT') ? exactSymbol : `${exactSymbol}USDT`;
-        const response = await cached(`binance:search:${providerAssetId}`, 5 * 60_000, (requestSignal) => requestJson(`${BINANCE_ORIGIN}/api/v3/ticker/24hr?symbol=${encodeURIComponent(providerAssetId)}&type=FULL`, { headers: { Accept: 'application/json', 'User-Agent': 'TO-DO-Panel/1.1' }, signal: requestSignal }), signal);
+        const response = await cached(`binance:search:${providerAssetId}`, 5 * 60_000, (requestSignal) => requestJson(`${BINANCE_ORIGIN}/api/v3/ticker/24hr?symbol=${encodeURIComponent(providerAssetId)}&type=FULL`, { headers: { Accept: 'application/json', 'User-Agent': 'Dynamic-Panel/1.1' }, signal: requestSignal }), signal);
         const result = normalizeBinanceMarket(response.value, new Date(response.storedAt).toISOString());
         if (result) items.push(result.asset);
       } catch (error) { errors.push({ provider: 'binance', error: financeError(error) }); }
@@ -2045,12 +2045,12 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
       }
       if (providerId === 'binance') {
         if (config.binance?.enabled === false) return { ok: false, error: 'provider_disabled' };
-        const value = await requestJson(`${BINANCE_ORIGIN}/api/v3/ping`, { headers: { Accept: 'application/json', 'User-Agent': 'TO-DO-Panel/1.1' } });
+        const value = await requestJson(`${BINANCE_ORIGIN}/api/v3/ping`, { headers: { Accept: 'application/json', 'User-Agent': 'Dynamic-Panel/1.1' } });
         return value && typeof value === 'object' ? { ok: true } : { ok: false, error: 'invalid_response' };
       }
       if (providerId === 'alpha-vantage') {
         if (config.alphaVantage?.enabled !== true || !config.alphaVantage.apiKey) return { ok: false, error: 'not_configured' };
-        const value = await requestJson(`${ALPHA_VANTAGE_ORIGIN}/query?function=GLOBAL_QUOTE&symbol=AAPL&apikey=${alphaVantageKey(config)}`, { headers: { Accept: 'application/json', 'User-Agent': 'TO-DO-Panel/1.1' } });
+        const value = await requestJson(`${ALPHA_VANTAGE_ORIGIN}/query?function=GLOBAL_QUOTE&symbol=AAPL&apikey=${alphaVantageKey(config)}`, { headers: { Accept: 'application/json', 'User-Agent': 'Dynamic-Panel/1.1' } });
         if (value?.Note || value?.Information) throw alphaVantageError(value.Note || value.Information);
         return value && typeof value === 'object' ? { ok: true } : { ok: false, error: 'invalid_response' };
       }

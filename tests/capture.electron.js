@@ -35,7 +35,7 @@ async function main() {
   await owner.loadFile(path.join(__dirname, 'capture-owner.html'));
   const execute = (code) => owner.webContents.executeJavaScript(code);
   const unwrap = (reply) => { assert.equal(reply.ok, true, JSON.stringify(reply)); return reply.value; };
-  const recordingControl = () => BrowserWindow.getAllWindows().find((candidate) => candidate.getTitle() === '录屏状态 · TO-DO Panel');
+  const recordingControl = () => BrowserWindow.getAllWindows().find((candidate) => candidate.getTitle() === '录屏状态 · Dynamic Panel');
   async function open(mode, denied = false, request = null) {
     if (request) await service.open(request);
     else unwrap(await execute(`window.notchAPI.openCapture('${mode}')`));

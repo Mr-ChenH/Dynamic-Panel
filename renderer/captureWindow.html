@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>屏幕采集 · TO-DO Panel</title>
+  <title>屏幕采集 · Dynamic Panel</title>
   <link rel="stylesheet" href="captureWindow.css">
 </head>
 <body>
   <main id="picker">
-    <header><div><span class="eyebrow">TO-DO PANEL</span><h1 id="heading">选择采集来源</h1></div><button id="cancel" type="button">取消 · Esc</button></header>
+    <header><div><span class="eyebrow">DYNAMIC PANEL</span><h1 id="heading">选择采集来源</h1></div><button id="cancel" type="button">取消 · Esc</button></header>
     <div class="toolbar"><label>采集方式 <select id="type"><option value="region">框选区域</option><option value="screen">整个屏幕</option><option value="window">单个窗口</option></select></label><button id="refresh" type="button">刷新来源</button><span id="summary"></span></div>
     <p id="status" role="status">正在读取屏幕与窗口…</p>
     <div id="sources" role="group" aria-label="可采集的屏幕或窗口"></div>

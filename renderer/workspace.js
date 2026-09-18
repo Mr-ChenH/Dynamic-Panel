@@ -2888,7 +2888,7 @@
       const heading = document.createElement('strong');
       heading.textContent = title;
       const hint = document.createElement('span');
-      hint.textContent = `系统设置 → 隐私与安全性 → ${pane}，允许 TO-DO Panel 后重试。`;
+      hint.textContent = `系统设置 → 隐私与安全性 → ${pane}，允许 Dynamic Panel 后重试。`;
       const action = document.createElement('button');
       action.type = 'button';
       action.className = 'window-permission-open';

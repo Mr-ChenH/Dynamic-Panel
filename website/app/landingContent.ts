@@ -31,12 +31,12 @@ export const NAV_ITEMS = [
 ] as const;
 
 export const MARQUEE_ITEMS: MediaItem[] = [
-  { id: "todo", src: assetPath("/product-captures/todo.webp"), fallbackSrc: "", kind: "image", alt: "TO-DO Panel 待办完整面板" },
-  { id: "clipboard", src: assetPath("/product-captures/clipboard.webp"), fallbackSrc: "", kind: "image", alt: "TO-DO Panel 剪贴完整面板" },
-  { id: "notes", src: assetPath("/product-captures/notes.webp"), fallbackSrc: "", kind: "image", alt: "TO-DO Panel 笔记完整面板" },
-  { id: "links", src: assetPath("/product-captures/links.webp"), fallbackSrc: "", kind: "image", alt: "TO-DO Panel 链接完整面板" },
-  { id: "recordings", src: assetPath("/product-captures/recordings.webp"), fallbackSrc: "", kind: "image", alt: "TO-DO Panel 录制完整面板" },
-  { id: "credentials", src: assetPath("/product-captures/credentials.webp"), fallbackSrc: "", kind: "image", alt: "TO-DO Panel 密钥完整面板" },
+  { id: "todo", src: assetPath("/product-captures/todo.webp"), fallbackSrc: "", kind: "image", alt: "Dynamic Panel 待办完整面板" },
+  { id: "clipboard", src: assetPath("/product-captures/clipboard.webp"), fallbackSrc: "", kind: "image", alt: "Dynamic Panel 剪贴完整面板" },
+  { id: "notes", src: assetPath("/product-captures/notes.webp"), fallbackSrc: "", kind: "image", alt: "Dynamic Panel 笔记完整面板" },
+  { id: "links", src: assetPath("/product-captures/links.webp"), fallbackSrc: "", kind: "image", alt: "Dynamic Panel 链接完整面板" },
+  { id: "recordings", src: assetPath("/product-captures/recordings.webp"), fallbackSrc: "", kind: "image", alt: "Dynamic Panel 录制完整面板" },
+  { id: "credentials", src: assetPath("/product-captures/credentials.webp"), fallbackSrc: "", kind: "image", alt: "Dynamic Panel 密钥完整面板" },
 ];
 
 export const CAPABILITIES = [
