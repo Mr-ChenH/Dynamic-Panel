@@ -466,6 +466,11 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
   handler('capture:recording', captureOnly, async () => {
     if (state.phase !== 'countdown') throw new Error('invalid_state');
     emit({ phase: 'recording', startedAt: Date.now(), countdownEndsAt: 0 });
+    // The source picker and countdown must stay hidden, but the workbench is
+    // useful once recording is live. The host temporarily re-exposes it with
+    // content protection so the panel remains interactive without becoming
+    // part of the captured desktop where the platform supports the feature.
+    restorePanel?.showDuringRecording?.();
     if (!recordingOverlay || recordingOverlay.isDestroyed()) {
       try { await showRecordingOverlay(); } catch { destroyRecordingOverlay(); }
     }

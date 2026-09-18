@@ -20,7 +20,7 @@ async function main() {
   const owner = new BrowserWindow({ show: false, webPreferences: { preload: path.join(__dirname, '..', 'preload.js'), contextIsolation: true, sandbox: true } });
   owner.webContents.on('console-message', (details) => { if (details.level === 'error') console.error(details.message); });
   await owner.loadFile(path.join(__dirname, 'capture-owner.html'));
-  let settings = { screenshot: 'screen', quality: '720', audio: 'none', countdown: 0 }, restored = 0, microphoneRequests = 0, handler;
+  let settings = { screenshot: 'screen', quality: '720', audio: 'none', countdown: 0 }, restored = 0, recordingPanelExposed = 0, microphoneRequests = 0, handler;
   const copiedImages = [];
   const captureSession = session.fromPartition('capture-tools');
   let permissionCheck, permissionRequest;
@@ -30,7 +30,7 @@ async function main() {
   let sourceThumbnail = nativeImage.createEmpty();
   desktopCapturer.getSources = async () => [{ id: 'screen:synthetic:0', display_id: String(screen.getPrimaryDisplay().id), name: 'Synthetic canvas', thumbnail: sourceThumbnail }];
   const service = createCaptureService({ getMainWindow: () => owner, getRoot: () => root, getSettings: () => settings, saveSettings: (value) => { settings = value; },
-    ensureMicrophone: () => { microphoneRequests++; return true; }, suspendPanel: () => () => { restored++; }, onChange: () => {},
+    ensureMicrophone: () => { microphoneRequests++; return true; }, suspendPanel: () => { const restore = () => { restored++; }; restore.showDuringRecording = () => { recordingPanelExposed++; }; return restore; }, onChange: () => {},
     screenshotProvider: async () => sourceThumbnail, clipboardWriter: (image) => copiedImages.push(image.getSize()) });
   await owner.loadFile(path.join(__dirname, 'capture-owner.html'));
   const execute = (code) => owner.webContents.executeJavaScript(code);
@@ -148,6 +148,7 @@ async function main() {
   const screenRecordingControl = await until(recordingControl, 'Recording control did not open');
   await until(() => screenRecordingControl.isVisible(), 'Recording control did not become visible');
   assert.equal(videoWindow.isVisible(), false, 'Capture worker should be hidden');
+  assert.equal(recordingPanelExposed, 1, 'Workbench should be exposed once recording is live');
   assert.equal(screenRecordingControl.isVisible(), true, 'Recording control must remain visible');
   assert.equal(screenRecordingControl.isContentProtected(), true, 'Recording control must be excluded from capture where supported');
   assert.equal((await execute('window.notchAPI.beginAudioCapture()')).ok, false);

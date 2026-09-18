@@ -4635,16 +4635,28 @@ app.whenReady().then(() => {
     suspendPanel: () => {
       const mode = currentMode, display = getWindowDisplay();
       const visible = mainWindow?.isVisible();
+      let exposedDuringRecording = false;
       transientSystemInteractionRequests++;
       // A screen-saver level panel otherwise obscures the source picker and TCC dialogs.
       mainWindow?.hide();
-      return () => {
+      const restore = () => {
         transientSystemInteractionRequests = Math.max(0, transientSystemInteractionRequests - 1);
         if (!mainWindow || mainWindow.isDestroyed() || captureQuitPending) return;
+        mainWindow.setContentProtection(false);
         const restoredDisplay = screen.getAllDisplays().find((candidate) => candidate.id === display.id) || getTargetDisplay();
         applyMode(mode, restoredDisplay);
         if (visible) mainWindow.show();
+        else mainWindow.hide();
+        refreshTrayMenu();
       };
+      restore.showDuringRecording = () => {
+        if (exposedDuringRecording || !mainWindow || mainWindow.isDestroyed() || captureQuitPending) return;
+        exposedDuringRecording = true;
+        mainWindow.setContentProtection(true);
+        mainWindow.showInactive();
+        refreshTrayMenu();
+      };
+      return restore;
     },
   });
   createWindow();
