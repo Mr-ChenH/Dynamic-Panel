@@ -4662,14 +4662,25 @@ app.whenReady().then(() => {
         }
         refreshTrayMenu();
       };
-      restore.showDuringRecording = () => {
+      restore.showDuringRecording = async () => {
         if (exposedDuringRecording || restored || !mainWindow || mainWindow.isDestroyed() || captureQuitPending) return;
         exposedDuringRecording = true;
         releaseInteractionGuard();
         hideWhenCollapsed = false;
         mainWindow.setContentProtection(true);
-        applyMode(mode, getWindowDisplay());
+        // The renderer may still believe the panel is expanded because the
+        // capture worker is a separate window. Reuse the normal collapse path
+        // before exposing the panel, otherwise the full workbench flashes until
+        // the user clicks it once.
+        if (currentMode === 'expanded') {
+          requestRendererCollapse();
+          await waitForCollapsedPanel();
+        }
+        if (!mainWindow || mainWindow.isDestroyed() || captureQuitPending) return;
+        if (currentMode !== 'collapsed') applyMode('collapsed', getWindowDisplay());
         mainWindow.showInactive();
+        syncHoverSpacePolling();
+        syncDisplayFollowPolling();
         refreshTrayMenu();
       };
       return restore;

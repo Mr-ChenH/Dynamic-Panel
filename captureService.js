@@ -470,7 +470,7 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     // useful once recording is live. The host temporarily re-exposes it with
     // content protection so the panel remains interactive without becoming
     // part of the captured desktop where the platform supports the feature.
-    restorePanel?.showDuringRecording?.();
+    await restorePanel?.showDuringRecording?.();
     if (!recordingOverlay || recordingOverlay.isDestroyed()) {
       try { await showRecordingOverlay(); } catch { destroyRecordingOverlay(); }
     }
