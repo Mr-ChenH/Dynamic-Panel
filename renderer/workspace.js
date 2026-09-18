@@ -217,171 +217,23 @@
     return true;
   }
 
-  function findLink(group, linkId) {
-    return group && (group.links || []).find((link) => link.id === linkId);
-  }
+  window.NotchWorkspaceLinksActions.createController({
+    Domain,
+    elements: { linkGroupsEl },
+    getGroups: () => linkGroups,
+    setGroups: (groups) => { linkGroups = groups; },
+    getSelection: () => linkSelection,
+    setSelection: (selection) => { linkSelection = selection; },
+    getSelectionAnchor: () => linkSelectionAnchor,
+    setSelectionAnchor: (anchor) => { linkSelectionAnchor = anchor; },
+    getAddingGroupId: () => addingLinkGroupId,
+    setAddingGroupId: (value) => { addingLinkGroupId = value; },
+    persist: persistLinks,
+    render: renderLinkGroups,
+    addLink,
+  });
 
   if (linkGroupsEl) {
-    linkGroupsEl.addEventListener('change', (event) => {
-      const groupSection = event.target.closest('[data-group-id]');
-      if (!groupSection) return;
-      if (event.target.matches('.group-name-input')) {
-        linkGroups = Domain.renameGroup(linkGroups, groupSection.dataset.groupId, event.target.value);
-        persistLinks();
-        renderLinkGroups();
-      }
-      if (event.target.matches('.link-title-edit, .link-description-edit, .link-tags-edit, .link-note-edit')) {
-        const row = event.target.closest('[data-link-id]');
-        const group = linkGroups.find((item) => item.id === groupSection.dataset.groupId);
-        const link = findLink(group, row && row.dataset.linkId);
-        if (link) {
-          if (event.target.matches('.link-title-edit') && event.target.value.trim()) link.title = event.target.value.trim();
-          if (event.target.matches('.link-description-edit')) link.description = event.target.value.trim().slice(0, 500);
-          if (event.target.matches('.link-tags-edit')) link.tags = Domain.normalizeLinkTags(event.target.value);
-          if (event.target.matches('.link-note-edit')) link.note = event.target.value.trim().slice(0, 2000);
-          link.updatedAt = Date.now();
-        }
-        persistLinks();
-        renderLinkGroups();
-      }
-    });
-
-    linkGroupsEl.addEventListener('keydown', async (event) => {
-      const groupSection = event.target.closest('[data-group-id]');
-      if (!groupSection) return;
-      if (event.target.matches('[data-group-link-input]')) {
-        if (event.key === 'Escape') {
-          addingLinkGroupId = '';
-          renderLinkGroups();
-        } else if (event.key === 'Enter' && !event.isComposing && !event.repeat) {
-          event.preventDefault();
-          if (addLink(event.target.value, groupSection.dataset.groupId)) {
-            addingLinkGroupId = '';
-            renderLinkGroups();
-          }
-        }
-        return;
-      }
-      if (event.target.matches('.group-name-input') && event.key === 'Enter') {
-        event.preventDefault();
-        event.target.blur();
-      }
-      if (event.target.matches('.link-title-edit, .link-description-edit, .link-tags-edit, .link-note-edit') && event.key === 'Enter' && !event.target.matches('.link-note-edit')) {
-        event.preventDefault();
-        event.target.blur();
-      }
-    });
-
-    linkGroupsEl.addEventListener('click', (event) => {
-      const action = event.target.closest('[data-action]');
-      const groupSection = event.target.closest('[data-group-id]');
-      if (!groupSection) return;
-      const groupId = groupSection.dataset.groupId;
-      const group = linkGroups.find((item) => item.id === groupId);
-      const row = event.target.closest('[data-link-id]');
-      const link = findLink(group, row && row.dataset.linkId);
-      if (event.shiftKey && link) {
-        event.preventDefault();
-        const result = Domain.updateRangeSelection(
-          [...linkGroupsEl.querySelectorAll('.link-item[data-link-id]')].map(item=>item.dataset.linkId),
-          [...linkSelection],
-          link.id,
-          linkSelectionAnchor,
-          true
-        );
-        linkSelection = new Set(result.selected);
-        linkSelectionAnchor = result.anchor;
-        renderLinkGroups();
-        return;
-      }
-      if (link) linkSelectionAnchor = link.id;
-      if (!action) return;
-      if (action.dataset.action === 'add-link-to-group') {
-        addingLinkGroupId = groupId;
-        group.collapsed = false;
-        persistLinks();
-        renderLinkGroups();
-        requestAnimationFrame(() => linkGroupsEl.querySelector(
-          `[data-group-id="${CSS.escape(groupId)}"] [data-group-link-input]`
-        )?.focus());
-      }
-      if (action.dataset.action === 'cancel-group-link-add') {
-        addingLinkGroupId = '';
-        renderLinkGroups();
-      }
-      if (action.dataset.action === 'toggle-group') {
-        group.collapsed = !group.collapsed;
-        persistLinks();
-        renderLinkGroups();
-      }
-      if (action.dataset.action === 'delete-group') {
-        (group.links || []).forEach((item) => linkSelection.delete(item.id));
-        linkGroups = linkGroups.filter((item) => item.id !== groupId);
-        persistLinks();
-        renderLinkGroups();
-      }
-      if (action.dataset.action === 'open-link' && link && window.notchAPI) {
-        link.read = true;
-        link.lastOpenedAt = Date.now();
-        link.updatedAt = link.updatedAt || Date.now();
-        persistLinks();
-        window.notchAPI.openExternal(link.url);
-        renderLinkGroups();
-      }
-      if (action.dataset.action === 'toggle-link-favorite' && link) {
-        link.favorite = link.favorite !== true;
-        link.updatedAt = Date.now();
-        persistLinks();
-        renderLinkGroups();
-      }
-      if (action.dataset.action === 'toggle-link-read' && link) {
-        link.read = link.read !== true;
-        link.updatedAt = Date.now();
-        persistLinks();
-        renderLinkGroups();
-      }
-      if (action.dataset.action === 'delete-link' && link) {
-        group.links = group.links.filter((item) => item.id !== link.id);
-        linkSelection.delete(link.id);
-        persistLinks();
-        renderLinkGroups();
-      }
-      if (action.dataset.action === 'name-link-ai' && link) {
-        window.NotchAI?.openLinkName?.(link.id);
-      }
-      if (action.dataset.action === 'edit-link' && link && row) {
-        const openButton = row.querySelector('.link-open');
-        const editor = document.createElement('div');
-        editor.className = 'link-edit-fields';
-        const titleInput = document.createElement('input'); titleInput.className = 'link-title-edit'; titleInput.value = link.title || ''; titleInput.placeholder = '链接名称'; titleInput.setAttribute('aria-label', '链接名称'); titleInput.dataset.linkEditInput = 'title';
-        const descriptionInput = document.createElement('input'); descriptionInput.className = 'link-description-edit'; descriptionInput.value = link.description || ''; descriptionInput.placeholder = '网页描述'; descriptionInput.setAttribute('aria-label', '网页描述'); descriptionInput.dataset.linkEditInput = 'description';
-        const tagsInput = document.createElement('input'); tagsInput.className = 'link-tags-edit'; tagsInput.value = Domain.normalizeLinkTags(link.tags).join(', '); tagsInput.placeholder = '标签，用逗号分隔'; tagsInput.setAttribute('aria-label', '链接标签'); tagsInput.dataset.linkEditInput = 'tags';
-        const noteInput = document.createElement('textarea'); noteInput.className = 'link-note-edit'; noteInput.value = link.note || ''; noteInput.placeholder = '私人备注'; noteInput.setAttribute('aria-label', '私人备注'); noteInput.dataset.linkEditInput = 'note';
-        editor.append(titleInput, descriptionInput, tagsInput, noteInput);
-        openButton.replaceWith(editor);
-        let finished = false;
-        const finish = (save) => {
-          if (finished) return;
-          finished = true;
-          if (save) {
-            link.title = titleInput.value.trim() || link.title || '未命名';
-            link.description = descriptionInput.value.trim().slice(0, 500);
-            link.tags = Domain.normalizeLinkTags(tagsInput.value);
-            link.note = noteInput.value.trim().slice(0, 2000);
-            link.updatedAt = Date.now();
-            persistLinks();
-          }
-          renderLinkGroups();
-        };
-        editor.addEventListener('focusout', () => setTimeout(() => { if (!editor.contains(document.activeElement)) finish(true); }, 0));
-        editor.addEventListener('keydown', (editEvent) => {
-          if (editEvent.key === 'Escape') { editEvent.preventDefault(); finish(false); }
-          if (editEvent.key === 'Enter' && !editEvent.isComposing && !editEvent.target.matches('.link-note-edit')) { editEvent.preventDefault(); editEvent.target.blur(); }
-        });
-        titleInput.focus(); titleInput.select();
-      }
-    });
-
     // ============ 链接长按拖拽：组内排序 + 跨组搬运 ============
     // 不用 HTML5 拖拽有两个原因：一是行中间那一大块是 <button class="link-open">，
     // Chromium 里从 button 上按下不会触发祖先的 dragstart，标题区域整块拖不动；

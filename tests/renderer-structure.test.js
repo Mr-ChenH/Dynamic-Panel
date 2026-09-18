@@ -21,6 +21,7 @@ const workspaceCredentialsJs = fs.readFileSync(path.join(__dirname, '..', 'rende
 const workspaceLinksDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-domain.js'), 'utf8');
 const workspaceLinksRendererJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-renderer.js'), 'utf8');
 const workspaceLinksControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-controller.js'), 'utf8');
+const workspaceLinksActionsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-actions.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -82,6 +83,15 @@ test('link view controls use a dedicated injected controller', () => {
   assert.match(workspaceLinksControllerJs, /linksCollapseAll/);
   assert.match(workspaceJs, /NotchWorkspaceLinksController\.createController/);
   assert.doesNotMatch(workspaceJs, /linksSearch\?\.addEventListener\('input'/);
+});
+
+test('link editing and row actions use a dedicated injected controller', () => {
+  assert.ok(html.indexOf('workspace-links-actions.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceLinksActionsJs, /editLink/);
+  assert.match(workspaceLinksActionsJs, /toggle-link-favorite/);
+  assert.match(workspaceLinksActionsJs, /updateRangeSelection/);
+  assert.match(workspaceJs, /NotchWorkspaceLinksActions\.createController/);
+  assert.doesNotMatch(workspaceJs, /linkGroupsEl\.addEventListener\('change'/);
 });
 
 test('credential storage and selection state stay outside the workspace coordinator', () => {

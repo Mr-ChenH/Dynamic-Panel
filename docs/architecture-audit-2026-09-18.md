@@ -427,6 +427,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/workspace-links-domain.js`，承接 `notch-link-groups` 的规范化、链接上下文和 AI 对话资料行生成；链接 UI 事件与渲染暂由 `workspace.js` 协调，后续可在此边界继续下沉
 - 新增 `renderer/workspace-links-renderer.js`，通过显式 host 注入迁移链接列表渲染、筛选侧栏、分组分页和行操作控件；编辑、拖拽和持久化事件仍由 `workspace.js` 管理
 - 新增 `renderer/workspace-links-controller.js`，迁移链接筛选重置、侧栏导航、全部折叠、顶部新增和批量删除监听；链接编辑、拖拽和 AI 操作继续由协调器处理
+- 新增 `renderer/workspace-links-actions.js`，迁移链接分组重命名、分组内新增、Shift 多选、收藏/已读切换、删除、编辑和打开链接动作；拖拽排序继续留在协调器以保持 document 指针事件生命周期
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 当前约 2840 行，直接 `ipcMain` 注册仅剩待办提醒控制器边界
 - 完整 `npm test` 当前为 321 项：320 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
