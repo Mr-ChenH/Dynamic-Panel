@@ -1159,6 +1159,14 @@ const topbarEl = document.querySelector('.topbar');
 if (topbarEl) {
   topbarEl.addEventListener('click', (e) => {
     if (e.target.closest('.tabs, button, input')) return;
+    // The tab pills are slightly shorter than the topbar. Keep the small
+    // area directly below them inside the tab hit region; otherwise a click
+    // on the pill's lower edge is mistaken for a blank-topbar collapse.
+    const tabsRect = document.getElementById('tabs')?.getBoundingClientRect();
+    const tabHitSlop = 8;
+    if (tabsRect
+      && e.clientX >= tabsRect.left && e.clientX <= tabsRect.right
+      && e.clientY >= tabsRect.top && e.clientY <= tabsRect.bottom + tabHitSlop) return;
     e.stopPropagation();
     setMode(false);
   });
