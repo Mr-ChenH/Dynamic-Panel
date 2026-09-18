@@ -1682,6 +1682,18 @@ async function requestMacMediaAccess(mediaType) {
 
 ipcMain.handle('tasks:recent', () => taskNotificationQueue.history());
 
+const networkSecurity = createNetworkSecurity({
+  dns,
+  https,
+  readable: Readable,
+  isPrivateAddress,
+});
+const {
+  validatePublicHttpUrl,
+  resolvePinnedAIEndpoint,
+  fetchPinnedAIEndpoint,
+} = networkSecurity;
+
 const PRIVACY_SETTINGS_PANES = privacySettingsPanesFor(process.platform);
 registerSystemIpc({
   ipcMain,
@@ -1757,18 +1769,6 @@ async function promptForMissingPermissions() {
   if (missing.includes('accessibility')) systemPreferences.isTrustedAccessibilityClient(true);
   shell.openExternal(PRIVACY_SETTINGS_PANES[missing[0]]);
 }
-
-const networkSecurity = createNetworkSecurity({
-  dns,
-  https,
-  readable: Readable,
-  isPrivateAddress,
-});
-const {
-  validatePublicHttpUrl,
-  resolvePinnedAIEndpoint,
-  fetchPinnedAIEndpoint,
-} = networkSecurity;
 
 async function requestFinanceJson(value, options = {}) {
   let url;

@@ -35,3 +35,11 @@ test('main process imports resolve from the working tree', () => {
     assert.equal(fs.existsSync(path.join(root, `${importPath}.js`)), true, `${importPath} must resolve`);
   }
 });
+
+test('main process initializes injected services before registering their IPC', () => {
+  const source = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
+  const networkSecurity = source.indexOf('const networkSecurity = createNetworkSecurity({');
+  const systemIpc = source.indexOf('registerSystemIpc({');
+  assert.ok(networkSecurity >= 0 && systemIpc >= 0);
+  assert.ok(networkSecurity < systemIpc, 'network security must exist before system IPC captures its validators');
+});
