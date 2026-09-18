@@ -5893,3 +5893,102 @@ textarea::placeholder { color: var(--text-4); opacity: 1; }
 :root[data-theme='light'] select {
   color-scheme: light;
 }
+
+/* High-contrast text overrides for component styles that were authored for
+   the dark surface and intentionally use light accent colors. */
+:root[data-theme='light'] .links-page-title .tile-label,
+:root[data-theme='light'] .links-sidebar-head .tile-label,
+:root[data-theme='light'] .links-main .links-capture-hint,
+:root[data-theme='light'] .links-sidebar-nav button.active,
+:root[data-theme='light'] .links-sidebar-list button.active {
+  color: #254f9c;
+}
+
+:root[data-theme='light'] .links-sidebar-nav button.active b,
+:root[data-theme='light'] .links-sidebar-list button.active b,
+:root[data-theme='light'] .link-open span,
+:root[data-theme='light'] .links-sidebar-section-head small {
+  color: #53647c;
+}
+
+:root[data-theme='light'] .links-main .link-state-flags .unread {
+  color: #2458ad;
+}
+
+:root[data-theme='light'] .links-main .link-tag-list > span {
+  color: #14704f;
+}
+
+:root[data-theme='light'] .home-note-mark,
+:root[data-theme='light'] .home-note-category,
+:root[data-theme='light'] .home-chat-message-head i,
+:root[data-theme='light'] .home-chat-message-sources span,
+:root[data-theme='light'] .home-chat-message-body a,
+:root[data-theme='light'] .home-chat-context-tabs button[aria-selected='true'],
+:root[data-theme='light'] .home-chat-context-row[aria-selected='true'],
+:root[data-theme='light'] #home-chat-session-confirm-save,
+:root[data-theme='light'] .home-chat-context-chips button {
+  color: #285da9;
+}
+
+:root[data-theme='light'] .home-chat-message-body code {
+  color: #7a3f28;
+}
+
+:root[data-theme='light'] .markdown-code,
+:root[data-theme='light'] .markdown-code pre code,
+:root[data-theme='light'] .markdown-table-wrap th {
+  color: #26364d;
+}
+
+:root[data-theme='light'] .home-chat-message-state,
+:root[data-theme='light'] .home-chat-message[data-state='error'] .home-chat-message-state {
+  color: #7a3d2d;
+}
+
+:root[data-theme='light'] .finance-ai-button,
+:root[data-theme='light'] .finance-asset-mark,
+:root[data-theme='light'] .finance-settings-market-icon,
+:root[data-theme='light'] .finance-settings-nav-icon {
+  color: #523b9a;
+}
+
+:root[data-theme='light'] .finance-ai-button:hover {
+  color: #35256d;
+}
+
+:root[data-theme='light'] .finance-search-notice,
+:root[data-theme='light'] .finance-settings-source > footer small[data-state='error'],
+:root[data-theme='light'] .finance-market-status-card[data-state='missing_credentials'] header span {
+  color: #875719;
+}
+
+:root[data-theme='light'] .finance-ranking-negative,
+:root[data-theme='light'] #finance-ranking-negative,
+:root[data-theme='light'] .down {
+  color: #b53632 !important;
+}
+
+:root[data-theme='light'] .todo-battery b,
+:root[data-theme='light'] .home-pomodoro .pomodoro-label,
+:root[data-theme='light'] .pomodoro-settings,
+:root[data-theme='light'] .pomodoro-dial span {
+  color: var(--text-2);
+}
+
+:root[data-theme='light'] .settings-device-row button,
+:root[data-theme='light'] .settings-feature-grid label,
+:root[data-theme='light'] .settings-home-module-grid label,
+:root[data-theme='light'] .credential-item,
+:root[data-theme='light'] .credentials-form-card input,
+:root[data-theme='light'] .credentials-library-actions input {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .settings-device-row button:hover,
+:root[data-theme='light'] .settings-feature-grid label:hover,
+:root[data-theme='light'] .settings-home-module-grid label:hover,
+:root[data-theme='light'] .credential-item:hover {
+  background: var(--surface-3);
+}
