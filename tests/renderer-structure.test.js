@@ -24,6 +24,7 @@ const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles
 const credentialsCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'credentials.css'), 'utf8');
 const todoPlannerCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-planner.css'), 'utf8');
 const todoListCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-list.css'), 'utf8');
+const todoEditorCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-editor.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
 const aiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.js'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'settings.js'), 'utf8');
@@ -92,6 +93,14 @@ test('todo list and completed disclosure styles load outside the shell styleshee
   assert.match(todoListCss, /\.todo-add-button/);
   assert.doesNotMatch(stylesCss, /DDL 与文字分两层/);
   assert.doesNotMatch(stylesCss, /\.todo-completed-disclosure button \{/);
+});
+
+test('todo deadline editor styles load before shell overrides', () => {
+  assert.ok(html.indexOf('todo-editor.css') < html.indexOf('styles.css'));
+  assert.match(todoEditorCss, /\.todo-editor-backdrop/);
+  assert.match(todoEditorCss, /\.todo-calendar-grid/);
+  assert.match(todoEditorCss, /\.todo-deadline-trigger/);
+  assert.doesNotMatch(stylesCss, /\.todo-editor-backdrop \{/);
 });
 
 test('light theme covers weather surfaces and preserves weather accents', () => {
