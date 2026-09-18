@@ -29,7 +29,9 @@
 .settings-organized .settings-device-row > div { flex: 1; gap: 5px; }
 .settings-organized .settings-device-row span { font-size: var(--fs-ui); color: var(--text-2); }
 .settings-organized .settings-device-row strong { font-size: var(--fs-small); font-weight: 400; color: var(--text-3); white-space: normal; overflow: visible; overflow-wrap: anywhere; }
-.settings-organized #settings-shortcut-value { color: var(--text-1); font-family: var(--font-mono); }
+.settings-organized .settings-shortcut-list { border-bottom: 1px solid var(--hairline); }
+.settings-organized .settings-shortcut-list .settings-device-row:last-child { border-bottom: 0; }
+.settings-organized :is(#settings-shortcut-value, #settings-launcher-shortcut-value, #settings-screenshot-shortcut-value, #settings-audio-shortcut-value) { color: var(--text-1); font-family: var(--font-mono); }
 .settings-organized .settings-device-row button, .settings-organized .settings-default-tab-row select { min-height: 32px; padding: 5px 12px; font-size: var(--fs-small); }
 .settings-organized .settings-workspace-path { max-width: none; }
 .settings-organized .settings-device-actions { flex-wrap: wrap; justify-content: flex-end; }
@@ -54,6 +56,7 @@
 .settings-launcher-card .launcher-setting-copy span { color:var(--text-2);font-size:var(--fs-ui); }
 .settings-launcher-card .launcher-setting-copy small { color:var(--text-4);font-size:var(--fs-micro);line-height:1.4; }
 .settings-launcher-card .launcher-setting-row input:not([type='checkbox']) { flex:0 0 220px; }
+.settings-launcher-card .launcher-setting-row kbd { color:var(--text-2);font:var(--fs-small) var(--font-mono); }
 .settings-launcher-card .launcher-section-heading { margin:26px 0 10px;padding-bottom:9px;border-bottom:1px solid var(--hairline);color:var(--text-1);font-size:var(--fs-body-lg);font-weight:600; }
 .settings-launcher-card .launcher-section-heading:first-of-type { margin-top:24px; }
 .settings-launcher-card .launcher-source-row { display:flex;align-items:center;justify-content:space-between;min-height:42px;padding:8px 12px;border-radius:9px;background:var(--surface-2);color:var(--text-2);font-size:var(--fs-small);cursor:pointer; }

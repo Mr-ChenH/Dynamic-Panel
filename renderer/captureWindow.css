@@ -25,6 +25,9 @@ h1 { margin: 6px 0 0; font-size: 22px; font-weight: 600; }
 footer { justify-content: space-between; }
 #cropper { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; background: #000; }
 #crop-canvas { max-width: 100%; max-height: 100%; object-fit: contain; cursor: crosshair; touch-action: none; }
+#crop-canvas[data-tool='rectangle'] { cursor: crosshair; }
+#crop-canvas[data-tool='arrow'], #crop-canvas[data-tool='pen'], #crop-canvas[data-tool='mosaic'] { cursor: cell; }
+#crop-canvas[data-tool='text'] { cursor: text; }
 #source-video { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: .001; pointer-events: none; }
 .crop-actions { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); padding: 12px; display: flex; flex-direction: column; gap: 10px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); max-width: calc(100vw - 24px); }
 .crop-coordinates, .crop-confirm { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; align-items: center; }
@@ -34,4 +37,23 @@ footer { justify-content: space-between; }
 .direct-screenshot .crop-actions { bottom: 18px; padding: 8px 12px; border-radius: 7px; pointer-events: none; }
 .direct-screenshot .crop-coordinates, .direct-screenshot .crop-confirm { display: none; }
 .direct-screenshot #crop-size { color: var(--text); }
-@media (max-width: 650px) { #picker { padding: 12px; } .toolbar, footer { flex-wrap: wrap; } .crop-actions { bottom: 8px; gap: 6px; font-size: 12px; } }
+.annotation-toolbar { position: fixed; z-index: 4; left: 12px; top: 12px; max-width: calc(100vw - 24px); min-height: 48px; padding: 6px; display: flex; align-items: center; gap: 6px; overflow-x: auto; color: var(--text); background: rgba(21,23,25,.98); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 10px 32px rgba(0,0,0,.38); }
+.annotation-tool-group, .annotation-colors { display: flex; align-items: center; gap: 3px; flex: 0 0 auto; }
+.annotation-toolbar button { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border-color: transparent; border-radius: 6px; background: transparent; }
+.annotation-toolbar button:hover:not(:disabled), .annotation-toolbar button.is-active { color: var(--accent); background: #30353a; border-color: #46515b; }
+.annotation-toolbar button:focus-visible, .annotation-toolbar select:focus-visible, .annotation-custom-color:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.annotation-toolbar svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.annotation-separator { width: 1px; height: 24px; flex: 0 0 auto; background: var(--line); }
+.annotation-color { position: relative; width: 24px !important; height: 24px !important; margin: 5px 1px; border: 2px solid rgba(255,255,255,.24) !important; border-radius: 50% !important; background: var(--annotation-color) !important; }
+.annotation-color[data-color='#ff4d4f'] { --annotation-color: #ff4d4f; }
+.annotation-color[data-color='#ffd43b'] { --annotation-color: #ffd43b; }
+.annotation-color[data-color='#42a5ff'] { --annotation-color: #42a5ff; }
+.annotation-color[data-color='#ffffff'] { --annotation-color: #ffffff; }
+.annotation-color.is-active::after { content: ''; position: absolute; inset: -4px; border: 2px solid var(--accent); border-radius: 50%; }
+.annotation-custom-color { width: 24px; height: 24px; margin: 5px 1px; display: block; overflow: hidden; border: 1px solid rgba(255,255,255,.24); border-radius: 50%; background: conic-gradient(#f44,#ff4,#4f4,#4ff,#44f,#f4f,#f44); cursor: pointer; }
+.annotation-custom-color input { width: 32px; height: 32px; opacity: 0; cursor: pointer; }
+.annotation-width { width: 58px; height: 34px; flex: 0 0 auto; padding: 0 7px; border-radius: 6px; }
+.annotation-toolbar .annotation-save { width: auto; min-width: 72px; padding: 0 11px; display: flex; gap: 6px; color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.annotation-toolbar .annotation-save:hover:not(:disabled) { color: var(--bg); background: #a4c9ff; border-color: #a4c9ff; }
+.annotation-text { position: fixed; z-index: 5; min-width: 120px; max-width: min(360px, calc(100vw - 24px)); height: 38px; padding: 6px 8px; color: #fff; background: rgba(21,23,25,.94); border: 1px solid var(--accent); border-radius: 5px; outline: none; font: 600 18px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+@media (max-width: 650px) { #picker { padding: 12px; } .toolbar, footer { flex-wrap: wrap; } .crop-actions { bottom: 8px; gap: 6px; font-size: 12px; } .annotation-toolbar { gap: 4px; } }

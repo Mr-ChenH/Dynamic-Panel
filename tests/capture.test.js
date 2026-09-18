@@ -82,6 +82,14 @@ test('cancelling before the first video chunk removes only the empty draft', asy
   await storage.abort(); assert.deepEqual(storage.list(), []);
 });
 
+test('discard removes an active video and its index row after data was written', async (t) => {
+  const storage = fixture(t), id = await storage.begin(meta);
+  await storage.append(0, Buffer.from('draft video bytes'));
+  await storage.discard();
+  assert.deepEqual(storage.list(), []);
+  assert.equal(fs.existsSync(path.join(storage.root, 'captures/videos', `${id}.partial`)), false);
+});
+
 test('image metadata comes from PNG bytes; invalid bytes and dimensions rejected', async (t) => {
   const storage = fixture(t), row = await storage.saveImage(png);
   assert.equal(row.width, 1); assert.equal(row.height, 1); assert.equal(row.mimeType, 'image/png');
@@ -91,6 +99,15 @@ test('image metadata comes from PNG bytes; invalid bytes and dimensions rejected
   assert.throws(() => storage.safe('captures/../private'), /invalid_path/);
   storage.rename(row.id, 'Example'); assert.equal(storage.list()[0].title, 'Example');
   assert.throws(() => storage.rename(row.id, ' '), /invalid_title/);
+});
+
+test('replacing an image keeps its library identity and rolls back failed writes', async (t) => {
+  const storage = fixture(t), row = await storage.saveImage(png);
+  await assert.rejects(storage.replaceImage(row.id, Buffer.from('not png')), /invalid_png/);
+  const updated = await storage.replaceImage(row.id, png);
+  assert.equal(updated.id, row.id);
+  assert.equal(storage.list().length, 1);
+  assert.equal(storage.list()[0].title, row.title);
 });
 
 test('symbolic link directories cannot be read or written', async (t) => {

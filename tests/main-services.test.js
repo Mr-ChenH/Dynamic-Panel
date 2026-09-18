@@ -34,6 +34,8 @@ const {
   collapsedDisplayFollowPolicy,
   collapsedDisplayRelocationPolicy,
   panelBlurCollapsePolicy,
+  isValidShortcutAccelerator,
+  shortcutAssignmentConflict,
   reduceClipboardObservation,
   createForegroundMediaPermissionCoordinator,
 } = require('../main-services');
@@ -225,6 +227,19 @@ test('panel blur collapses only after the window stays unfocused', () => {
   assert.equal(panelBlurCollapsePolicy({ mode: 'expanded', windowFocused: true, guarded: false }).collapse, false);
   assert.equal(panelBlurCollapsePolicy({ mode: 'expanded', windowFocused: false, guarded: true }).collapse, false);
   assert.equal(panelBlurCollapsePolicy({ mode: 'launcher', windowFocused: false, guarded: false }).closeLauncher, true);
+});
+
+test('global shortcut policy validates optional actions and detects in-app conflicts', () => {
+  assert.equal(isValidShortcutAccelerator('Space', { allowSpace: true }), true);
+  assert.equal(isValidShortcutAccelerator('Space', { allowEmpty: true }), false);
+  assert.equal(isValidShortcutAccelerator('', { allowEmpty: true }), true);
+  assert.equal(isValidShortcutAccelerator('CommandOrControl+Shift+S'), true);
+  assert.equal(isValidShortcutAccelerator('S'), false);
+  assert.equal(isValidShortcutAccelerator('CommandOrControl+Mouse1'), false);
+  const assignments = { panel: 'Space', launcher: 'CommandOrControl+Space', screenshot: 'CommandOrControl+Shift+S', audioRecording: '' };
+  assert.equal(shortcutAssignmentConflict(assignments, 'audioRecording', 'CommandOrControl+Shift+S'), true);
+  assert.equal(shortcutAssignmentConflict(assignments, 'screenshot', 'CommandOrControl+Shift+S'), false);
+  assert.equal(shortcutAssignmentConflict(assignments, 'audioRecording', ''), false);
 });
 
 test('isPrivateAddress blocks loopback, private, link-local and unique-local ranges', () => {

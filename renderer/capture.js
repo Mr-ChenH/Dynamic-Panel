@@ -45,7 +45,10 @@
     const meta = document.createElement('p'); meta.className = 'capture-detail-meta'; meta.textContent = `${item.width} × ${item.height} · ${size(item.bytes)}${item.kind === 'video' ? ` · ${clock(item.durationMs || 0)} · ${item.audio === 'microphone' ? '麦克风' : '无声'}` : ' · PNG'}`; container.append(meta);
     const preview = document.createElement('div'); preview.className = 'capture-preview'; container.append(preview);
     const actions = document.createElement('div'); actions.className = 'capture-actions'; container.append(actions);
-    if (item.kind === 'screenshot' && item.status === 'complete' && !item.missing) actions.append(action('复制图片', async () => { await must(api.copyCapture(item.id)); notice('图片已复制'); }));
+    if (item.kind === 'screenshot' && item.status === 'complete' && !item.missing) {
+      actions.append(action('编辑标注', async () => { await must(api.editCapture(item.id)); }));
+      actions.append(action('复制图片', async () => { await must(api.copyCapture(item.id)); notice('图片已复制'); }));
+    }
     if (!item.missing) actions.append(action('导出', async () => { if (await must(api.exportCapture(item.id))) notice('文件已导出'); }), action('打开所在文件夹', () => must(api.revealCapture(item.id))));
     const remove = action('删除', async () => {
       if (remove.dataset.confirm !== 'yes') { remove.dataset.confirm = 'yes'; remove.textContent = '确认删除文件？'; return; }
@@ -79,7 +82,10 @@
     const active = state.phase !== 'idle';
     $('capture-new').disabled = active || state.audioBusy === true;
     $('capture-stop').hidden = !active; globalStop.hidden = !active;
+    $('capture-discard').hidden = !active || state.mode !== 'video';
+    $('capture-stop').textContent = state.mode === 'video' && ['countdown', 'recording'].includes(state.phase) ? '停止并保存' : '取消采集';
     $('capture-stop').disabled = ['stopping', 'saving'].includes(state.phase); globalStop.disabled = $('capture-stop').disabled;
+    $('capture-discard').disabled = $('capture-stop').disabled;
     if (state.error) notice(domain.message(state.error));
     else if (!active && oldPhase !== 'idle') notice(state.itemId ? '已保存到当前数据文件夹' : '采集已取消');
     if (state.itemId && oldPhase !== 'idle') { selected = state.itemId; if (mode !== 'audio') selectMode(state.mode); }
@@ -102,6 +108,7 @@
   });
   $('capture-new').addEventListener('click', async () => { try { await must(api.openCapture(mode)); } catch (value) { error(value); } });
   $('capture-stop').addEventListener('click', () => { void must(api.stopCapture()).catch(error); });
+  $('capture-discard').addEventListener('click', () => { void must(api.discardCapture()).catch(error); });
   $('capture-settings').addEventListener('click', () => { document.getElementById('tab-button-settings')?.click(); window.NotchSettings?.select('capture'); });
   $('capture-settings-form').addEventListener('submit', async (event) => {
     event.preventDefault();

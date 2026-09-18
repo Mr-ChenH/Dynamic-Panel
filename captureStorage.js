@@ -144,6 +144,31 @@ class CaptureStorage {
     catch (error) { await fs.promises.unlink(file); throw error; }
     return item;
   }
+  async replaceImage(id, value) {
+    const buffer = bytes(value, LIMITS.image);
+    check(buffer.length >= 33 && buffer.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) && buffer.toString('ascii', 12, 16) === 'IHDR', 'invalid_png');
+    const size = dimensions(buffer.readUInt32BE(16), buffer.readUInt32BE(20));
+    const { item, file } = this.resolve(id, true);
+    check(item.kind === 'screenshot', 'invalid_image');
+    const token = randomUUID(), temp = `${file}.${token}.tmp`, backup = `${file}.${token}.bak`;
+    let movedOriginal = false, committed = false;
+    try {
+      await fs.promises.writeFile(temp, buffer, { flag: 'wx' });
+      await fs.promises.rename(file, backup); movedOriginal = true;
+      await fs.promises.rename(temp, file);
+      const next = { ...item, ...size, bytes: buffer.length };
+      this.writeIndex(this.readIndex().map((row) => row.id === id ? next : row));
+      committed = true;
+      return next;
+    } finally {
+      await fs.promises.unlink(temp).catch(() => {});
+      if (committed) await fs.promises.unlink(backup).catch(() => {});
+      else if (movedOriginal) {
+        await fs.promises.unlink(file).catch(() => {});
+        await fs.promises.rename(backup, file).catch(() => {});
+      }
+    }
+  }
   async begin(meta) {
     check(!this.active, 'busy');
     const size = dimensions(meta.width, meta.height);
@@ -227,6 +252,18 @@ class CaptureStorage {
       const file = this.safe(task.item.path);
       if (item && fs.existsSync(file) && fs.statSync(file).size === 0) this.remove(task.item.id);
     }
+  }
+  async discard() {
+    const task = this.active;
+    check(task, 'writer_unavailable');
+    task.failed = true;
+    await task.pending.catch(() => {});
+    await task.handle?.close().catch(() => {});
+    task.handle = null; this.active = null;
+    const items = this.readIndex();
+    const file = this.safe(task.item.path);
+    if (fs.existsSync(file)) await fs.promises.unlink(file);
+    this.writeIndex(items.filter((row) => row.id !== task.item.id));
   }
   rename(id, title) {
     check(typeof title === 'string' && title.trim().length > 0 && title.trim().length <= 120, 'invalid_title');

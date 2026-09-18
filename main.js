@@ -81,6 +81,8 @@ const {
   collapsedDisplayFollowPolicy,
   collapsedDisplayRelocationPolicy,
   panelBlurCollapsePolicy,
+  isValidShortcutAccelerator,
+  shortcutAssignmentConflict,
   reduceClipboardObservation,
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,
@@ -337,6 +339,7 @@ let panelBlurTimer = null;
 let panelBlurGeneration = 0;
 let configuredShortcut = '';
 let configuredLauncherShortcut = '';
+let configuredActionShortcuts = { screenshot: '', audioRecording: '' };
 let launcherService;
 let launcherManaging = false;
 let previousPasteTarget = null;
@@ -1314,15 +1317,26 @@ function writeJsonFile(filePath, value) {
 function readAppSettings() {
   const stored = readJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE));
   const features = { ...DEFAULT_FEATURES, ...(stored.features || {}), home: true };
+  const shortcuts = stored.shortcuts && typeof stored.shortcuts === 'object' && !Array.isArray(stored.shortcuts)
+    ? stored.shortcuts : {};
   return {
     features,
     shortcut: isValidPanelShortcut(stored.shortcut) ? stored.shortcut : 'Space',
+    shortcuts: {
+      screenshot: isValidOptionalShortcut(shortcuts.screenshot) ? shortcuts.screenshot : '',
+      audioRecording: isValidOptionalShortcut(shortcuts.audioRecording) ? shortcuts.audioRecording : '',
+    },
     defaultTab: normalizeDefaultTabPreference(stored.defaultTab, features),
   };
 }
 
 function publicAppSettings() {
-  return { ...readAppSettings(), autoLaunch: isAutoLaunchEnabled() };
+  const settings = readAppSettings();
+  return {
+    ...settings,
+    shortcuts: { ...settings.shortcuts, launcher: launcherConfig().shortcut },
+    autoLaunch: isAutoLaunchEnabled(),
+  };
 }
 
 function saveAppSettings(settings) {
@@ -1763,45 +1777,53 @@ function applyFeatureServices(features) {
 }
 
 function isValidPanelShortcut(shortcut) {
-  if (shortcut === 'Space') return true;
-  if (typeof shortcut !== 'string' || shortcut.length > 80) return false;
-  const tokens = shortcut.split('+');
-  if (tokens.length < 2) return false;
-  const key = tokens.pop();
-  const modifiers = new Set(['CommandOrControl', 'Command', 'Control', 'Alt', 'Option', 'Shift']);
-  return tokens.length > 0
-    && tokens.every((token) => modifiers.has(token))
-    && /^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Tab|Escape|Left|Right|Up|Down|Home|End|PageUp|PageDown|Backspace|Delete|Enter)$/.test(key);
+  return isValidShortcutAccelerator(shortcut, { allowSpace: true });
+}
+
+function isValidOptionalShortcut(shortcut) {
+  return isValidShortcutAccelerator(shortcut, { allowEmpty: true });
+}
+
+function registeredShortcutConflict(action, shortcut) {
+  return shortcutAssignmentConflict({
+    panel: configuredShortcut,
+    launcher: configuredLauncherShortcut,
+    screenshot: configuredActionShortcuts.screenshot,
+    audioRecording: configuredActionShortcuts.audioRecording,
+  }, action, shortcut);
+}
+
+function registerShortcut(accelerator, callback) {
+  try { return globalShortcut.register(accelerator, callback) === true; }
+  catch (error) { return false; }
+}
+
+function panelShortcutCallback() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  hideWhenCollapsed = false;
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('shortcut:toggle-panel');
 }
 
 function setPanelShortcut(shortcut) {
-  if (!isValidPanelShortcut(shortcut)) return false;
-  const previousShortcut = configuredShortcut || 'Space';
+  if (!isValidPanelShortcut(shortcut) || registeredShortcutConflict('panel', shortcut)) return false;
+  if (shortcut === configuredShortcut) return true;
+  const previousShortcut = configuredShortcut;
   stopHoverSpaceShortcut();
-  if (configuredShortcut && configuredShortcut !== 'Space' && globalShortcut.isRegistered(configuredShortcut)) {
-    globalShortcut.unregister(configuredShortcut);
-  }
+  if (previousShortcut && previousShortcut !== 'Space') globalShortcut.unregister(previousShortcut);
   if (shortcut === 'Space') {
     configuredShortcut = shortcut;
     startHoverSpaceShortcut();
     return true;
   }
-  let registered = false;
-  try {
-    registered = globalShortcut.register(shortcut, () => {
-      if (!mainWindow || mainWindow.isDestroyed()) return;
-      hideWhenCollapsed = false;
-      if (!mainWindow.isVisible()) mainWindow.show();
-      mainWindow.focus();
-      mainWindow.webContents.send('shortcut:toggle-panel');
-    });
-  } catch (error) {}
-  if (registered) {
+  if (registerShortcut(shortcut, panelShortcutCallback)) {
     configuredShortcut = shortcut;
     return true;
   }
   configuredShortcut = previousShortcut;
-  startHoverSpaceShortcut();
+  if (previousShortcut === 'Space') startHoverSpaceShortcut();
+  else if (previousShortcut && !registerShortcut(previousShortcut, panelShortcutCallback)) configuredShortcut = '';
   return false;
 }
 
@@ -1813,27 +1835,57 @@ function launcherConfig() {
   const sources=Object.fromEntries(Object.entries(defaults).map(([key,value])=>[key,typeof stored.sources?.[key]==='boolean'?stored.sources[key]:value]));
   return { executeTimeoutMs: Math.max(500, Math.min(10000, Number(stored.executeTimeoutMs) || 5000)), queryTimeoutMs: Math.max(300, Math.min(5000, Number(stored.queryTimeoutMs) || 800)), shortcut: typeof stored.shortcut === 'string' && stored.shortcut.length <= 100 ? stored.shortcut : 'CommandOrControl+Space', sources };
 }
-function setLauncherShortcut(shortcut = launcherConfig().shortcut) {
-  if (shortcut === configuredLauncherShortcut) return true;
-  if (shortcut && (!isValidPanelShortcut(shortcut) || shortcut === 'Space')) return false;
-  if (shortcut) {
-    let registered = false;
-    try {
-      registered = globalShortcut.register(shortcut, () => {
-        if (!mainWindow || mainWindow.isDestroyed()) return;
-        launcherFocus.capture({keepWhenOwned:currentMode==='launcher'});
-        hideWhenCollapsed = false;
-        if (!mainWindow.isVisible()) mainWindow.show();
-        mainWindow.focus();
-        mainWindow.webContents.send('shortcut:toggle-launcher');
-      });
-    } catch {}
-    if (!registered) return false;
-  }
-  if (configuredLauncherShortcut) globalShortcut.unregister(configuredLauncherShortcut);
-  configuredLauncherShortcut = shortcut;
-  return true;
+function launcherShortcutCallback() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  launcherFocus.capture({ keepWhenOwned: currentMode === 'launcher' });
+  hideWhenCollapsed = false;
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('shortcut:toggle-launcher');
 }
+
+function setLauncherShortcut(shortcut = launcherConfig().shortcut) {
+  if (!isValidOptionalShortcut(shortcut) || registeredShortcutConflict('launcher', shortcut)) return false;
+  if (shortcut === configuredLauncherShortcut) return true;
+  const previousShortcut = configuredLauncherShortcut;
+  if (previousShortcut) globalShortcut.unregister(previousShortcut);
+  if (!shortcut || registerShortcut(shortcut, launcherShortcutCallback)) {
+    configuredLauncherShortcut = shortcut;
+    return true;
+  }
+  configuredLauncherShortcut = previousShortcut;
+  if (previousShortcut && !registerShortcut(previousShortcut, launcherShortcutCallback)) configuredLauncherShortcut = '';
+  return false;
+}
+
+function runConfiguredShortcutAction(action) {
+  if (action === 'screenshot') {
+    if (!captureService || captureService.busy()) return;
+    void captureService.open('screenshot').catch(() => {});
+    return;
+  }
+  if (action === 'audioRecording') openRendererPanel('shortcut:audio-recording');
+}
+
+function setActionShortcut(action, shortcut) {
+  if (!Object.hasOwn(configuredActionShortcuts, action)
+    || !isValidOptionalShortcut(shortcut)
+    || registeredShortcutConflict(action, shortcut)) return false;
+  if (shortcut === configuredActionShortcuts[action]) return true;
+  const previousShortcut = configuredActionShortcuts[action];
+  if (previousShortcut) globalShortcut.unregister(previousShortcut);
+  const callback = () => runConfiguredShortcutAction(action);
+  if (!shortcut || registerShortcut(shortcut, callback)) {
+    configuredActionShortcuts = { ...configuredActionShortcuts, [action]: shortcut };
+    return true;
+  }
+  configuredActionShortcuts = { ...configuredActionShortcuts, [action]: previousShortcut };
+  if (previousShortcut && !registerShortcut(previousShortcut, callback)) {
+    configuredActionShortcuts = { ...configuredActionShortcuts, [action]: '' };
+  }
+  return false;
+}
+
 function getLauncherService() {
   if (!launcherService) launcherService = createLauncherService({ dataRoot: app.getPath('userData'), executable: process.execPath, getSettings: launcherConfig, readShortcut: (file) => shell.readShortcutLink(file) });
   return launcherService;
@@ -1985,12 +2037,20 @@ launcherHandler('launcher:open-url', async (payload) => { const url = await vali
 function applyAppSettings() {
   const settings = readAppSettings();
   applyFeatureServices(settings.features);
+  let changed = false;
   if (!setPanelShortcut(settings.shortcut)) {
     settings.shortcut = 'Space';
-    saveAppSettings(settings);
+    changed = true;
     setPanelShortcut('Space');
   }
   setLauncherShortcut();
+  for (const action of Object.keys(configuredActionShortcuts)) {
+    if (setActionShortcut(action, settings.shortcuts[action])) continue;
+    settings.shortcuts[action] = '';
+    changed = true;
+    setActionShortcut(action, '');
+  }
+  if (changed) saveAppSettings(settings);
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', publicAppSettings());
 }
 
@@ -2015,7 +2075,8 @@ function refreshTrayMenu() {
   const menu = Menu.buildFromTemplate([
     ...(captureService && captureService.state().phase !== 'idle' ? [
       { label: captureService.state().phase === 'recording' ? '● 正在录屏' : '屏幕采集中', enabled: false },
-      { label: '停止 / 取消采集', click: () => { void captureService.stop(); } },
+      { label: captureService.state().mode === 'video' ? '停止并保存' : '取消采集', click: () => { void captureService.stop(); } },
+      ...(captureService.state().mode === 'video' ? [{ label: '取消并丢弃录屏', click: () => { void captureService.discard(); } }] : []),
       { type: 'separator' },
     ] : []),
     {
@@ -2152,15 +2213,41 @@ ipcMain.handle('settings:set-auto-launch', (event, enabled) => {
   refreshTrayMenu();
   return { ok: true, autoLaunch: settings.autoLaunch };
 });
-ipcMain.handle('settings:set-shortcut', (event, accelerator) => {
-  if (!isValidPanelShortcut(accelerator)) return { ok: false, error: 'invalid' };
-  if (!setPanelShortcut(accelerator)) return { ok: false, error: 'occupied' };
-  const next = readAppSettings();
-  next.shortcut = accelerator;
-  if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', publicAppSettings());
+ipcMain.handle('settings:set-shortcut', (event, payload) => {
+  const action = typeof payload === 'string' ? 'panel' : payload?.action;
+  const accelerator = typeof payload === 'string' ? payload : payload?.accelerator;
+  if (!['panel', 'launcher', 'screenshot', 'audioRecording'].includes(action)
+    || typeof accelerator !== 'string'
+    || (action === 'panel' ? !isValidPanelShortcut(accelerator) : !isValidOptionalShortcut(accelerator))) {
+    return { ok: false, error: 'invalid' };
+  }
+  if (action === 'launcher') {
+    const previous = launcherConfig();
+    if (!setLauncherShortcut(accelerator)) return { ok: false, error: 'occupied' };
+    const next = { ...previous, shortcut: accelerator };
+    if (!writeJsonFile(path.join(app.getPath('userData'), 'launcher-settings.json'), next)) {
+      setLauncherShortcut(previous.shortcut);
+      return { ok: false, error: 'save_failed' };
+    }
+  } else {
+    const next = readAppSettings();
+    const previous = action === 'panel' ? next.shortcut : next.shortcuts[action];
+    const registered = action === 'panel'
+      ? setPanelShortcut(accelerator)
+      : setActionShortcut(action, accelerator);
+    if (!registered) return { ok: false, error: 'occupied' };
+    if (action === 'panel') next.shortcut = accelerator;
+    else next.shortcuts[action] = accelerator;
+    if (!saveAppSettings(next)) {
+      if (action === 'panel') setPanelShortcut(previous);
+      else setActionShortcut(action, previous);
+      return { ok: false, error: 'save_failed' };
+    }
+  }
+  const settings = publicAppSettings();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', settings);
   refreshTrayMenu();
-  return { ok: true, shortcut: accelerator };
+  return { ok: true, action, shortcut: accelerator, settings };
 });
 ipcMain.handle('workspace:get', () => ({ path: workspaceRoot(), portable: workspaceRoot() !== app.getPath('userData') }));
 ipcMain.handle('workspace:load-data', () => {

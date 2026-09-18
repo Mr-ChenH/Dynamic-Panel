@@ -52,6 +52,20 @@ test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', (
   assert.doesNotMatch(appJs, /localStorage\.setItem\([^\n]*todo-time-scope/);
 });
 
+test('global shortcuts expose configurable panel, launcher, screenshot and audio actions', () => {
+  for (const id of ['settings-shortcut-value', 'settings-launcher-shortcut-value', 'settings-screenshot-shortcut-value', 'settings-audio-shortcut-value']) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(preloadJs, /setShortcut:.*settings:set-shortcut/);
+  assert.match(preloadJs, /onAudioRecordingShortcut:.*shortcut:audio-recording/);
+  assert.match(mainJs, /runConfiguredShortcutAction/);
+  assert.match(mainJs, /captureService\.open\('screenshot'\)/);
+  assert.match(workspaceJs, /onAudioRecordingShortcut/);
+  assert.match(workspaceJs, /await window\.NotchPanel\?\.navigate\(\{ tab: 'recordings' \}\)/);
+  assert.match(appJs, /shortcutRecorderAction/);
+  assert.match(appJs, /saveRecordedShortcut/);
+});
+
 test('Windows collapsed notch stays compact and grows only on approach', () => {
   assert.match(appJs, /app\.dataset\.platform\s*=\s*window\.notchAPI\?\.platform/);
   const compactRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch \{([\s\S]*?)\n\}/)?.[1] || '';

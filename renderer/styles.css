@@ -3905,7 +3905,9 @@ body {
 .shortcut-recorder > span { color: var(--text-1); font-size: var(--fs-small); font-weight: 620; }
 .shortcut-recorder kbd { justify-self: end; padding: 5px 8px; border-radius: 9px; background: rgba(255,255,255,.08); color: #cbd9ff; font: var(--fs-micro) var(--font-mono); }
 .shortcut-recorder small { color: var(--text-4); font-size: var(--fs-micro); line-height: 1.4; }
+.shortcut-recorder-actions { justify-self: end; display: flex; gap: 10px; }
 .shortcut-recorder button { border: 0; background: transparent; color: var(--text-3); font: var(--fs-micro) var(--font); cursor: pointer; }
+.shortcut-recorder button:hover { color: var(--text-1); }
 
 /* 汽水音乐在四档尺寸中保持完全相同的信息顺序：Logo、名称、三枚控制键。 */
 .home-music,

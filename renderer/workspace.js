@@ -956,6 +956,12 @@
   const settingsHomeModuleList = document.getElementById('settings-home-module-list');
   const settingsShortcutValue = document.getElementById('settings-shortcut-value');
   const settingsShortcutChange = document.getElementById('settings-shortcut-change');
+  const settingsLauncherShortcutValue = document.getElementById('settings-launcher-shortcut-value');
+  const settingsLauncherShortcutChange = document.getElementById('settings-launcher-shortcut-change');
+  const settingsScreenshotShortcutValue = document.getElementById('settings-screenshot-shortcut-value');
+  const settingsScreenshotShortcutChange = document.getElementById('settings-screenshot-shortcut-change');
+  const settingsAudioShortcutValue = document.getElementById('settings-audio-shortcut-value');
+  const settingsAudioShortcutChange = document.getElementById('settings-audio-shortcut-change');
   const settingsDefaultTab = document.getElementById('settings-default-tab');
   const settingsWorkspaceKind = document.getElementById('settings-workspace-kind');
   const settingsWorkspacePath = document.getElementById('settings-workspace-path');
@@ -1406,6 +1412,18 @@
     aiDiagnostics.dataset.copyText = diagnosticText(items.slice().reverse());
   }
 
+  function shortcutLabel(value) {
+    if (!value) return '未设置';
+    const mac = window.notchAPI?.platform === 'darwin';
+    return String(value).split('+').map((part) => ({
+      CommandOrControl: mac ? 'Cmd' : 'Ctrl',
+      Command: 'Cmd',
+      Control: 'Ctrl',
+      Option: 'Option',
+      Alt: mac ? 'Option' : 'Alt',
+    })[part] || part).join(' + ');
+  }
+
   function setSettingsNote(message, error = false) {
     if (!settingsInlineNote) return;
     settingsInlineNote.textContent = message || '';
@@ -1424,7 +1442,10 @@
       workspace: settingsWorkspace,
       transcription: transcriptionConfig,
     });
-    if (settingsShortcutValue) settingsShortcutValue.textContent = summary.shortcut;
+    if (settingsShortcutValue) settingsShortcutValue.textContent = shortcutLabel(summary.shortcut);
+    if (settingsLauncherShortcutValue) settingsLauncherShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.launcher);
+    if (settingsScreenshotShortcutValue) settingsScreenshotShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenshot);
+    if (settingsAudioShortcutValue) settingsAudioShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.audioRecording);
     if (settingsDefaultTab) {
       const visibleTabs = new Set(Domain.visiblePanelTabs(
         ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings'],
@@ -2178,6 +2199,15 @@
   if (recordPause) recordPause.addEventListener('click', togglePauseRecording);
   if (recordStop) recordStop.addEventListener('click', stopRecording);
   if (recordingNew) recordingNew.addEventListener('click', startRecording);
+  window.notchAPI?.onAudioRecordingShortcut?.(async () => {
+    if (['recording', 'paused'].includes(recordingStatus)) {
+      stopRecording();
+      return;
+    }
+    if (recordingStatus !== 'idle' || recordingStartTask.isPending()) return;
+    await window.NotchPanel?.navigate({ tab: 'recordings' });
+    await startRecording();
+  });
   if (recordingConfigure) recordingConfigure.addEventListener('click', () => { void openTranscriptionSettings('transcription'); });
   if (transcriptionSettingsSave) transcriptionSettingsSave.addEventListener('click', saveTranscriptionSettings);
   aiProviderTranscription?.addEventListener('click', () => selectAIServicePanel('transcription'));
@@ -2453,9 +2483,15 @@
       : input.checked ? '首页组件已恢复' : '首页组件已隐藏';
     if (typeof showStatusToast === 'function') showStatusToast(message);
   });
-  settingsShortcutChange?.addEventListener('click', () => {
-    document.dispatchEvent(new CustomEvent('notch:record-shortcut'));
-  });
+  const shortcutControls = [
+    [settingsShortcutChange, 'panel', () => settingsAppSettings?.shortcut || 'Space'],
+    [settingsLauncherShortcutChange, 'launcher', () => settingsAppSettings?.shortcuts?.launcher || ''],
+    [settingsScreenshotShortcutChange, 'screenshot', () => settingsAppSettings?.shortcuts?.screenshot || ''],
+    [settingsAudioShortcutChange, 'audioRecording', () => settingsAppSettings?.shortcuts?.audioRecording || ''],
+  ];
+  shortcutControls.forEach(([button, action, current]) => button?.addEventListener('click', () => {
+    document.dispatchEvent(new CustomEvent('notch:record-shortcut', { detail: { action, current: current() } }));
+  }));
   settingsDefaultTab?.addEventListener('change', async () => {
     if (!window.notchAPI?.setDefaultTab) return;
     const previous = settingsAppSettings?.defaultTab || 'home';

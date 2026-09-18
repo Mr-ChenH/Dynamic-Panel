@@ -556,6 +556,24 @@ function panelBlurCollapsePolicy({ mode, windowFocused, guarded } = {}) {
   };
 }
 
+function isValidShortcutAccelerator(shortcut, { allowEmpty = false, allowSpace = false } = {}) {
+  if (shortcut === '') return allowEmpty;
+  if (shortcut === 'Space') return allowSpace;
+  if (typeof shortcut !== 'string' || shortcut.length > 80) return false;
+  const tokens = shortcut.split('+');
+  if (tokens.length < 2) return false;
+  const key = tokens.pop();
+  const modifiers = new Set(['CommandOrControl', 'Command', 'Control', 'Alt', 'Option', 'Shift']);
+  return tokens.length > 0
+    && tokens.every((token) => modifiers.has(token))
+    && /^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Tab|Escape|Left|Right|Up|Down|Home|End|PageUp|PageDown|Backspace|Delete|Enter)$/.test(key);
+}
+
+function shortcutAssignmentConflict(assignments, action, shortcut) {
+  if (!shortcut || !assignments || typeof assignments !== 'object') return false;
+  return Object.entries(assignments).some(([name, value]) => name !== action && value === shortcut);
+}
+
 const CONFIGURABLE_FEATURES = new Set(['todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip']);
 const DEFAULT_PANEL_TABS = new Set(['home', 'todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings']);
 
@@ -614,6 +632,8 @@ module.exports = {
   collapsedDisplayFollowPolicy,
   collapsedDisplayRelocationPolicy,
   panelBlurCollapsePolicy,
+  isValidShortcutAccelerator,
+  shortcutAssignmentConflict,
   updateFeaturePreference,
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,

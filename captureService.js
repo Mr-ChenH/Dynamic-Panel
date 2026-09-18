@@ -25,13 +25,14 @@ function normalizeSettings(value = {}) {
 function createCaptureService({ getMainWindow, getRoot, getSettings, saveSettings, ensureMicrophone, suspendPanel, onChange, sourceProvider, screenshotProvider, clipboardWriter = (image) => clipboard.writeImage(image) }) {
   const captureSources = sourceProvider || createCaptureSources({ getSources: (options) => desktopCapturer.getSources(options) });
   let win = null, task = null, audioOwner = null, state = { phase: 'idle' }, restorePanel = null;
+  let recordingOverlay = null, recordingBorders = [];
   let sources = new Map(), selected = null, selectionTime = 0, mediaGranted = false;
   let resolveDone = null, done = Promise.resolve(), closing = false, stopTimer = null, maxTimer = null;
   let enumeration = 0;
   let selectionRevision = 0;
   let storageOperation = Promise.resolve();
   let taskSettings = normalizeSettings();
-  let regionFrame = null, activeRegion = null, directSnapshot = null, stopNotice = '';
+  let regionFrame = null, activeRegion = null, directSnapshot = null, editingId = '', stopNotice = '';
   const audioWatchers = new WeakSet();
   const previews = new Map();
   const store = () => new CaptureStorage(getRoot());
@@ -40,11 +41,13 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     state = { ...state, ...patch };
     const main = getMainWindow();
     if (main && !main.isDestroyed()) main.webContents.send('captures:changed', state);
+    if (recordingOverlay && !recordingOverlay.isDestroyed()) recordingOverlay.webContents.send('capture-overlay:state', state);
     onChange();
   };
   const owned = (event, owner) => owner && !owner.isDestroyed() && event.sender === owner.webContents && event.senderFrame === owner.webContents.mainFrame;
   const mainOnly = (event) => { if (!owned(event, getMainWindow())) throw new Error('forbidden'); };
   const captureOnly = (event) => { if (!owned(event, win) || closing) throw new Error('forbidden'); };
+  const overlayOnly = (event) => { if (!owned(event, recordingOverlay) || closing) throw new Error('forbidden'); };
   const handler = (channel, guard, fn) => ipcMain.handle(channel, async (event, payload) => {
     try { guard(event); return { ok: true, value: await fn(payload, event) }; }
     catch (error) {
@@ -52,6 +55,66 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
       return { ok: false, error: known.test(error.message) ? error.message : 'capture_failed' };
     }
   });
+  function destroyRecordingOverlay() {
+    const windows = [...recordingBorders, recordingOverlay].filter(Boolean);
+    recordingBorders = []; recordingOverlay = null;
+    for (const window of windows) if (!window.isDestroyed()) window.destroy();
+  }
+  function protectOverlay(window, clickThrough = false) {
+    window.setMenu(null); window.setContentProtection(true);
+    window.setAlwaysOnTop(true, 'screen-saver'); window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    if (clickThrough) window.setIgnoreMouseEvents(true);
+    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    window.webContents.on('will-navigate', (event) => event.preventDefault());
+  }
+  function regionDisplayBounds() {
+    if (!activeRegion) return null;
+    const display = screen.getAllDisplays().find((entry) => String(entry.id) === activeRegion.displayId);
+    if (!display) return null;
+    const sx = display.bounds.width / activeRegion.frameWidth, sy = display.bounds.height / activeRegion.frameHeight;
+    const left = display.bounds.x + Math.round(activeRegion.x * sx), top = display.bounds.y + Math.round(activeRegion.y * sy);
+    const right = display.bounds.x + Math.round((activeRegion.x + activeRegion.width) * sx);
+    const bottom = display.bounds.y + Math.round((activeRegion.y + activeRegion.height) * sy);
+    return { display, left, top, right, bottom, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+  }
+  async function showRecordingOverlay() {
+    destroyRecordingOverlay();
+    const region = regionDisplayBounds();
+    const display = region?.display || selected?.display || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    if (region) {
+      const thickness = 3;
+      const border = new BrowserWindow({
+        x: region.left - thickness, y: region.top - thickness, width: region.width + thickness * 2, height: region.height + thickness * 2,
+        frame: false, show: false, focusable: false, skipTaskbar: true, resizable: false, transparent: true, hasShadow: false,
+      });
+      recordingBorders = [border]; protectOverlay(border, true);
+      await border.loadFile(path.join(__dirname, 'renderer', 'recordingBorder.html'));
+      if (!border.isDestroyed()) border.showInactive();
+    }
+    const controlWidth = 188, controlHeight = 48, margin = 8;
+    const area = display.workArea, areaRight = area.x + area.width, areaBottom = area.y + area.height;
+    const controlX = region
+      ? Math.max(area.x + margin, Math.min(areaRight - controlWidth - margin, Math.round(region.left + region.width / 2 - controlWidth / 2)))
+      : Math.round(area.x + area.width / 2 - controlWidth / 2);
+    let controlY = area.y + margin;
+    if (region) {
+      if (region.bottom + margin + controlHeight <= areaBottom) controlY = region.bottom + margin;
+      else if (region.top - margin - controlHeight >= area.y) controlY = region.top - margin - controlHeight;
+      else controlY = Math.max(area.y + margin, Math.min(areaBottom - controlHeight - margin, region.top + margin));
+    }
+    const overlay = new BrowserWindow({
+      width: controlWidth, height: controlHeight, x: controlX, y: controlY, frame: false, show: false, transparent: true,
+      focusable: true, skipTaskbar: true, resizable: false, minimizable: false, maximizable: false, fullscreenable: false, closable: false,
+      webPreferences: { preload: path.join(__dirname, 'renderer', 'recordingOverlayPreload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
+    });
+    recordingOverlay = overlay; protectOverlay(overlay);
+    overlay.webContents.on('render-process-gone', () => { if (recordingOverlay === overlay) recordingOverlay = null; });
+    await overlay.loadFile(path.join(__dirname, 'renderer', 'recordingOverlay.html'), { query: { startedAt: String(state.startedAt || 0) } });
+    if (recordingOverlay === overlay && !overlay.isDestroyed()) {
+      overlay.webContents.send('capture-overlay:state', state);
+      overlay.showInactive();
+    }
+  }
   async function end(error = '', item = null) {
     if (closing) return done;
     closing = true;
@@ -60,21 +123,22 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     try { await storageOperation.catch(() => {}); await task?.abort(); }
     finally {
       task = null;
+      destroyRecordingOverlay();
       const previous = win;
       win = null;
       if (previous && !previous.isDestroyed()) previous.destroy();
       sources.clear(); selected = null; mediaGranted = false;
-      regionFrame = null; activeRegion = null; directSnapshot = null;
+      regionFrame = null; activeRegion = null; directSnapshot = null; editingId = '';
       restorePanel?.(); restorePanel = null;
       closing = false;
-      emit({ phase: 'idle', startedAt: 0, error: error || stopNotice, itemId: item?.id || '' });
+      emit({ phase: 'idle', startedAt: 0, countdownEndsAt: 0, error: error || stopNotice, itemId: item?.id || '' });
       resolveDone?.(); resolveDone = null;
     }
   }
   function stop(reason = '') {
     if (!win || closing) return done;
-    if (reason) stopNotice = reason;
-    if (['selecting', 'cropping'].includes(state.phase)) { void end(reason); return done; }
+    if (reason && reason !== 'discard') stopNotice = reason;
+    if (['selecting', 'cropping'].includes(state.phase)) { void end(reason === 'discard' ? '' : reason); return done; }
     if (state.phase !== 'stopping' && state.phase !== 'saving') {
       emit({ phase: 'stopping' });
       win.webContents.send('capture:stop', reason);
@@ -82,17 +146,30 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     if (!stopTimer) stopTimer = setTimeout(() => { void end('stop_timeout'); }, 10000);
     return done;
   }
-  async function open(mode) {
+  const discard = () => stop('discard');
+  async function open(request) {
+    const editId = request && typeof request === 'object' && request.mode === 'edit' ? request.id : '';
+    const mode = editId ? 'screenshot' : request;
     if (!['screenshot', 'video'].includes(mode)) throw new Error('invalid_mode');
     if (busy()) throw new Error('busy');
     done = new Promise((resolve) => { resolveDone = resolve; });
     restorePanel = suspendPanel();
     const settings = normalizeSettings(getSettings());
     taskSettings = settings;
-    regionFrame = null; activeRegion = null; directSnapshot = null; stopNotice = '';
+    regionFrame = null; activeRegion = null; directSnapshot = null; editingId = editId || ''; stopNotice = '';
     storageOperation = Promise.resolve();
     let target = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    if (mode === 'screenshot') {
+    if (editId) {
+      try {
+        const { item, file } = store().resolve(editId, true);
+        if (item.kind !== 'screenshot') throw new Error('invalid_image');
+        const image = nativeImage.createFromPath(file), size = image.getSize();
+        if (image.isEmpty() || size.width < 2 || size.height < 2) throw new Error('invalid_image');
+        selected = { source: null, identity: {}, type: 'screen', display: target };
+        mediaGranted = true;
+        directSnapshot = { dataUrl: image.toDataURL(), width: size.width, height: size.height, editId };
+      } catch (error) { await end(error.message === 'file_missing' ? 'file_missing' : 'capture_failed'); throw error; }
+    } else if (mode === 'screenshot') {
       if (process.platform === 'darwin' && ['denied', 'restricted'].includes(systemPreferences.getMediaAccessStatus('screen'))) {
         await end('screen_denied');
         throw new Error('screen_denied');
@@ -132,19 +209,33 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
       webPreferences: { preload: path.join(__dirname, 'capturePreload.js'), session: captureSession, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false },
     });
     const current = win;
-    current.setMenu(null);
+    current.setMenu(null); current.setContentProtection(true);
     current.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     current.webContents.on('will-navigate', (event) => event.preventDefault());
     current.webContents.on('will-attach-webview', (event) => event.preventDefault());
     current.webContents.on('render-process-gone', () => { if (win === current) void end('capture_crashed'); });
     current.on('close', (event) => { if (win === current) { event.preventDefault(); void stop(); } });
-    captureSession.setPermissionCheckHandler((contents, permission, _origin, details) => contents === current.webContents
-      && (permission === 'display-capture' || (permission === 'media' && mediaGranted && mode === 'video'
-        && settings.audio === 'microphone' && details.mediaType === 'audio')));
+    const displayMediaAllowed = () => !!selected && !task && ['selecting', 'preparing'].includes(state.phase);
+    const microphoneAllowed = () => mediaGranted && mode === 'video' && settings.audio === 'microphone';
+    captureSession.setPermissionCheckHandler((contents, permission, _origin, details) => {
+      if (contents !== current.webContents) return false;
+      if (permission === 'display-capture') return displayMediaAllowed();
+      if (permission !== 'media') return false;
+      // Chromium on Windows probes both media kinds before it dispatches the
+      // separately guarded display-media request. This does not authorize a
+      // camera request; the request handler below rejects explicit video media.
+      if (displayMediaAllowed() && ['video', 'audio'].includes(details.mediaType)) return true;
+      return microphoneAllowed() && details.mediaType === 'audio';
+    });
     captureSession.setPermissionRequestHandler((contents, permission, callback, details) => {
-      callback(contents === current.webContents && (permission === 'display-capture'
-        || (permission === 'media' && mediaGranted && mode === 'video' && settings.audio === 'microphone'
-          && details.mediaTypes?.every((type) => type === 'audio'))));
+      if (contents !== current.webContents) { callback(false); return; }
+      if (permission === 'display-capture') { callback(displayMediaAllowed()); return; }
+      if (permission !== 'media') { callback(false); return; }
+      const mediaTypes = details.mediaTypes;
+      // getDisplayMedia uses an explicit empty mediaTypes list on Windows.
+      // Missing metadata and getUserMedia video requests remain denied.
+      if (Array.isArray(mediaTypes) && mediaTypes.length === 0 && displayMediaAllowed()) { callback(true); return; }
+      callback(microphoneAllowed() && Array.isArray(mediaTypes) && mediaTypes.length > 0 && mediaTypes.every((type) => type === 'audio'));
     });
     captureSession.setDisplayMediaRequestHandler(async (request, callback) => {
       // Electron may destroy the requesting frame while the metadata refresh awaits.
@@ -165,7 +256,7 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
       selected = fresh;
       respond({ video: fresh.source });
     });
-    emit({ phase: direct ? 'preparing' : 'selecting', mode, error: '', itemId: '', startedAt: 0 });
+    emit({ phase: direct ? 'preparing' : 'selecting', mode, error: '', itemId: '', startedAt: 0, countdownEndsAt: 0 });
     current.once('ready-to-show', () => { if (win === current && state.phase === 'selecting') { current.show(); current.focus(); } });
     try { await current.loadFile(path.join(__dirname, 'renderer', 'captureWindow.html'), { query: { mode } }); }
     catch (error) { await end('capture_failed'); throw error; }
@@ -173,8 +264,12 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
   }
 
   handler('captures:open', mainOnly, open);
+  handler('captures:edit', mainOnly, (id) => open({ mode: 'edit', id }));
   handler('captures:state', mainOnly, () => state);
   handler('captures:stop', mainOnly, () => { void stop(); return true; });
+  handler('captures:discard', mainOnly, () => { void discard(); return true; });
+  handler('capture-overlay:stop', overlayOnly, () => { void stop(); return true; });
+  handler('capture-overlay:discard', overlayOnly, () => { void discard(); return true; });
   handler('captures:list', mainOnly, () => store().list());
   handler('captures:settings', mainOnly, () => normalizeSettings(getSettings()));
   handler('captures:save-settings', mainOnly, (value) => {
@@ -305,7 +400,7 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     win.setBounds(display.bounds, false); win.show(); win.focus(); emit({ phase: 'cropping' });
     return { saved, stale: !!taskSettings.fixedRegion && !saved };
   });
-  handler('capture:confirm-region', captureOnly, ({ rect, remember }) => {
+  handler('capture:confirm-region', captureOnly, async ({ rect, remember }) => {
     if (state.phase !== 'cropping' || !regionFrame || selected?.type !== 'screen') throw new Error('invalid_state');
     if (!validRegion(rect, regionFrame.width, regionFrame.height)) throw new Error('invalid_region');
     const display = screen.getAllDisplays().find((d) => d.id === selected.display?.id);
@@ -317,16 +412,30 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
       x: rect.x, y: rect.y, width: rect.width, height: rect.height };
     if (remember === true) saveSettings(normalizeSettings({ ...getSettings(), fixedRegion: activeRegion }));
     emit({ phase: 'preparing' });
+    if (state.mode === 'video') {
+      try { await showRecordingOverlay(); } catch { destroyRecordingOverlay(); }
+    }
     return activeRegion;
   });
   handler('capture:image', captureOnly, async (value) => {
-    if (!mediaGranted || state.mode !== 'screenshot' || !['preparing', 'cropping'].includes(state.phase)) throw new Error('invalid_state');
+    if (!mediaGranted || state.mode !== 'screenshot' || editingId || !['preparing', 'cropping'].includes(state.phase)) throw new Error('invalid_state');
     emit({ phase: 'saving' });
     const target = store();
     storageOperation = target.saveImage(value);
     const item = await storageOperation;
     const { file } = target.resolve(item.id, true);
     const image = nativeImage.createFromPath(file);
+    if (image.isEmpty()) throw new Error('invalid_image');
+    try { clipboardWriter(image); } catch {}
+    if (!closing) await end('', item);
+    return item;
+  });
+  handler('capture:replace-image', captureOnly, async ({ id, bytes }) => {
+    if (!mediaGranted || state.mode !== 'screenshot' || !editingId || id !== editingId || !['preparing', 'cropping'].includes(state.phase)) throw new Error('invalid_state');
+    emit({ phase: 'saving' });
+    const target = store(); storageOperation = target.replaceImage(id, bytes);
+    const item = await storageOperation;
+    const { file } = target.resolve(item.id, true), image = nativeImage.createFromPath(file);
     if (image.isEmpty()) throw new Error('invalid_image');
     try { clipboardWriter(image); } catch {}
     if (!closing) await end('', item);
@@ -343,13 +452,17 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     storageOperation = task.begin(meta);
     const id = await storageOperation;
     if (closing) return id;
-    emit({ phase: 'countdown' });
+    emit({ phase: 'countdown', countdownEndsAt: Date.now() + taskSettings.countdown * 1000 });
     maxTimer = setTimeout(() => { void stop('duration_limit'); }, LIMITS.duration + 6000);
     return id;
   });
-  handler('capture:recording', captureOnly, () => {
+  handler('capture:recording', captureOnly, async () => {
     if (state.phase !== 'countdown') throw new Error('invalid_state');
-    emit({ phase: 'recording', startedAt: Date.now() }); return true;
+    emit({ phase: 'recording', startedAt: Date.now(), countdownEndsAt: 0 });
+    if (!recordingOverlay || recordingOverlay.isDestroyed()) {
+      try { await showRecordingOverlay(); } catch { destroyRecordingOverlay(); }
+    }
+    return true;
   });
   handler('capture:append', captureOnly, ({ sequence, data }) => {
     if (!task || !['recording', 'stopping'].includes(state.phase)) throw new Error('invalid_state');
@@ -366,6 +479,12 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
     return item;
   });
   handler('capture:cancel', captureOnly, () => end());
+  handler('capture:discard', captureOnly, async () => {
+    if (!task || !['recording', 'stopping'].includes(state.phase)) throw new Error('invalid_state');
+    storageOperation = task.discard(); await storageOperation;
+    if (!closing) await end();
+    return true;
+  });
   handler('capture:fail', captureOnly, (code) => end(['permission_denied', 'no_frames', 'queue_limit', 'source_ended', 'unsupported_codec', 'write_failed', 'video_limit', 'region_changed', 'region_display_unknown'].includes(code) ? code : 'capture_failed'));
   handler('capture:privacy', captureOnly, () => process.platform === 'darwin' ? shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture') : undefined);
   powerMonitor.on('lock-screen', () => { void stop('screen_locked'); });
@@ -377,7 +496,7 @@ function createCaptureService({ getMainWindow, getRoot, getSettings, saveSetting
       && (original.size.width !== display.size.width || original.size.height !== display.size.height
         || original.scaleFactor !== display.scaleFactor || original.rotation !== display.rotation)) void stop('region_changed');
   });
-  return { busy, state: () => state, stop, abort: end, refresh: () => { previews.clear(); emit({}); } };
+  return { busy, state: () => state, open, stop, discard, abort: end, refresh: () => { previews.clear(); emit({}); } };
 }
 
 module.exports = { registerCaptureScheme, createCaptureService, normalizeSettings };

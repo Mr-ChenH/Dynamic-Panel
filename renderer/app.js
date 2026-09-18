@@ -794,6 +794,7 @@ panel.addEventListener('click', (e) => {
 // Escape 不会原生到达页面（被浏览器层吞掉），由主进程 before-input-event 转发
 if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
   window.notchAPI.onEscape(() => {
+    if (shortcutRecorderActive) { closeShortcutRecorder(); return; }
     if (window.NotchAI?.isOpen()) { window.NotchAI.close(); return; }
     if (window.NotchLauncher?.handleEscape()) return;
     if (window.NotchChatReaderView?.handleEscape()) return;
@@ -1034,13 +1035,43 @@ Array.from(document.querySelectorAll('.tab[data-tab]')).forEach((btn) => {
 // 托盘里的“设置快捷键…”会把设置入口以内联浮层放到面板中。
 // 这里绑定所有 Tab（包括启动时隐藏的剪贴板），避免功能启用后按钮仍没有事件。
 const shortcutRecorder = document.getElementById('shortcut-recorder');
+const shortcutRecorderTitle = document.getElementById('shortcut-recorder-title');
 const shortcutRecorderValue = document.getElementById('shortcut-recorder-value');
+const shortcutRecorderHint = document.getElementById('shortcut-recorder-hint');
+const shortcutRecorderDisable = document.getElementById('shortcut-recorder-disable');
 const shortcutRecorderCancel = document.getElementById('shortcut-recorder-cancel');
 let shortcutRecorderActive = false;
+let shortcutRecorderAction = 'panel';
 
 function closeShortcutRecorder() {
   shortcutRecorderActive = false;
   if (shortcutRecorder) shortcutRecorder.hidden = true;
+}
+
+async function saveRecordedShortcut(accelerator) {
+  const setter = window.notchAPI?.setShortcut;
+  const result = typeof setter === 'function'
+    ? await setter(shortcutRecorderAction, accelerator).catch(() => ({ ok: false }))
+    : await window.notchAPI?.setPanelShortcut?.(accelerator).catch(() => ({ ok: false }));
+  if (!result?.ok) {
+    if (shortcutRecorderValue) shortcutRecorderValue.textContent = result?.error === 'occupied' ? '该快捷键已被占用' : '无法使用该快捷键';
+    return false;
+  }
+  showStatusToast(accelerator ? `快捷键已设为 ${shortcutLabel(accelerator)}` : '快捷键已禁用');
+  setTimeout(closeShortcutRecorder, 420);
+  return true;
+}
+
+function shortcutLabel(value) {
+  if (!value) return '未设置';
+  const mac = app.dataset.platform === 'darwin';
+  return String(value).split('+').map((part) => ({
+    CommandOrControl: mac ? 'Cmd' : 'Ctrl',
+    Command: 'Cmd',
+    Control: 'Ctrl',
+    Option: 'Option',
+    Alt: mac ? 'Option' : 'Alt',
+  })[part] || part).join(' + ');
 }
 
 function keyEventToAccelerator(event) {
@@ -1073,29 +1104,39 @@ shortcutRecorder?.addEventListener('keydown', async (event) => {
     if (shortcutRecorderValue) shortcutRecorderValue.textContent = '请按下完整按键组合';
     return;
   }
-  if (accelerator !== 'Space' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
-    if (shortcutRecorderValue) shortcutRecorderValue.textContent = '单键仅支持空格';
+  const hasModifier = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey;
+  if ((!hasModifier && accelerator !== 'Space') || (shortcutRecorderAction !== 'panel' && accelerator === 'Space')) {
+    if (shortcutRecorderValue) shortcutRecorderValue.textContent = shortcutRecorderAction === 'panel' ? '单键仅支持空格' : '请使用包含修饰键的组合键';
     return;
   }
-  if (shortcutRecorderValue) shortcutRecorderValue.textContent = accelerator;
-  const result = await window.notchAPI?.setPanelShortcut?.(accelerator).catch(() => ({ ok: false }));
-  if (!result?.ok) {
-    if (shortcutRecorderValue) shortcutRecorderValue.textContent = result?.error === 'occupied' ? '该快捷键已被占用' : '无法使用该快捷键';
-    return;
-  }
-  showStatusToast(`快捷键已设为 ${accelerator}`);
-  setTimeout(closeShortcutRecorder, 420);
+  if (shortcutRecorderValue) shortcutRecorderValue.textContent = shortcutLabel(accelerator);
+  await saveRecordedShortcut(accelerator);
 });
 
+shortcutRecorderDisable?.addEventListener('click', () => { void saveRecordedShortcut(''); });
 shortcutRecorderCancel?.addEventListener('click', closeShortcutRecorder);
-function openShortcutRecorder() {
+function openShortcutRecorder(input = {}) {
+  const detail = input?.detail && typeof input.detail === 'object' ? input.detail : input;
+  const action = ['panel', 'launcher', 'screenshot', 'audioRecording'].includes(detail?.action) ? detail.action : 'panel';
+  const labels = {
+    panel: '展开或收起面板',
+    launcher: '搜索与启动器',
+    screenshot: '区域截图',
+    audioRecording: '开始或停止录音',
+  };
   if (!isExpanded) setMode(true);
+  shortcutRecorderAction = action;
   shortcutRecorderActive = true;
   shortcutRecorder.hidden = false;
-  shortcutRecorderValue.textContent = '等待输入…';
+  shortcutRecorderTitle.textContent = `设置：${labels[action]}`;
+  shortcutRecorderValue.textContent = detail?.current ? shortcutLabel(detail.current) : '等待输入…';
+  shortcutRecorderHint.textContent = action === 'panel'
+    ? '可直接使用空格；其他按键请搭配修饰键'
+    : '请使用包含修饰键的组合键，也可禁用';
+  shortcutRecorderDisable.hidden = action === 'panel';
   requestAnimationFrame(() => shortcutRecorder.focus({ preventScroll: true }));
 }
-window.notchAPI?.onRecordShortcut?.(openShortcutRecorder);
+window.notchAPI?.onRecordShortcut?.(() => openShortcutRecorder({ action: 'panel' }));
 document.addEventListener('notch:record-shortcut', openShortcutRecorder);
 
 if (collapseBtn) {

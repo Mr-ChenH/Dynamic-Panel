@@ -116,10 +116,13 @@
         </header>
 
         <div class="shortcut-recorder" id="shortcut-recorder" tabindex="-1" hidden>
-          <span>按下新的唤出快捷键</span>
+          <span id="shortcut-recorder-title">按下新的快捷键</span>
           <kbd id="shortcut-recorder-value">等待输入…</kbd>
-          <small>可直接使用空格；其他按键建议搭配 ⌘ / ⌥ / ⌃ / ⇧</small>
-          <button id="shortcut-recorder-cancel" type="button">取消</button>
+          <small id="shortcut-recorder-hint">请使用包含修饰键的组合键</small>
+          <span class="shortcut-recorder-actions">
+            <button id="shortcut-recorder-disable" type="button">禁用</button>
+            <button id="shortcut-recorder-cancel" type="button">取消</button>
+          </span>
         </div>
 
         <div class="panels" id="panels">
@@ -565,7 +568,8 @@
                 <button id="capture-tab-video" type="button" role="tab" aria-selected="false" aria-controls="capture-library" data-capture-tab="video" tabindex="-1">录屏</button>
               </div>
               <span id="capture-status" role="status" aria-live="polite"></span>
-              <button id="capture-stop" class="workspace-button compact danger" type="button" hidden>停止采集</button>
+              <button id="capture-stop" class="workspace-button compact" type="button" hidden>停止并保存</button>
+              <button id="capture-discard" class="workspace-button compact danger" type="button" hidden>取消并丢弃</button>
               <button id="capture-settings" class="workspace-button compact" type="button">采集设置</button>
               <button id="capture-new" class="workspace-button compact primary" type="button" hidden>新建截图</button>
             </div>
@@ -646,9 +650,9 @@
                   <label><span>录屏画质</span><select id="capture-default-quality"><option value="720">最高 720p · 30 fps</option><option value="1080">最高 1080p · 30 fps</option><option value="native">来源分辨率 · 30 fps</option></select></label>
                   <label><span>录屏声音</span><select id="capture-default-audio"><option value="none">无声</option><option value="microphone">麦克风（开始时请求权限）</option></select></label>
                   <label><span>开始倒计时</span><select id="capture-default-countdown"><option value="0">立即开始</option><option value="3">3 秒</option><option value="5">5 秒</option></select></label>
-                  <p>截图保存为 PNG，录屏保存为 WebM，随当前数据文件夹迁移。单次录屏最多 60 分钟或 4 GiB。录屏期间可通过托盘菜单停止；主动展开面板可能入镜。</p>
+                  <p>截图保存为 PNG，录屏保存为 WebM，随当前数据文件夹迁移。单次录屏最多 60 分钟或 4 GiB。录屏期间可通过浮动控制条或托盘停止保存，也可取消并丢弃；主动展开面板可能入镜。</p>
                   <div class="capture-region-setting"><p id="capture-fixed-region" role="status"></p><button id="capture-clear-region" class="workspace-button compact" type="button" hidden>清除已记住区域</button></div>
-                  <p>框选区域支持鼠标拖动或输入像素位置与宽高；可选择记住区域，下次预填后仍需确认。暂不提供系统声音、标注或 MP4 转码，不占用系统截图快捷键。</p>
+                  <p>截图框选后可添加矩形、箭头、画笔、文字和马赛克；录屏区域支持鼠标拖动或输入像素位置与宽高，也可记住区域供下次预填。暂不提供系统声音或 MP4 转码。</p>
                   <div><button class="workspace-button primary" type="submit">保存设置</button><span id="capture-settings-status" role="status"></span></div>
                 </form>
               </section>
@@ -856,13 +860,27 @@
                   <div class="settings-card-heading">
                     <div><span class="tile-label">这台电脑</span><strong>本机与唤出</strong></div>
                   </div>
-                  <div class="settings-device-row">
-                    <div><span>唤出快捷键</span><strong id="settings-shortcut-value">Space</strong></div>
-                    <button id="settings-shortcut-change" type="button">重新设置</button>
+                  <div class="settings-shortcut-list" aria-label="全局快捷键">
+                    <div class="settings-device-row">
+                      <div><span>展开或收起面板</span><strong id="settings-shortcut-value">Space</strong></div>
+                      <button id="settings-shortcut-change" type="button">设置</button>
+                    </div>
+                    <div class="settings-device-row">
+                      <div><span>搜索与启动器</span><strong id="settings-launcher-shortcut-value">CommandOrControl+Space</strong></div>
+                      <button id="settings-launcher-shortcut-change" type="button">设置</button>
+                    </div>
+                    <div class="settings-device-row">
+                      <div><span>区域截图</span><strong id="settings-screenshot-shortcut-value">未设置</strong></div>
+                      <button id="settings-screenshot-shortcut-change" type="button">设置</button>
+                    </div>
+                    <div class="settings-device-row">
+                      <div><span>开始或停止录音</span><strong id="settings-audio-shortcut-value">未设置</strong></div>
+                      <button id="settings-audio-shortcut-change" type="button">设置</button>
+                    </div>
                   </div>
                   <div class="settings-device-row">
-                    <div><span>搜索与启动器</span><strong>搜索来源、快捷键和本地扩展</strong></div>
-                    <button id="settings-launcher-open" type="button">启动器设置</button>
+                    <div><span>启动器高级设置</span><strong>搜索来源和本地扩展</strong></div>
+                    <button id="settings-launcher-open" type="button">管理</button>
                   </div>
                   <label class="settings-device-row settings-default-tab-row">
                     <div><span>默认展开页</span><strong>每次唤出面板时显示</strong></div>

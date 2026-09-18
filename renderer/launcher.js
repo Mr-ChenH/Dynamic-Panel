@@ -16,6 +16,7 @@
   let settings = { shortcut: 'CommandOrControl+Space', sources: { apps: true, workspace: true, clipboard: false, extensions: true } };
   let features = {};
   const KEY = 'notch-launcher-';
+  const shortcutLabel=(value)=>value?String(value).split('+').map(part=>({CommandOrControl:api?.platform==='darwin'?'Cmd':'Ctrl',Command:'Cmd',Control:'Ctrl',Option:'Option',Alt:api?.platform==='darwin'?'Option':'Alt'})[part]||part).join(' + '):'未设置';
   let regexEnabled=false,regexWorker=null,regexTimer,regexJobKey='',regexResult=null,resultsVersion=0;
   const regexKey=()=>`${generation}:${resultsVersion}`;
   function stopRegex(){regexWorker?.terminate();regexWorker=null;clearTimeout(regexTimer);regexJobKey='';}
@@ -366,11 +367,11 @@
     if(config?.ok)settings=config;
     features=appSettings?.features||{};
     manager.hidden=false;manager.replaceChildren();
-    const label = document.createElement('label'); label.className='launcher-setting-row launcher-shortcut-row';
+    const label = document.createElement('div'); label.className='launcher-setting-row launcher-shortcut-row';
     const shortcutName=document.createElement('span');shortcutName.textContent='全局快捷键';
-    const shortcutHint=document.createElement('small');shortcutHint.textContent='留空可禁用';
+    const shortcutHint=document.createElement('small');shortcutHint.textContent='在“通用”中统一设置';
     label.append(Object.assign(document.createElement('div'),{className:'launcher-setting-copy'}));label.firstChild.append(shortcutName,shortcutHint);
-    const shortcut = document.createElement('input'); shortcut.value = settings.shortcut; shortcut.setAttribute('aria-label', '启动器全局快捷键'); label.append(shortcut); manager.append(label);
+    const shortcutValue=document.createElement('kbd');shortcutValue.textContent=shortcutLabel(settings.shortcut);label.append(shortcutValue);manager.append(label);
     const timeoutLabel = document.createElement('label'); timeoutLabel.className='launcher-setting-row';
     const timeoutCopy=document.createElement('div');timeoutCopy.className='launcher-setting-copy';const timeoutName=document.createElement('span');timeoutName.textContent='扩展查询超时';const timeoutHint=document.createElement('small');timeoutHint.textContent='动态搜索等待时间，300–5000ms';timeoutCopy.append(timeoutName,timeoutHint);timeoutLabel.append(timeoutCopy);
     const timeout = document.createElement('input'); timeout.type = 'number'; timeout.min = '300'; timeout.max = '5000'; timeout.step = '100'; timeout.value = settings.queryTimeoutMs || 800; timeout.setAttribute('aria-label', '扩展查询超时'); timeoutLabel.append(timeout); manager.append(timeoutLabel);
@@ -383,7 +384,7 @@
     }
     const sourcesHeading=document.createElement('h3');sourcesHeading.className='launcher-section-heading';sourcesHeading.textContent='搜索来源';manager.append(sourcesHeading);
     manager.append(button('保存设置', async () => {
-      const next = { shortcut: shortcut.value.trim(), queryTimeoutMs: Number(timeout.value), executeTimeoutMs: Number(executionTimeout.value), sources: Object.fromEntries(Object.entries(checks).map(([key, check]) => [key, check.checked])) };
+      const next = { shortcut: settings.shortcut, queryTimeoutMs: Number(timeout.value), executeTimeoutMs: Number(executionTimeout.value), sources: Object.fromEntries(Object.entries(checks).map(([key, check]) => [key, check.checked])) };
       const response = await api.saveLauncherSettings(next);
       if (response?.ok) { settings = next; status.textContent = '已保存'; } else status.textContent = '快捷键无效或已被占用，设置未保存';
     }));
