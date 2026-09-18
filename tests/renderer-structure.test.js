@@ -17,6 +17,7 @@ const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer',
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const workspaceWindowsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-windows.js'), 'utf8');
+const workspaceCredentialsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-credentials.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
@@ -38,6 +39,16 @@ test('current windows keep their domain state outside the workspace coordinator'
   assert.match(workspaceWindowsJs, /window\.NotchWorkspaceWindows/);
   assert.doesNotMatch(workspaceJs, /function renderWindows\(/);
   assert.doesNotMatch(workspaceJs, /function refreshWindows\(/);
+});
+
+test('credential storage and selection state stay outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-credentials.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceCredentialsJs, /listCredentials/);
+  assert.match(workspaceCredentialsJs, /saveCredential/);
+  assert.match(workspaceCredentialsJs, /notch:clear-selection/);
+  assert.match(workspaceCredentialsJs, /window\.NotchWorkspaceCredentials/);
+  assert.doesNotMatch(workspaceJs, /function renderCredentials\(/);
+  assert.doesNotMatch(workspaceJs, /credentialSelection/);
 });
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
