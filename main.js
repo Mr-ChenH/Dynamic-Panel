@@ -36,6 +36,7 @@ const { createWindowGeometry } = require('./main/window-geometry');
 const { createNetworkSecurity } = require('./main/network-security');
 const { createLinkInspector } = require('./main/link-inspector');
 const { createWorkspaceFiles } = require('./main/workspace-files');
+const { createClipboardService } = require('./main/clipboard-service');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -326,13 +327,6 @@ const taskCompletionHistory = [];
 let todoReminderTimer = null;
 let scheduledTodoReminders = [];
 
-let clipPollTimer = null;
-let clipBaselineTimer = null;
-let clipPollingEnabled = false;
-let clipPolling = false; // 互斥锁：大图 toPNG 同步耗时，防止上一轮未完成又进入
-let clipObservationState = { textFingerprint: null, imageFingerprint: null };
-let lastClipImageProbeAt = 0;
-let clipPollingGeneration = 0;
 let spaceShortcutTimer = null;
 let spaceShortcutRegistered = false;
 let windowsCollapsedHovering = false;
@@ -3806,6 +3800,27 @@ const {
   ensureClipImagesDir,
 } = workspaceFiles;
 
+const clipboardService = createClipboardService({
+  clipboard,
+  nativeImage,
+  ClipboardItem,
+  fs,
+  path,
+  workspaceFiles,
+  readClipboardObservation,
+  prepareClipboardImagePayload,
+  reduceClipboardObservation,
+  createClipboardImageFingerprint,
+  getMainWindow: () => mainWindow,
+  portableImagePath: (directory, filePath) => platformPolicy.portableMediaPath(directory, filePath),
+  pollIntervalMs: CLIP_POLL_INTERVAL_MS,
+  imagePollIntervalMs: CLIP_IMAGE_POLL_INTERVAL_MS,
+  imageDirectoryName: CLIP_IMAGES_DIR_NAME,
+});
+const startClipboardPolling = () => clipboardService.start();
+const stopClipboardPolling = () => clipboardService.stop();
+const writeClipboardEntry = (entry) => clipboardService.writeEntry(entry);
+
 ipcMain.handle('recordings:save', (event, payload) => saveRecording(payload));
 ipcMain.handle('recordings:read', (event, audioPath) => readRecording(audioPath));
 ipcMain.handle('recordings:delete', (event, audioPath) => deleteRecording(audioPath));
@@ -3877,148 +3892,6 @@ ipcMain.handle('notes:delete-images', async (event, noteId) => {
 });
 
 // ============ 剪贴板历史 ============
-
-async function readSystemClipboard(includeImage = false) {
-  try {
-    const items = await clipboard.read();
-    const observation = await readClipboardObservation(items, { includeImage });
-    let image = null;
-    if (observation.image?.buffer) {
-      const native = nativeImage.createFromBuffer(observation.image.buffer);
-      if (!native.isEmpty()) {
-        const size = native.getSize();
-        image = prepareClipboardImagePayload(
-          observation.image.mimeType,
-          observation.image.buffer,
-          size
-        );
-      }
-    }
-    return { concealed: observation.concealed, text: observation.text, image };
-  } catch (error) {
-    return { concealed: false, text: '', image: null };
-  }
-}
-
-async function baselineCurrentClipboard(generation) {
-  try {
-    const observation = await readSystemClipboard(true);
-    if (!clipPollingEnabled || generation !== clipPollingGeneration) return;
-    if (observation.concealed) {
-      clipObservationState = reduceClipboardObservation(
-        {},
-        { concealed: true },
-        { baseline: true }
-      ).state;
-      return;
-    }
-    clipObservationState = reduceClipboardObservation(
-      {},
-      { text: observation.text, imageFingerprint: observation.image?.fingerprint || null },
-      { baseline: true }
-    ).state;
-    lastClipImageProbeAt = Date.now();
-  } catch (error) {
-    clipObservationState = { textFingerprint: null, imageFingerprint: null };
-  }
-}
-
-async function pollClipboard() {
-  if (!clipPollingEnabled || !mainWindow) return;
-  if (clipPolling) return;
-  clipPolling = true;
-  try {
-    const now = Date.now();
-    const includeImage = now - lastClipImageProbeAt >= CLIP_IMAGE_POLL_INTERVAL_MS;
-    const observation = await readSystemClipboard(includeImage);
-    if (!clipPollingEnabled) return;
-    // 密码管理器写入的敏感内容：跳过不记录、不更新指纹
-    if (observation.concealed) return;
-
-    // 优先读文字
-    const text = observation.text;
-    if (text) {
-      const decision = reduceClipboardObservation(clipObservationState, { text });
-      clipObservationState = decision.state;
-      if (decision.record && clipPollingEnabled) {
-        const type = /^https?:\/\//i.test(text.trim()) ? 'url' : 'text';
-        mainWindow.webContents.send('clipboard:new-entry', { type, text, imagePath: null });
-      }
-      return;
-    }
-
-    // 文字为空再读图片
-    if (!text && includeImage) {
-      lastClipImageProbeAt = now;
-      const result = observation.image;
-      const decision = reduceClipboardObservation(clipObservationState, {
-        text: '',
-        imageFingerprint: result?.fingerprint || null,
-      });
-      clipObservationState = decision.state;
-      if (result && decision.record && clipPollingEnabled) {
-        const pngBuf = result.pngBuffer
-          || nativeImage.createFromBuffer(result.sourceBuffer).toPNG();
-        if (!pngBuf.length) return;
-        ensureClipImagesDir();
-        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-        const fileName = 'clip-' + id + '.png';
-        const imagePath = path.join(getClipImagesDir(), fileName);
-        try {
-          await fs.promises.writeFile(imagePath, pngBuf);
-        } catch (e) {
-          return; // 写盘失败不记录
-        }
-        if (!clipPollingEnabled) {
-          try { await fs.promises.unlink(imagePath); } catch (error) {}
-          return;
-        }
-        mainWindow.webContents.send('clipboard:new-entry', {
-          type: 'image',
-          text: null,
-          imagePath: platformPolicy.portableMediaPath(CLIP_IMAGES_DIR_NAME, imagePath),
-        });
-      }
-    }
-  } catch (e) {
-    // 轮询任何异常不能崩主进程，静默
-  } finally {
-    clipPolling = false;
-  }
-}
-
-function startClipboardPolling() {
-  // Electron 没有 NSPasteboard.changeCount，只能内容轮询：靠文本本身与
-  // 图片 PNG 内容哈希指纹去重（见 pollClipboard）。
-  if (clipPollingEnabled) return;
-  clipPollingEnabled = true;
-  const generation = ++clipPollingGeneration;
-  // 首次开启只建立当前系统剪贴板基线，不把开启前的内容写入历史。
-  clipBaselineTimer = setTimeout(() => {
-    clipBaselineTimer = null;
-    if (!clipPollingEnabled) return;
-    void baselineCurrentClipboard(generation).finally(() => {
-      if (clipPollingEnabled && generation === clipPollingGeneration && !clipPollTimer) {
-        clipPollTimer = setInterval(pollClipboard, CLIP_POLL_INTERVAL_MS);
-      }
-    });
-  }, 0);
-}
-
-function stopClipboardPolling() {
-  clipPollingEnabled = false;
-  clipPollingGeneration += 1;
-  if (clipBaselineTimer) {
-    clearTimeout(clipBaselineTimer);
-    clipBaselineTimer = null;
-  }
-  if (clipPollTimer) {
-    clearInterval(clipPollTimer);
-    clipPollTimer = null;
-  }
-  clipObservationState = { textFingerprint: null, imageFingerprint: null };
-  lastClipImageProbeAt = 0;
-}
 
 function setHoverSpaceShortcut(enabled) {
   if (enabled === spaceShortcutRegistered) return;
@@ -4149,46 +4022,6 @@ ipcMain.handle('clipboard:deleteImages', async (event, paths) => {
     }
   }
 });
-
-async function writeClipboardEntry(entry) {
-  if (!entry) return false;
-  try {
-    const safeImagePath =
-      entry.type === 'image' ? getSafeClipImagePath(entry.imagePath) : null;
-    if (safeImagePath) {
-      const buf = fs.readFileSync(safeImagePath);
-      const image = nativeImage.createFromBuffer(buf);
-      if (image.isEmpty()) return false;
-      const pngBuf = image.toPNG();
-      await clipboard.write([
-        new ClipboardItem({
-          'image/png': new Blob([pngBuf], { type: 'image/png' }),
-        }),
-      ]);
-      const size = image.getSize();
-      const fingerprint = createClipboardImageFingerprint(size.width, size.height, pngBuf);
-      if (fingerprint) {
-        clipObservationState = reduceClipboardObservation(
-          clipObservationState,
-          { imageFingerprint: fingerprint },
-          { baseline: true }
-        ).state;
-      }
-    } else if (entry.text) {
-      await clipboard.writeText(entry.text);
-      clipObservationState = reduceClipboardObservation(
-        clipObservationState,
-        { text: entry.text },
-        { baseline: true }
-      ).state;
-    } else {
-      return false;
-    }
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
 
 function waitForCollapsedPanel(timeoutMs = 950) {
   const deadline = Date.now() + timeoutMs;
