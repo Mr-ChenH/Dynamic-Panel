@@ -4401,62 +4401,11 @@ async function addClipEntry(raw) {
   renderClipFavs();
 }
 
-function clipDayKey(timestamp) {
-  const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function formatClipDay(timestamp, now = Date.now()) {
-  const date = new Date(timestamp);
-  const today = new Date(now);
-  const targetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const currentDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const dayDifference = Math.round((currentDay - targetDay) / 86400000);
-  if (dayDifference === 0) return '今天';
-  if (dayDifference === 1) return '昨天';
-  const weekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][date.getDay()];
-  return date.getFullYear() === today.getFullYear()
-    ? `${date.getMonth() + 1}月${date.getDate()}日 ${weekday}`
-    : `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${weekday}`;
-}
-
-function formatClipMoment(timestamp, now = Date.now()) {
-  const date = new Date(timestamp);
-  const difference = Math.max(0, now - timestamp);
-  let relative = '';
-  if (difference < 60000) relative = '刚刚';
-  else if (difference < 3600000) relative = `${Math.floor(difference / 60000)} 分钟前`;
-  else if (difference < 86400000) relative = `${Math.floor(difference / 3600000)} 小时前`;
-  const clock = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  const full = `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${clock}`;
-  return { clock, relative, full, iso: date.toISOString() };
-}
-
-function groupClipItemsByDay(items) {
-  const groups = [];
-  const groupsByKey = new Map();
-  items.forEach((entry) => {
-    const key = clipDayKey(entry.timestamp);
-    const existing = groupsByKey.get(key);
-    if (existing) {
-      existing.items.push(entry);
-      return;
-    }
-    const group = { key, timestamp: entry.timestamp, items: [entry] };
-    groupsByKey.set(key, group);
-    groups.push(group);
-  });
-  return groups;
-}
-
 function clipEntryHtml(entry, faved) {
   const favClass = faved ? ' faved' : '';
   const star = faved ? starFilledSvg : starOutlineSvg;
   const favLabel = faved ? '取消收藏' : '收藏';
-  const moment = formatClipMoment(entry.timestamp);
+  const moment = window.NotchClipboardDomain.formatMoment(entry.timestamp);
   const relative = moment.relative ? `<span class="clip-time-relative">${escapeHtml(moment.relative)}</span>` : '';
   const timeHtml = `<time class="clip-time" datetime="${escapeHtml(moment.iso)}" title="${escapeHtml(moment.full)}"><span>${escapeHtml(moment.clock)}</span>${relative}</time>`;
   const safeId = escapeHtml(entry.id);
@@ -4522,12 +4471,12 @@ function renderClipList() {
     return;
   }
 
-  clipListEl.innerHTML = groupClipItemsByDay(items).map((group) => {
+  clipListEl.innerHTML = window.NotchClipboardDomain.groupByDay(items).map((group) => {
     const headingId = `clip-day-${group.key}`;
     return `<section class="clip-timeline-group" aria-labelledby="${headingId}">
   <div class="clip-timeline-heading">
     <span class="clip-timeline-node" aria-hidden="true"></span>
-    <time id="${headingId}" datetime="${group.key}">${escapeHtml(formatClipDay(group.timestamp))}</time>
+    <time id="${headingId}" datetime="${group.key}">${escapeHtml(window.NotchClipboardDomain.formatDay(group.timestamp))}</time>
     <span>${group.items.length} 条</span>
   </div>
   <div class="clip-timeline-items">${group.items.map((entry) => clipEntryHtml(entry, favSet.has(entry.id))).join('')}</div>

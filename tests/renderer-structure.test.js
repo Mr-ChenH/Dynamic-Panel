@@ -13,6 +13,7 @@ const windowIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'w
 const shortcutServiceJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'shortcut-service.js'), 'utf8');
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
+const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-domain.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
@@ -51,9 +52,9 @@ test('light theme covers recording and clipboard surfaces', () => {
 
 test('clipboard history renders a dated timeline with filtered result counts', () => {
   assert.match(html, /id="clip-result-count"/);
-  assert.match(appJs, /groupClipItemsByDay/);
+  assert.match(clipboardDomainJs, /groupByDay/);
   assert.match(appJs, /clip-timeline-group/);
-  assert.match(appJs, /formatClipMoment/);
+  assert.match(clipboardDomainJs, /formatMoment/);
   assert.match(stylesCss, /\.clip-timeline-group::before/);
   assert.match(stylesCss, /\.clip-timeline-node/);
 });
