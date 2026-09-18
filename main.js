@@ -42,6 +42,7 @@ const { createTaskNotificationDomain } = require('./main/task-notification-domai
 const { createTaskNotificationQueue } = require('./main/task-notification-queue');
 const { createTaskNotificationTimers } = require('./main/task-notification-timers');
 const { createTaskNotificationWindowState } = require('./main/task-notification-window-state');
+const { createTaskNotificationWindowFactory } = require('./main/task-notification-window');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -659,56 +660,28 @@ function recoverClosedTaskNotificationWindow(targetWindow) {
   if (!isQuitting) setTimeout(showNextTaskNotification, 80);
 }
 
-function createTaskNotificationWindow() {
-  if (notificationWindow && !notificationWindow.isDestroyed()) return notificationWindow;
-  const bounds = getTaskNotificationBounds();
-  taskNotificationWindowState.markNotReady();
-  notificationWindow = new BrowserWindow({
-    ...bounds,
-    frame: false,
-    transparent: true,
-    backgroundColor: '#00000000',
-    resizable: false,
-    movable: false,
-    focusable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    hasShadow: false,
-    hiddenInMissionControl: true,
-    fullscreenable: false,
-    minimizable: false,
-    maximizable: false,
-    roundedCorners: false,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      backgroundThrottling: false,
-    },
-  });
-
-  installLocalWebContentsGuards(notificationWindow.webContents);
-
-  const targetWindow = notificationWindow;
-  notificationWindow.setAlwaysOnTop(true, 'screen-saver', 1);
-  if (process.platform === 'darwin') notificationWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  notificationWindow.setIgnoreMouseEvents(false);
-  notificationWindow.loadFile(path.join(__dirname, 'renderer', 'notification.html'));
-
-  targetWindow.webContents.once('did-finish-load', () => {
+const taskNotificationWindowFactory = createTaskNotificationWindowFactory({
+  BrowserWindow,
+  path,
+  preloadPath: path.join(__dirname, 'preload.js'),
+  htmlPath: path.join(__dirname, 'renderer', 'notification.html'),
+  getBounds: () => getTaskNotificationBounds(),
+  installLocalWebContentsGuards,
+  onReady: (targetWindow) => {
     if (notificationWindow !== targetWindow || targetWindow.isDestroyed()) return;
     taskNotificationWindowState.markReady();
     showNextTaskNotification();
-  });
-
-  targetWindow.webContents.on('render-process-gone', () => {
+  },
+  onRenderProcessGone: (targetWindow) => {
     if (!targetWindow.isDestroyed()) targetWindow.destroy();
-  });
-  targetWindow.on('closed', () => {
-    recoverClosedTaskNotificationWindow(targetWindow);
-  });
+  },
+  onClosed: (targetWindow) => recoverClosedTaskNotificationWindow(targetWindow),
+});
+
+function createTaskNotificationWindow() {
+  if (notificationWindow && !notificationWindow.isDestroyed()) return notificationWindow;
+  taskNotificationWindowState.markNotReady();
+  notificationWindow = taskNotificationWindowFactory.create();
   return notificationWindow;
 }
 
