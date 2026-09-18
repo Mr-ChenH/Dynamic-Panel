@@ -316,3 +316,11 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 保留图片路径边界校验、系统剪贴板写入、辅助功能权限降级和回到原应用粘贴流程
 - 将面板收起、原应用目标和粘贴执行器作为依赖注入，避免 IPC 模块持有窗口全局状态
 - 新增 `tests/clipboard-ipc.test.js`
+
+### 已完成：AI IPC 注册拆分
+
+- 新增 `main/ipc/ai.js`
+- 将 `ai:run`、`ai:cancel`、`ai:test-provider`、诊断读取/清理和迁移确认移出 `main.js`
+- AI service、provider 配置解析、验证持久化和密钥处理通过依赖注入保留在主进程领域层
+- 保留 sender ID 隔离、provider stale context 检查、诊断失败返回和迁移保存失败处理
+- 新增 `tests/ai-ipc.test.js`

@@ -50,6 +50,7 @@ const { registerFinanceIpc } = require('./main/ipc/finance');
 const { registerRecordingsIpc } = require('./main/ipc/recordings');
 const { registerNotesIpc } = require('./main/ipc/notes');
 const { registerClipboardIpc } = require('./main/ipc/clipboard');
+const { registerAiIpc } = require('./main/ipc/ai');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -2868,9 +2869,6 @@ aiModelService = createAIService({
   },
 });
 
-ipcMain.handle('ai:run', (event, payload) => aiModelService.run(event.sender.id, payload));
-ipcMain.handle('ai:cancel', (event, requestId) => aiModelService.cancel(event.sender.id, requestId));
-
 function persistProviderVerification(slot, result, capabilities = null, expectedRevision = '') {
   const settings = readStoredTranscriptionSettings();
   const config = slot === 'transcription' ? resolveTranscriptionConfig() : resolveLlmConfig();
@@ -2935,58 +2933,22 @@ function testTranscriptionProvider() {
   });
 }
 
-ipcMain.handle('ai:test-provider', async (event, payload) => {
-  const slot = payload?.slot === 'transcription' ? 'transcription' : 'content';
-  if (slot === 'transcription') {
-    const expectedRevision = providerVerificationRevision(slot, resolveTranscriptionConfig());
-    const result = await testTranscriptionProvider();
-    try {
-      if (!persistProviderVerification(slot, result, result.capabilities, expectedRevision)) return { ok: false, error: 'stale_context' };
-    } catch (error) {}
-    return result;
-  }
-  const expectedRevision = providerVerificationRevision(slot, resolveLlmConfig());
-  const referenceTime = new Date().toISOString();
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const textResult = await aiModelService.run(event.sender.id, {
-    requestId: `connection-text-${crypto.randomUUID()}`,
-    action: 'summarize',
-    context: { sourceType: 'manual', sourceId: '', sourceRevision: '', text: '连接测试：请只回复“已连接”。' },
-    referenceTime,
-    timeZone,
-    categories: {},
-  });
-  if (!textResult.ok) {
-    try {
-      if (!persistProviderVerification(slot, textResult, null, expectedRevision)) return { ok: false, error: 'stale_context' };
-    } catch (error) {}
-    return textResult;
-  }
-  const structuredResult = await aiModelService.run(event.sender.id, {
-    requestId: `connection-json-${crypto.randomUUID()}`,
-    action: 'nameLink',
-    context: { sourceType: 'link', sourceId: 'connection-test', sourceRevision: '', text: 'URL: https://example.com\n网页标题: Example' },
-    referenceTime,
-    timeZone,
-    categories: {},
-  });
-  const result = structuredResult.ok
-    ? { ok: true, capabilities: { text: true, stream: true, structuredJson: true }, promptVersion: structuredResult.promptVersion }
-    : { ...structuredResult, error: 'structured_output_unsupported', providerError: structuredResult.error };
-  try {
-    if (!persistProviderVerification(slot, result, result.capabilities, expectedRevision)) return { ok: false, error: 'stale_context' };
-  } catch (error) {}
-  return result;
-});
-
-ipcMain.handle('ai:get-diagnostics', () => ({ ok: true, items: readAIDiagnostics() }));
-ipcMain.handle('ai:clear-diagnostics', () => {
-  try { fs.rmSync(getAIDiagnosticsPath(), { force: true }); return { ok: true }; }
-  catch (error) { return { ok: false, error: 'clear_failed' }; }
-});
-ipcMain.handle('ai:ack-migration', () => {
-  try { writeTranscriptionSettings({ ...readStoredTranscriptionSettings(), schemaVersion: 3, aiSettingsVersion: 2 }); return { ok: true, ...publicTranscriptionConfig() }; }
-  catch (error) { return { ok: false, error: 'save_failed' }; }
+registerAiIpc({
+  ipcMain,
+  crypto,
+  getAIService: () => aiModelService,
+  getProviderVerificationRevision: providerVerificationRevision,
+  resolveTranscriptionConfig,
+  resolveLlmConfig,
+  testTranscriptionProvider,
+  persistProviderVerification,
+  readDiagnostics: readAIDiagnostics,
+  clearDiagnostics: () => {
+    try { fs.rmSync(getAIDiagnosticsPath(), { force: true }); return { ok: true }; }
+    catch (error) { return { ok: false, error: 'clear_failed' }; }
+  },
+  acknowledgeMigration: () => writeTranscriptionSettings({ ...readStoredTranscriptionSettings(), schemaVersion: 3, aiSettingsVersion: 2 }),
+  publicTranscriptionConfig,
 });
 
 ipcMain.handle('transcription:get-config', () => publicTranscriptionConfig());
