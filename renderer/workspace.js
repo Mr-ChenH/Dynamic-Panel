@@ -233,146 +233,15 @@
     addLink,
   });
 
-  if (linkGroupsEl) {
-    // ============ 链接长按拖拽：组内排序 + 跨组搬运 ============
-    // 不用 HTML5 拖拽有两个原因：一是行中间那一大块是 <button class="link-open">，
-    // Chromium 里从 button 上按下不会触发祖先的 dragstart，标题区域整块拖不动；
-    // 二是原生拖拽一按就走，没法和「点击打开链接」区分。改成指针事件 + 长按门槛。
-    const LINK_DRAG_HOLD_MS = 340;
-    const LINK_DRAG_MOVE_CANCEL = 8;
-    let linkDrag = null;
-    let suppressLinkClick = false;
-
-    function clearLinkDropMarks() {
-      linkGroupsEl.querySelectorAll('.drop-before, .drop-after, .drop-target').forEach((item) => {
-        item.classList.remove('drop-before', 'drop-after', 'drop-target');
-      });
-    }
-
-    function cancelLinkDrag() {
-      if (!linkDrag) return;
-      clearTimeout(linkDrag.holdTimer);
-      if (linkDrag.active) {
-        linkDrag.row.classList.remove('dragging');
-        linkGroupsEl.classList.remove('link-dragging');
-        clearLinkDropMarks();
-      }
-      try { linkDrag.row.releasePointerCapture(linkDrag.pointerId); } catch (error) {}
-      linkDrag = null;
-    }
-
-    // 落点有两种：压在某一行上就按该行中线决定插到它前面还是后面；
-    // 压在分组的空白或标题上就追加到该组末尾（index 为 null）。
-    function updateLinkDropTarget(clientX, clientY) {
-      clearLinkDropMarks();
-      linkDrag.target = null;
-      const under = document.elementFromPoint(clientX, clientY);
-      if (!under || !linkGroupsEl.contains(under)) return;
-      const overRow = under.closest('.link-item[data-link-id]');
-      // 压在被拖那一行自己身上 = 放回原处，目标留空，松手什么都不做。
-      // 少了这一步，长按后原地松手会落到「自己所在的分组」上，被当成追加到组末尾。
-      if (overRow === linkDrag.row) return;
-      if (overRow) {
-        const rect = overRow.getBoundingClientRect();
-        const after = clientY > rect.top + rect.height / 2;
-        overRow.classList.add(after ? 'drop-after' : 'drop-before');
-        const rows = Array.from(overRow.parentElement.children)
-          .filter((item) => item.dataset && item.dataset.linkId);
-        linkDrag.target = {
-          groupId: overRow.dataset.groupId,
-          index: rows.indexOf(overRow) + (after ? 1 : 0),
-        };
-        return;
-      }
-      const overGroup = under.closest('.link-group[data-group-id]');
-      if (!overGroup) return;
-      overGroup.classList.add('drop-target');
-      linkDrag.target = { groupId: overGroup.dataset.groupId, index: null };
-    }
-
-    function linkOrderFingerprint() {
-      return linkGroups
-        .map((group) => `${group.id}:${(group.links || []).map((link) => link.id).join(',')}`)
-        .join('|');
-    }
-
-    linkGroupsEl.addEventListener('pointerdown', (event) => {
-      if(linksSearch?.value.trim()||groupFilter?.value)return;
-      if (event.button !== 0) return;
-      const row = event.target.closest('.link-item[data-link-id]');
-      // 编辑 / 删除按钮和标题输入框保持原有点击语义，不参与拖拽。
-      if (!row || event.target.closest('input, .link-actions')) return;
-      // 上一次拖拽后若没有等到那个补发的 click（比如在列表外松手），标志会留着，
-      // 否则它会把下一次正常点击吞掉，链接就打不开了。
-      suppressLinkClick = false;
-      cancelLinkDrag();
-      linkDrag = {
-        row,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        active: false,
-        target: null,
-        holdTimer: setTimeout(() => {
-          if (!linkDrag) return;
-          linkDrag.active = true;
-          row.classList.add('dragging');
-          linkGroupsEl.classList.add('link-dragging');
-          try { row.setPointerCapture(linkDrag.pointerId); } catch (error) {}
-          updateLinkDropTarget(linkDrag.startX, linkDrag.startY);
-          setLinksStatus('拖到目标位置后松手');
-        }, LINK_DRAG_HOLD_MS),
-      };
-    });
-
-    // 这三个挂在 document 上（与窗口拖拽同一套写法）：长按还没满就快速划出列表时，
-    // 挂在 linkGroupsEl 上收不到 move / up，计时器随后仍会启动一次拖拽。
-    document.addEventListener('pointermove', (event) => {
-      if (!linkDrag || event.pointerId !== linkDrag.pointerId) return;
-      if (!linkDrag.active) {
-        // 长按还没满就移动，说明用户在滚动或只是手抖，放弃这次拖拽。
-        const moved = Math.abs(event.clientX - linkDrag.startX) > LINK_DRAG_MOVE_CANCEL
-          || Math.abs(event.clientY - linkDrag.startY) > LINK_DRAG_MOVE_CANCEL;
-        if (moved) cancelLinkDrag();
-        return;
-      }
-      event.preventDefault();
-      updateLinkDropTarget(event.clientX, event.clientY);
-    });
-
-    document.addEventListener('pointerup', (event) => {
-      if (!linkDrag || event.pointerId !== linkDrag.pointerId) return;
-      const wasActive = linkDrag.active;
-      const target = linkDrag.target;
-      const linkId = linkDrag.row.dataset.linkId;
-      cancelLinkDrag();
-      if (!wasActive) return;
-      // 拖拽结束后浏览器仍会补一个 click，必须拦掉，否则松手即打开链接。
-      suppressLinkClick = true;
-      if (!target) {
-        setLinksStatus('');
-        return;
-      }
-      const before = linkOrderFingerprint();
-      linkGroups = Domain.moveLinkToPosition(linkGroups, linkId, target.groupId, target.index);
-      if (linkOrderFingerprint() === before) {
-        setLinksStatus('');
-        return;
-      }
-      persistLinks();
-      renderLinkGroups();
-      setLinksStatus('链接顺序已更新');
-    });
-
-    document.addEventListener('pointercancel', () => cancelLinkDrag());
-
-    linkGroupsEl.addEventListener('click', (event) => {
-      if (!suppressLinkClick) return;
-      suppressLinkClick = false;
-      event.stopPropagation();
-      event.preventDefault();
-    }, true);
-  }
+  window.NotchWorkspaceLinksDrag.createController({
+    Domain,
+    elements: { linkGroupsEl, linksSearch, groupFilter },
+    getGroups: () => linkGroups,
+    setGroups: (groups) => { linkGroups = groups; },
+    persist: persistLinks,
+    render: renderLinkGroups,
+    setStatus: setLinksStatus,
+  });
 
   window.NotchWorkspaceLinksController.createController({
     elements: {
