@@ -19,6 +19,7 @@ const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'work
 const workspaceWindowsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-windows.js'), 'utf8');
 const workspaceCredentialsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-credentials.js'), 'utf8');
 const workspaceLinksDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-domain.js'), 'utf8');
+const workspaceLinksRendererJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-renderer.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -62,6 +63,15 @@ test('link data normalization and context formatting stay outside the workspace 
   assert.match(workspaceLinksDomainJs, /chatRows/);
   assert.match(workspaceJs, /window\.NotchWorkspaceLinksDomain/);
   assert.doesNotMatch(workspaceJs, /String\(link\.title \|\| '未命名'\)/);
+});
+
+test('link list rendering stays in an injected renderer outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-links-renderer.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceLinksRendererJs, /createRenderer/);
+  assert.match(workspaceLinksRendererJs, /linksSidebarGroups/);
+  assert.match(workspaceLinksRendererJs, /links-load-more/);
+  assert.match(workspaceJs, /NotchWorkspaceLinksRenderer\.createRenderer/);
+  assert.doesNotMatch(workspaceJs, /function renderLinkGroups\(/);
 });
 
 test('credential storage and selection state stay outside the workspace coordinator', () => {
@@ -627,10 +637,10 @@ test('home music is app-owned and switches local, HTTPS and go-music-dl playlist
   assert.match(homeJs, /notch:settings-category-change/);
   assert.match(homeJs, /MUSIC_DISCOVERY_FILTER_KEY/);
   assert.match(homeJs, /saveMusicDiscoveryFilter/);
-  assert.match(workspaceJs, /parseLinkQuery/);
-  assert.match(workspaceJs, /toggle-link-favorite/);
-  assert.match(workspaceJs, /toggle-link-read/);
-  assert.match(workspaceJs, /link\.description/);
+  assert.match(workspaceLinksRendererJs, /parseLinkQuery/);
+  assert.match(workspaceLinksRendererJs, /toggle-link-favorite/);
+  assert.match(workspaceLinksRendererJs, /toggle-link-read/);
+  assert.match(workspaceLinksRendererJs, /link\.description/);
   assert.match(aiJs, /ai-metadata-tags/);
   assert.match(homeJs, /settingsPlaylists = musicCatalogView === 'mine'/);
   assert.match(homeJs, /home-media-progress'\)\.hidden = !activeMusicTrack\(\)/);

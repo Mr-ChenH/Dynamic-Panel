@@ -81,7 +81,6 @@
   const linksSidebar=document.querySelector('.links-sidebar'),linksSidebarGroups=document.getElementById('links-sidebar-groups'),linksSidebarTags=document.getElementById('links-sidebar-tags');
   const linkLimits=new Map();
   const LINK_PAGE_SIZE=40;
-  const normalizeLinkSearch=value=>String(value||'').normalize('NFKC').toLocaleLowerCase();
   function resetLinkView(){linkLimits.clear();linkSelection.clear();linkSelectionAnchor=null;renderLinkGroups();linkGroupsEl.scrollTop=0;}
   linksSearch?.addEventListener('input',resetLinkView);
   groupFilter?.addEventListener('change',resetLinkView);
@@ -129,23 +128,6 @@
     return linkGroups.flatMap((group) => Array.isArray(group.links) ? group.links : []);
   }
 
-  function updateLinkBulkAction() {
-    if (!linkBulkDelete) return;
-    linkBulkDelete.hidden = linkSelection.size === 0;
-    linkBulkDelete.textContent = '删除';
-    linkBulkDelete.setAttribute('aria-label', linkSelection.size
-      ? `删除 ${linkSelection.size} 项`
-      : '删除所选');
-  }
-
-  function linkHostname(url) {
-    try {
-      return new URL(url).hostname.replace(/^www\./, '');
-    } catch (error) {
-      return url;
-    }
-  }
-
   function createIconButton(action, label, icon, danger = false) {
     const button = document.createElement('button');
     button.className = `icon-button${danger ? ' danger' : ''}`;
@@ -156,166 +138,32 @@
     return button;
   }
 
-  function renderLinkGroups() {
-    if (!linkGroupsEl) return;
-    const groupScroll = new Map([...linkGroupsEl.querySelectorAll('.link-group')].map(section=>[section.dataset.groupId,section.querySelector('.link-list')?.scrollTop||0]));
-    linkGroupsEl.replaceChildren();
-    updateLinkBulkAction();
-    const query=normalizeLinkSearch(linksSearch?.value).trim();
-    const parsedQuery=Domain.parseLinkQuery(query);
-    const selected=groupFilter?.value||'';
-    const selectedTag=tagFilter?.value||'';
-    if(groupFilter){
-      const options=[['','全部分组'],...linkGroups.map(g=>[String(g.id),`${g.name||'未命名分组'} (${(g.links||[]).length})`])];
-      const signature=JSON.stringify(options);
-      if(groupFilter.dataset.signature!==signature){groupFilter.replaceChildren(...options.map(([value,label])=>new Option(label,value)));groupFilter.value=selected;groupFilter.dataset.signature=signature;}
-    }
-    if(tagFilter){
-      const tags=[...new Set(allLinks().flatMap((link)=>Domain.normalizeLinkTags(link.tags)))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
-      const options=[['','全部标签'],...tags.map((tag)=>[tag,`#${tag}`])];
-      const signature=JSON.stringify(options);
-      if(tagFilter.dataset.signature!==signature){tagFilter.replaceChildren(...options.map(([value,label])=>new Option(label,value)));tagFilter.value=selectedTag;tagFilter.dataset.signature=signature;}
-    }
-    const view=viewFilter?.value||'all';
-    const allLinkRows=allLinks();
-    const sidebarCounts={all:allLinkRows.length,unread:allLinkRows.filter((link)=>link.read!==true).length,favorite:allLinkRows.filter((link)=>link.favorite===true).length,read:allLinkRows.filter((link)=>link.read===true).length};
-    Object.entries(sidebarCounts).forEach(([key,value])=>{const node=document.getElementById(`links-sidebar-${key==='all'?'total':key}`);if(node)node.textContent=String(value);});
-    document.querySelectorAll('[data-links-sidebar-view]').forEach((button)=>button.classList.toggle('active',button.dataset.linksSidebarView===view));
-    if(linksSidebarGroups){linksSidebarGroups.replaceChildren(...[['','全部分组',allLinkRows.length],...linkGroups.map((group)=>[String(group.id),group.name||'未命名分组',(group.links||[]).length])].map(([value,label,count])=>{const button=document.createElement('button');button.type='button';button.dataset.linksSidebarGroup=value;button.classList.toggle('active',value===(groupFilter?.value||''));const text=document.createElement('span');text.textContent=label;const amount=document.createElement('b');amount.textContent=String(count);button.append(text,amount);return button;}));}
-    if(linksSidebarTags){const tagCounts=new Map();allLinkRows.forEach((link)=>Domain.normalizeLinkTags(link.tags).forEach((tag)=>tagCounts.set(tag,(tagCounts.get(tag)||0)+1)));const popular=[...tagCounts].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'zh-CN')).slice(0,10).map(([tag,count])=>[tag,tag,count]);linksSidebarTags.replaceChildren(...([['','全部标签',tagCounts.size],...popular]).map(([value,label,count])=>{const button=document.createElement('button');button.type='button';button.dataset.linksSidebarTag=value;button.classList.toggle('active',value===(tagFilter?.value||''));const text=document.createElement('span');text.textContent=value?`# ${label}`:label;const amount=document.createElement('b');amount.textContent=String(count);button.append(text,amount);return button;}));}
-    const pageHeading=document.querySelector('.links-page-title h1');if(pageHeading)pageHeading.textContent=view==='favorite'?'收藏链接':view==='unread'?'稍后阅读':view==='read'?'已读链接':groupFilter?.value?(linkGroups.find((group)=>String(group.id)===groupFilter.value)?.name||'链接'):'全部链接';
-    const pageSubtitle=document.getElementById('links-page-subtitle');if(pageSubtitle)pageSubtitle.textContent=`${linkGroups.length} 个分组 · ${sidebarCounts.unread} 条未读 · ${sidebarCounts.favorite} 条收藏`;
-    const visibleGroups=linkGroups.filter(g=>!groupFilter?.value||String(g.id)===groupFilter.value).map(group=>({group,links:(group.links||[]).filter(link=>Domain.linkMatchesQuery(link,group,parsedQuery)&&(!selectedTag||Domain.normalizeLinkTags(link.tags).some((tag)=>tag===selectedTag))&&(!view||view==='all'||(view==='favorite'&&link.favorite===true)||(view==='unread'&&link.read!==true)||(view==='read'&&link.read===true)))})).filter(entry=>entry.links.length||(!query&&view==='all'&&!selectedTag));
-    const matched=visibleGroups.reduce((sum,entry)=>sum+entry.links.length,0),total=allLinks().length;
-    const counter=document.getElementById('links-result-count');if(counter)counter.textContent=`${matched} / ${total}`;
-    const collapseButton=document.getElementById('links-collapse-all');if(collapseButton){collapseButton.disabled=!!query||view!=='all'||!!selectedTag||!linkGroups.length;collapseButton.textContent=linkGroups.some(g=>!g.collapsed)?'全部折叠':'全部展开';}
-    if (!linkGroups.length) {
-      const empty = document.createElement('div');
-      empty.className = 'links-empty';
-      empty.innerHTML = '<strong>链接库还是空的</strong><span>粘贴一个网址，开始建立你的本地收藏。</span>';
-      linkGroupsEl.appendChild(empty);
-      return;
-    }
-
-    if(!visibleGroups.length){const empty=document.createElement('div');empty.className='links-empty';empty.textContent='没有匹配链接，试试其他关键词或分组';linkGroupsEl.append(empty);return;}
-    visibleGroups.forEach(({group,links}) => {
-      const collapsed=group.collapsed&&!query;
-      const section = document.createElement('section');
-      section.className = `link-group${collapsed ? ' collapsed' : ''}`;
-      section.dataset.groupId = group.id;
-
-      const header = document.createElement('header');
-      header.className = 'link-group-head';
-      const toggle = document.createElement('button');
-      toggle.className = 'group-toggle';
-      toggle.type = 'button';
-      toggle.dataset.action = 'toggle-group';
-      toggle.setAttribute('aria-label', collapsed ? '展开分组' : '折叠分组');
-      toggle.setAttribute('aria-expanded',String(!collapsed));toggle.disabled=!!query;
-      toggle.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>';
-      const name = document.createElement('input');
-      name.className = 'group-name-input';
-      name.value = String(group.name || '未命名分组');
-      name.dataset.action = 'rename-group';
-      name.setAttribute('aria-label', '分组名称');
-      const count = document.createElement('span');
-      count.className = 'group-count';
-      count.textContent = query ? `${links.length} / ${(group.links||[]).length}` : `${links.length}`;
-      header.append(toggle, name, count);
-      header.appendChild(createIconButton('add-link-to-group', `在“${group.name || '当前分组'}”中新增链接`, ADD_ICON));
-      header.appendChild(createIconButton('delete-group', '删除分组及其中所有链接', DELETE_ICON, true));
-
-      const body = document.createElement('div');
-      body.className = 'link-group-body';
-      if (addingLinkGroupId === group.id) {
-        const addRow = document.createElement('div');
-        addRow.className = 'group-link-add';
-        addRow.innerHTML = `<input data-group-link-input type="text" placeholder="粘贴网址并回车，添加到此分组" aria-label="添加链接到${String(group.name || '当前分组').replace(/[<>"&]/g, '')}" autocomplete="off" spellcheck="false"><button type="button" data-action="cancel-group-link-add" aria-label="取消">×</button>`;
-        body.appendChild(addRow);
-      }
-      const list = document.createElement('div');
-      list.className = 'link-list';
-      const limit=linkLimits.get(group.id)||LINK_PAGE_SIZE;
-      (collapsed?[]:links.slice(0,limit)).forEach((link) => {
-        const row = document.createElement('article');
-        row.className = `link-item${linkSelection.has(link.id) ? ' multi-selected' : ''}${link.read !== true ? ' is-unread' : ''}${link.favorite === true ? ' is-favorite' : ''}`;
-        row.dataset.linkId = link.id;
-        row.dataset.groupId = group.id;
-        const mark = document.createElement('span');
-        mark.className = 'link-favicon';
-        if (link.icon && String(link.icon).startsWith('data:image/')) {
-          const image = document.createElement('img');
-          image.src = link.icon;
-          image.alt = ''; image.loading='lazy';image.decoding='async';
-          mark.appendChild(image);
-        } else {
-          mark.textContent = (linkHostname(link.url).charAt(0) || '·').toUpperCase();
-        }
-        const open = document.createElement('button');
-        open.className = 'link-open';
-        open.type = 'button';
-        open.dataset.action = 'open-link';
-        const title = document.createElement('strong');
-        title.textContent = link.title || linkHostname(link.url);
-        const domain = document.createElement('span');
-        domain.className = 'link-domain';
-        domain.textContent = linkHostname(link.url);
-        const details = document.createElement('small');
-        details.className = 'link-summary';
-        if (link.description) {
-          const description = document.createElement('span');
-          description.className = 'link-description';
-          description.textContent = link.description;
-          details.appendChild(description);
-        }
-        const tags = Domain.normalizeLinkTags(link.tags);
-        if (tags.length) {
-          const tagList = document.createElement('span');
-          tagList.className = 'link-tag-list';
-          tags.slice(0, 4).forEach((tag) => {
-            const chip = document.createElement('span');
-            chip.textContent = tag;
-            tagList.appendChild(chip);
-          });
-          details.appendChild(tagList);
-        }
-        details.hidden = !details.childElementCount;
-        const flags = document.createElement('span');
-        flags.className = 'link-state-flags';
-        if (link.read !== true) { const unread = document.createElement('span'); unread.className = 'unread'; unread.textContent = '未读'; flags.appendChild(unread); }
-        if (link.favorite === true) { const starred = document.createElement('span'); starred.className = 'favorite'; starred.textContent = '收藏'; flags.appendChild(starred); }
-        flags.hidden = !flags.childElementCount;
-        open.append(title, flags, domain, details);
-        const actions = document.createElement('div');
-        actions.className = 'link-actions';
-        const favorite = createIconButton('toggle-link-favorite', link.favorite ? '取消收藏' : '收藏链接', STAR_ICON);
-        favorite.classList.toggle('is-active', link.favorite === true);
-        favorite.setAttribute('aria-pressed', String(link.favorite === true));
-        const read = createIconButton('toggle-link-read', link.read ? '标记为未读' : '标记为已读', READ_ICON);
-        read.classList.toggle('is-active', link.read === true);
-        read.setAttribute('aria-pressed', String(link.read === true));
-        actions.append(
-          favorite,
-          read,
-          createIconButton('open-link', '打开链接', OPEN_ICON),
-          createIconButton('name-link-ai', '智能生成名称、分类与标签', AI_ICON),
-          createIconButton('edit-link', '编辑链接信息', EDIT_ICON),
-          createIconButton('delete-link', '删除链接', DELETE_ICON, true)
-        );
-        row.append(mark, open, actions);
-        list.appendChild(row);
-      });
-
-      body.append(list);
-      if(!collapsed&&links.length>limit){
-        const more=document.createElement('button');more.type='button';more.className='links-load-more';more.textContent=`再显示 ${Math.min(LINK_PAGE_SIZE,links.length-limit)} 条 · 还有 ${links.length-limit} 条`;
-        more.addEventListener('click',()=>{linkLimits.set(group.id,limit+LINK_PAGE_SIZE);const top=linkGroupsEl.scrollTop;renderLinkGroups();linkGroupsEl.scrollTop=top;const section=[...linkGroupsEl.children].find(el=>el.dataset.groupId===String(group.id));const firstNew=section?.querySelectorAll('.link-open')[limit];firstNew?.focus({preventScroll:true});const scroller=section?.querySelector('.link-list');if(scroller&&firstNew)scroller.scrollTop+=firstNew.getBoundingClientRect().top-scroller.getBoundingClientRect().top;});body.append(more);
-      }
-      section.append(header, body);
-      linkGroupsEl.appendChild(section);
-      list.scrollTop=groupScroll.get(String(group.id))||0;
-    });
-  }
+  const renderLinkGroups = window.NotchWorkspaceLinksRenderer.createRenderer({
+    Domain,
+    getGroups: () => linkGroups,
+    getSelection: () => linkSelection,
+    getAddingGroupId: () => addingLinkGroupId,
+    getLimit: (groupId) => linkLimits.get(groupId),
+    setLimit: (groupId, limit) => linkLimits.set(groupId, limit),
+    getSearch: () => linksSearch,
+    getGroupFilter: () => groupFilter,
+    getViewFilter: () => viewFilter,
+    getTagFilter: () => tagFilter,
+    elements: { linkGroupsEl, linkBulkDelete, linksSidebarGroups, linksSidebarTags },
+    createIconButton,
+    icons: {
+      'add-link-to-group': ADD_ICON,
+      'delete-group': DELETE_ICON,
+      'toggle-link-favorite': STAR_ICON,
+      'toggle-link-read': READ_ICON,
+      'open-link': OPEN_ICON,
+      'name-link-ai': AI_ICON,
+      'edit-link': EDIT_ICON,
+      'delete-link': DELETE_ICON,
+    },
+    setStatus: setLinksStatus,
+    pageSize: LINK_PAGE_SIZE,
+  });
 
   function addLink(rawValue, requestedGroupId = '') {
     const normalized = Domain.normalizeHttpUrl(rawValue);
