@@ -59,6 +59,8 @@ const { registerWorkspaceIpc } = require('./main/ipc/workspace');
 const { createSettingsController } = require('./main/settings-controller');
 const { registerSettingsIpc } = require('./main/ipc/settings');
 const { createShortcutService } = require('./main/shortcut-service');
+const { createCredentialsVault } = require('./main/credentials-vault');
+const { registerCredentialsIpc } = require('./main/ipc/credentials');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -2295,105 +2297,15 @@ async function rememberPasteTarget() {
   return previousPasteTarget;
 }
 
-function getCredentialsVaultPath() {
-  return path.join(app.getPath('userData'), CREDENTIALS_VAULT_FILE);
-}
-
-function readCredentialsVault() {
-  if (!safeStorage.isEncryptionAvailable()) return [];
-  try {
-    const envelope = JSON.parse(fs.readFileSync(getCredentialsVaultPath(), 'utf8'));
-    const decoded = safeStorage.decryptString(Buffer.from(String(envelope.payload || ''), 'base64'));
-    const rows = JSON.parse(decoded);
-    return Array.isArray(rows) ? rows.map((item) => normalizeCredentialInput(item, item && item.id, item && item.createdAt)).filter(Boolean) : [];
-  } catch (error) {
-    return [];
-  }
-}
-
-function writeCredentialsVault(rows) {
-  if (!safeStorage.isEncryptionAvailable()) return false;
-  const payload = safeStorage.encryptString(JSON.stringify(rows)).toString('base64');
-  const vaultPath = getCredentialsVaultPath();
-  const temporaryPath = `${vaultPath}.${process.pid}.tmp`;
-  try {
-    fs.writeFileSync(temporaryPath, JSON.stringify({ version: 1, payload }), { mode: 0o600 });
-    fs.renameSync(temporaryPath, vaultPath);
-    return true;
-  } catch (error) {
-    try { fs.unlinkSync(temporaryPath); } catch (unlinkError) {}
-    return false;
-  }
-}
-
-function publicCredential(item) {
-  return {
-    id: item.id,
-    service: item.service,
-    account: item.account,
-    passwordMask: '**********',
-    createdAt: item.createdAt,
-  };
-}
-
-ipcMain.handle('credentials:list', () => ({
-  ok: safeStorage.isEncryptionAvailable(),
-  secureStorage: safeStorage.isEncryptionAvailable(),
-  items: readCredentialsVault().map(publicCredential),
-}));
-
-ipcMain.handle('credentials:get', (event, id) => {
-  const item = readCredentialsVault().find((row) => row.id === String(id || ''));
-  return item ? { ok: true, item: { ...item } } : { ok: false, error: 'not_found' };
+const credentialsVault = createCredentialsVault({
+  fs,
+  safeStorage,
+  normalizeCredentialInput,
+  vaultPath: path.join(app.getPath('userData'), CREDENTIALS_VAULT_FILE),
+  randomId: () => crypto.randomUUID(),
+  processId: process.pid,
 });
-
-ipcMain.handle('credentials:save', (event, payload) => {
-  if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'secure_storage_unavailable' };
-  const rows = readCredentialsVault();
-  const existing = payload && payload.id ? rows.find((item) => item.id === payload.id) : null;
-  const normalized = normalizeCredentialInput(
-    existing && !String(payload && payload.password || '') ? { ...payload, password: existing.password } : payload,
-    existing ? existing.id : crypto.randomUUID(),
-    existing ? existing.createdAt : Date.now()
-  );
-  if (!normalized) return { ok: false, error: 'invalid_credential' };
-  const next = existing
-    ? rows.map((item) => item.id === existing.id ? normalized : item)
-    : [normalized, ...rows];
-  return writeCredentialsVault(next)
-    ? { ok: true, item: publicCredential(normalized) }
-    : { ok: false, error: 'save_failed' };
-});
-
-ipcMain.handle('credentials:delete-many', (event, ids) => {
-  const targets = new Set(Array.isArray(ids) ? ids.map(String) : []);
-  if (!targets.size) return { ok: true, deleted: 0 };
-  const rows = readCredentialsVault();
-  const next = rows.filter((item) => !targets.has(item.id));
-  if (!writeCredentialsVault(next)) return { ok: false, error: 'save_failed' };
-  return { ok: true, deleted: rows.length - next.length };
-});
-
-ipcMain.handle('credentials:copy', async (event, payload) => {
-  const id = String(payload && payload.id || '');
-  const field = payload && payload.field === 'password' ? 'password' : payload && payload.field === 'account' ? 'account' : '';
-  if (!id || !field) return false;
-  const item = readCredentialsVault().find((row) => row.id === id);
-  if (!item) return false;
-  const value = item[field];
-  await clipboard.writeText(value);
-  if (field === 'password') {
-    setTimeout(() => {
-      void clipboard.readText()
-        .then((currentValue) => {
-          if (currentValue === value) return clipboard.clear();
-          return undefined;
-        })
-        .catch(() => {});
-    }, 60_000).unref?.();
-  }
-  return true;
-});
+registerCredentialsIpc({ ipcMain, credentialsVault, clipboard });
 
 const homeWeather = require('./home-services').createWeatherService();
 const homeMusic = require('./home-media').createMusicLibrary({ filePath: getJsonSettingsPath('music-library.json') });
