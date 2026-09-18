@@ -53,6 +53,7 @@ const { registerClipboardIpc } = require('./main/ipc/clipboard');
 const { registerAiIpc } = require('./main/ipc/ai');
 const { registerTranscriptionIpc } = require('./main/ipc/transcription');
 const { registerHomeIpc } = require('./main/ipc/home');
+const { privacySettingsPanesFor, registerSystemIpc } = require('./main/ipc/system');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -1838,40 +1839,17 @@ async function requestMacMediaAccess(mediaType) {
   });
 }
 
-// macOS 渲染层 getUserMedia 不会自动弹 TCC 授权，必须由主进程申请麦克风权限。
-ipcMain.handle('media:microphone', () => requestMacMediaAccess('microphone'));
-
 ipcMain.handle('tasks:recent', () => taskNotificationQueue.history());
 
-// 快捷链接：URL 走外部浏览器（仅 http/https），本地路径走系统打开（仅绝对路径）
-ipcMain.handle('shell:openExternal', async (event, value) => {
-  const url = await validatePublicHttpUrl(value);
-  if (!url) return false;
-  await shell.openExternal(url.toString());
-  return true;
-});
-
-ipcMain.handle('shell:openPath', (event, p) => {
-  if (typeof p === 'string' && path.isAbsolute(p)) {
-    return shell.openPath(p);
-  }
-});
-
-// 只放行固定的几个隐私面板，渲染层传来的值只能当作枚举的键来查，
-// 绝不能拼进 URL：x-apple.systempreferences: 能打开任意设置面板。
-const PRIVACY_SETTINGS_PANES = process.platform === 'win32' ? {
-  microphone: 'ms-settings:privacy-microphone',
-} : {
-  accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
-  'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
-  microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
-};
-
-ipcMain.handle('shell:open-privacy-settings', (event, pane) => {
-  const target = PRIVACY_SETTINGS_PANES[String(pane || '')];
-  if (!target) return false;
-  shell.openExternal(target);
-  return true;
+const PRIVACY_SETTINGS_PANES = privacySettingsPanesFor(process.platform);
+registerSystemIpc({
+  ipcMain,
+  requestMicrophoneAccess: () => requestMacMediaAccess('microphone'),
+  validatePublicHttpUrl,
+  openExternal: (target) => shell.openExternal(target),
+  openPath: (target) => shell.openPath(target),
+  isAbsolutePath: (target) => path.isAbsolute(target),
+  privacySettingsPanes: PRIVACY_SETTINGS_PANES,
 });
 
 // ============ 启动时的权限自检 ============

@@ -8,6 +8,7 @@ const mainJs = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const financeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'finance.js'), 'utf8');
 const financeBackgroundJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-background-refresh.js'), 'utf8');
 const homeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'home.js'), 'utf8');
+const systemIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'system.js'), 'utf8');
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
@@ -462,7 +463,8 @@ test('home chat exposes temporary-session state, recovery controls and safe mark
   assert.match(markdownJs, /window\.NotchMarkdown = \{ render \}/);
   assert.match(markdownJs, /code\.textContent = codeText/);
   assert.doesNotMatch(markdownJs, /container\.innerHTML\s*=/);
-  assert.match(mainJs, /ipcMain\.handle\('shell:openExternal',[\s\S]*?validatePublicHttpUrl\(value\)/);
+  assert.match(mainJs, /registerSystemIpc\(/);
+  assert.match(systemIpcJs, /ipcMain\.handle\('shell:openExternal',[\s\S]*?validatePublicHttpUrl\(value\)/);
   assert.match(homeJs, /setTurnState\(turn, 'stopped'/);
   assert.match(homeJs, /setTurnState\(turn, 'error'/);
   assert.match(homeJs, /NotchNotes\?\.saveGenerated/);

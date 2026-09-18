@@ -342,3 +342,12 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 保留拥有主窗口的文件选择器、音频扩展名过滤、取消返回结构和文件夹导入入口
 - 天气与音乐领域规则继续由 `home-services.js` 和 `home-media.js` 负责
 - 新增 `tests/home-ipc.test.js`
+
+### 已完成：系统能力 IPC 拆分
+
+- 新增 `main/ipc/system.js`
+- 将麦克风权限、公共外部 URL、本地绝对路径和隐私设置面板 IPC 移出 `main.js`
+- 隐私设置 URL 由 `privacySettingsPanesFor(platform)` 固定生成，renderer 输入只能作为枚举键查询
+- 公共 URL 继续经过 DNS 与私网地址校验，本地路径继续要求绝对路径
+- macOS 麦克风权限仍通过既有 TCC 前台协调器请求
+- 新增 `tests/system-ipc.test.js`
