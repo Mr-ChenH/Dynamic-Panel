@@ -45,6 +45,7 @@ const { createTaskNotificationWindowState } = require('./main/task-notification-
 const { createTaskNotificationWindowFactory } = require('./main/task-notification-window');
 const { createTaskNotificationController } = require('./main/task-notification-controller');
 const { createTranscriptionService } = require('./main/transcription-service');
+const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -341,14 +342,6 @@ let windowScanCache = new Map();
 const windowIconCache = new Map();
 let aiModelService = null;
 let aiContextGeneration = 0;
-let financeBackgroundTimer = null;
-let financeBackgroundActive = false;
-let financeBackgroundPending = false;
-let financeBackgroundInterval = 60;
-let financeBackgroundGeneration = 0;
-let financeBackgroundSequence = 0;
-let financeBackgroundRequestId = '';
-let financeBackgroundPayload = { assetIds: [], rankingMarket: 'all', rankingSource: 'coingecko', rankingSort: 'gainers', rankingPage: 1 };
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -1151,114 +1144,35 @@ function updateFinanceProvider(payload) {
   }
   if (!writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), { schemaVersion: 2, refreshSeconds: current.refreshSeconds, providers })) return { ok: false, error: 'save_failed' };
   getFinanceService().clearCache({ includeQuotaProtected: true });
-  if (financeBackgroundActive) {
-    financeBackgroundGeneration += 1;
-    if (financeBackgroundRequestId) getFinanceService().cancel(financeBackgroundRequestId);
-    void refreshFinanceBackground();
-  }
+  financeBackgroundService.invalidate();
   return publicFinanceSettings();
 }
 
-function clearFinanceBackgroundTimer() {
-  if (financeBackgroundTimer) clearTimeout(financeBackgroundTimer);
-  financeBackgroundTimer = null;
-}
+const financeBackgroundService = createFinanceBackgroundRefresh({
+  getFinanceService,
+  getMainWindow: () => mainWindow,
+  readAppSettings,
+  readFinanceSettings,
+  isQuitting: () => isQuitting,
+  sendUpdate: (window, snapshot) => window.webContents.send('finance:update', snapshot),
+});
 
-function scheduleFinanceBackgroundTimer() {
-  clearFinanceBackgroundTimer();
-  if (!financeBackgroundActive || financeBackgroundInterval <= 0 || isQuitting) return;
-  financeBackgroundTimer = setTimeout(() => {
-    financeBackgroundTimer = null;
-    void refreshFinanceBackground();
-  }, financeBackgroundInterval * 1000);
-  financeBackgroundTimer.unref?.();
-}
-
-function financeBackgroundIssueCode(value) {
-  const code = String(value?.error || value?.warning || value?.code || value?.message || value || '').trim().slice(0, 80);
-  return /^[a-z0-9_,:-]+$/i.test(code) ? code : 'network_error';
-}
-
-function financeBackgroundIssues(snapshot) {
-  const issues = [];
-  for (const warning of Array.isArray(snapshot?.overview?.warnings) ? snapshot.overview.warnings : []) {
-    issues.push(`${String(warning?.provider || 'overview').slice(0, 32)}:${financeBackgroundIssueCode(warning)}`);
-  }
-  for (const [key, result] of Object.entries(snapshot?.rankings || {})) {
-    if (!result) issues.push(`${key}:request_failed`);
-    else if (result.ok === false || result.error) issues.push(`${key}:${financeBackgroundIssueCode(result)}`);
-    else if ((!Array.isArray(result.rows) || !result.rows.length) && result.unavailable) issues.push(`${key}:${financeBackgroundIssueCode(result.unavailable)}`);
-    else if ((!Array.isArray(result.rows) || !result.rows.length) && result.warning) issues.push(`${key}:${financeBackgroundIssueCode(result.warning)}`);
-  }
-  return [...new Set(issues)].slice(0, 16);
-}
-
-async function refreshFinanceBackground({ allowInactive = false } = {}) {
-  if ((!financeBackgroundActive && !allowInactive) || financeBackgroundPending || isQuitting) return;
-  const generation = financeBackgroundGeneration;
-  const requestId = `finance-background-${generation}-${++financeBackgroundSequence}`;
-  financeBackgroundRequestId = requestId;
-  financeBackgroundPending = true;
-  const startedAt = Date.now();
-  try {
-    const snapshot = await getFinanceService().prefetch({ ...financeBackgroundPayload, requestId });
-    const issues = financeBackgroundIssues(snapshot);
-    if (issues.length) console.warn(`[finance] Background refresh ${requestId} completed with issues after ${Date.now() - startedAt}ms: ${issues.join(', ')}`);
-    if (generation === financeBackgroundGeneration && (financeBackgroundActive || allowInactive) && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('finance:update', snapshot);
-    }
-  } catch (error) {
-    const code = financeBackgroundIssueCode(error);
-    if (code !== 'cancelled') console.warn(`[finance] Background refresh ${requestId} failed after ${Date.now() - startedAt}ms: ${code}`);
-  } finally {
-    if (financeBackgroundRequestId === requestId) financeBackgroundRequestId = '';
-    financeBackgroundPending = false;
-    if (generation === financeBackgroundGeneration && financeBackgroundActive) scheduleFinanceBackgroundTimer();
-    else if (financeBackgroundActive && !isQuitting) void refreshFinanceBackground();
-  }
+function refreshFinanceBackground(options) {
+  return financeBackgroundService.refresh(options);
 }
 
 function setFinanceBackgroundActivity(payload = {}) {
-  const active = payload.active === true;
-  // 启动预热只读取一次已配置的 provider 快照，不改变隐藏页面的周期刷新策略。
-  const startupPrefetch = payload.prefetch === true && readAppSettings().features?.finance !== false;
-  const nextInterval = [0, 30, 60, 120, 300].includes(Number(payload.refreshSeconds)) ? Number(payload.refreshSeconds) : readFinanceSettings().refreshSeconds;
-  const nextPayload = {
-    assetIds: Array.isArray(payload.assetIds) ? [...new Set(payload.assetIds.map((value) => String(value).trim().slice(0, 240)).filter(Boolean))].slice(0, 100) : [],
-    rankingMarket: ['all', 'crypto', 'binance', 'us', 'cn'].includes(payload.rankingMarket) ? payload.rankingMarket : 'all',
-    rankingSource: ['coingecko', 'binance'].includes(payload.rankingSource) ? payload.rankingSource : 'coingecko',
-    rankingSort: ['gainers', 'losers', 'market_cap', 'volume'].includes(payload.rankingSort) ? payload.rankingSort : 'gainers',
-    rankingPage: Math.max(1, Math.min(200, Math.floor(Number(payload.rankingPage) || 1))),
-  };
-  const payloadChanged = JSON.stringify(nextPayload) !== JSON.stringify(financeBackgroundPayload);
-  const changed = active !== financeBackgroundActive || nextInterval !== financeBackgroundInterval || payloadChanged;
-  financeBackgroundActive = active;
-  financeBackgroundInterval = nextInterval;
-  financeBackgroundPayload = nextPayload;
-  if (!active) {
-    financeBackgroundGeneration += 1;
-    if (financeBackgroundRequestId) getFinanceService().cancel(financeBackgroundRequestId);
-    clearFinanceBackgroundTimer();
-    if (startupPrefetch) void refreshFinanceBackground({ allowInactive: true });
-    return { ok: true, active: false, refreshSeconds: financeBackgroundInterval, prefetching: startupPrefetch };
-  }
-  if (payloadChanged && financeBackgroundPending) {
-    financeBackgroundGeneration += 1;
-    if (financeBackgroundRequestId) getFinanceService().cancel(financeBackgroundRequestId);
-  }
-  scheduleFinanceBackgroundTimer();
-  if (financeBackgroundInterval > 0 && (changed || !financeBackgroundPending)) void refreshFinanceBackground();
-  return { ok: true, active: true, refreshSeconds: financeBackgroundInterval };
+  return financeBackgroundService.setActivity(payload);
 }
 
 function updateFinanceRefreshInterval(value) {
   const refreshSeconds = [0, 30, 60, 120, 300].includes(Number(value)) ? Number(value) : null;
   if (refreshSeconds === null) return { ok: false, error: 'invalid_refresh_interval' };
   const current = readFinanceSettings();
-  if (!writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), { schemaVersion: 2, refreshSeconds, providers: current.providers })) return { ok: false, error: 'save_failed' };
-  financeBackgroundInterval = refreshSeconds;
-  scheduleFinanceBackgroundTimer();
-  if (financeBackgroundActive && refreshSeconds > 0) void refreshFinanceBackground();
+  if (!writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), { schemaVersion: 2, refreshSeconds, providers: current.providers })) {
+    return { ok: false, error: 'save_failed' };
+  }
+  financeBackgroundService.updateInterval(refreshSeconds);
   return publicFinanceSettings();
 }
 
@@ -3706,9 +3620,7 @@ app.on('before-quit', (event) => {
     return;
   }
   launcherService?.cancel().catch(() => {});
-  financeBackgroundGeneration += 1;
-  financeBackgroundActive = false;
-  if (financeBackgroundRequestId) getFinanceService().cancel(financeBackgroundRequestId);
+  financeBackgroundService.dispose();
   clearFinanceBackgroundTimer();
   isQuitting = true;
   hideWhenCollapsed = false;
