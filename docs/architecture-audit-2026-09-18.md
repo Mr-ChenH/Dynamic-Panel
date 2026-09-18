@@ -424,6 +424,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/todo-planner.css`，迁移待办时间范围规划栏、范围计数和逾期跳转样式；待办四象限及截止时间弹层样式暂保留在覆盖层中
 - 新增 `renderer/todo-list.css`，迁移待办列表文字、截止时间、逾期重排、添加行和已完成折叠样式；四象限边框与日期弹层覆盖继续保留在 shell 覆盖层中
 - 新增 `renderer/todo-editor.css`，迁移截止时间触发器、日期编辑器、快捷日期、日历网格和时间选择基础样式；文件在 `styles.css` 前加载，保留后续紧凑弹层覆盖
+- 新增 `renderer/workspace-links-domain.js`，承接 `notch-link-groups` 的规范化、链接上下文和 AI 对话资料行生成；链接 UI 事件与渲染暂由 `workspace.js` 协调，后续可在此边界继续下沉
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 当前约 2840 行，直接 `ipcMain` 注册仅剩待办提醒控制器边界
 - 完整 `npm test` 当前为 321 项：320 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过

@@ -18,6 +18,7 @@ const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const workspaceWindowsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-windows.js'), 'utf8');
 const workspaceCredentialsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-credentials.js'), 'utf8');
+const workspaceLinksDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-domain.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -52,6 +53,15 @@ test('current windows keep their domain state outside the workspace coordinator'
   assert.match(workspaceWindowsJs, /window\.NotchWorkspaceWindows/);
   assert.doesNotMatch(workspaceJs, /function renderWindows\(/);
   assert.doesNotMatch(workspaceJs, /function refreshWindows\(/);
+});
+
+test('link data normalization and context formatting stay outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-links-domain.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceLinksDomainJs, /normalizeGroups/);
+  assert.match(workspaceLinksDomainJs, /linkContext/);
+  assert.match(workspaceLinksDomainJs, /chatRows/);
+  assert.match(workspaceJs, /window\.NotchWorkspaceLinksDomain/);
+  assert.doesNotMatch(workspaceJs, /String\(link\.title \|\| '未命名'\)/);
 });
 
 test('credential storage and selection state stay outside the workspace coordinator', () => {

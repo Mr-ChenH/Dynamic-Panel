@@ -72,18 +72,8 @@
   const linksStatus = document.getElementById('links-status');
   let linkGroups = loadJson(LINKS_KEY, []);
   if (!Array.isArray(linkGroups)) linkGroups = [];
-  linkGroups = linkGroups.map((group) => ({
-    ...group,
-    links: (Array.isArray(group.links) ? group.links : []).map((link) => ({
-      ...link,
-      title: String(link.title || '未命名').trim() || '未命名',
-      description: String(link.description || '').trim().slice(0, 500),
-      tags: Domain.normalizeLinkTags(link.tags),
-      favorite: link.favorite === true,
-      read: link.read === true,
-      note: String(link.note || '').trim().slice(0, 2000),
-    })),
-  }));
+  const LinksDomain = window.NotchWorkspaceLinksDomain;
+  linkGroups = LinksDomain?.normalizeGroups(linkGroups) || [];
   let linkSelection = new Set();
   let linkSelectionAnchor = null;
   let addingLinkGroupId = '';
@@ -2759,26 +2749,14 @@
       return true;
     },
     linkContext(id) {
-      for (const group of linkGroups) {
-        const link = (group.links || []).find((item) => String(item.id) === String(id));
-        if (link) return { sourceType: 'link', sourceId: link.id, sourceTitle: link.title, text: `URL: ${link.url}\n网页标题: ${link.title}${link.description ? `\n网页描述: ${link.description}` : ''}${Domain.normalizeLinkTags(link.tags).length ? `\n标签: ${Domain.normalizeLinkTags(link.tags).join('、')}` : ''}${link.note ? `\n私人备注: ${link.note}` : ''}`, createdAt: link.createdAt || Date.now(), updatedAt: link.updatedAt || link.createdAt || Date.now() };
-      }
-      return null;
+      return LinksDomain?.linkContext(linkGroups, id) || null;
     },
     recordingContext(id = selectedRecordingId) {
       const recording = recordings.find((item) => item.id === id && !item.isDraft);
       return recording ? { sourceType: 'recording', sourceId: recording.id, sourceTitle: recording.title, text: recording.transcript, createdAt: recording.createdAt } : null;
     },
     chatContexts() {
-      const links = linkGroups.flatMap((group) => (group.links || []).map((link) => ({
-        sourceType: 'link',
-        sourceId: link.id,
-        sourceTitle: link.title || link.url,
-        sourceRevision: String(link.updatedAt || link.createdAt || ''),
-        text: `URL: ${link.url}\n网页标题: ${link.title || ''}${link.description ? `\n网页描述: ${link.description}` : ''}${Domain.normalizeLinkTags(link.tags).length ? `\n标签: ${Domain.normalizeLinkTags(link.tags).join('、')}` : ''}${link.note ? `\n私人备注: ${link.note}` : ''}`,
-        detail: `${group.name || '未分组'}${link.favorite ? ' · 收藏' : ''}${link.read ? ' · 已读' : ' · 未读'}`,
-        updatedAt: link.updatedAt || link.createdAt || 0,
-      })));
+      const links = LinksDomain?.chatRows(linkGroups) || [];
       const recordingRows = recordings.filter((recording) => !recording.isDraft && recording.transcript.trim()).map((recording) => ({
         sourceType: 'recording',
         sourceId: recording.id,
