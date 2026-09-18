@@ -43,6 +43,7 @@ const { createTaskNotificationQueue } = require('./main/task-notification-queue'
 const { createTaskNotificationTimers } = require('./main/task-notification-timers');
 const { createTaskNotificationWindowState } = require('./main/task-notification-window-state');
 const { createTaskNotificationWindowFactory } = require('./main/task-notification-window');
+const { createTaskNotificationController } = require('./main/task-notification-controller');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -317,7 +318,7 @@ let transientSystemInteractionRequests = 0;
 const mediaPermissionCoordinator = createForegroundMediaPermissionCoordinator();
 
 let notificationWindow = null;
-let taskNotificationFallbackTimer = null;
+let taskNotificationController = null;
 let todoReminderTimer = null;
 let scheduledTodoReminders = [];
 
@@ -647,114 +648,40 @@ function getTaskNotificationBounds(display) {
   return getCenteredBounds(width, TASK_NOTIFICATION_HEIGHT, d);
 }
 
-function recoverClosedTaskNotificationWindow(targetWindow) {
-  if (notificationWindow !== targetWindow) return;
-  const interruptedNotification = taskNotificationWindowState.active();
-  clearTaskNotificationTimers();
-  taskNotificationWindowState.recover();
-  notificationWindow = null;
-  taskNotificationTimers.reset();
-  if (!isQuitting && interruptedNotification) {
-    taskNotificationQueue.requeueFront(interruptedNotification);
-  }
-  if (!isQuitting) setTimeout(showNextTaskNotification, 80);
-}
-
 const taskNotificationWindowFactory = createTaskNotificationWindowFactory({
   BrowserWindow,
-  path,
   preloadPath: path.join(__dirname, 'preload.js'),
   htmlPath: path.join(__dirname, 'renderer', 'notification.html'),
-  getBounds: () => getTaskNotificationBounds(),
+  getBounds: () => getTaskNotificationBounds(getTargetDisplay()),
   installLocalWebContentsGuards,
-  onReady: (targetWindow) => {
-    if (notificationWindow !== targetWindow || targetWindow.isDestroyed()) return;
-    taskNotificationWindowState.markReady();
-    showNextTaskNotification();
-  },
+  onReady: (targetWindow) => taskNotificationController?.onReady(targetWindow),
   onRenderProcessGone: (targetWindow) => {
     if (!targetWindow.isDestroyed()) targetWindow.destroy();
   },
-  onClosed: (targetWindow) => recoverClosedTaskNotificationWindow(targetWindow),
+  onClosed: (targetWindow) => taskNotificationController?.onClosed(targetWindow),
 });
 
-function createTaskNotificationWindow() {
-  if (notificationWindow && !notificationWindow.isDestroyed()) return notificationWindow;
-  taskNotificationWindowState.markNotReady();
-  notificationWindow = taskNotificationWindowFactory.create();
-  return notificationWindow;
-}
+taskNotificationController = createTaskNotificationController({
+  queue: taskNotificationQueue,
+  state: taskNotificationWindowState,
+  timers: taskNotificationTimers,
+  windowFactory: taskNotificationWindowFactory,
+  getBounds: () => getTaskNotificationBounds(getTargetDisplay()),
+  visibleMs: TASK_NOTIFICATION_VISIBLE_MS,
+  leaveMs: TASK_NOTIFICATION_LEAVE_MS,
+  windowPolicy: taskNotificationWindowPolicy,
+  isQuitting: () => isQuitting,
+  onQueueCount: (count) => sendTaskNotificationQueueCount(count),
+  onWindowChange: (window) => { notificationWindow = window; },
+});
 
-function clearTaskNotificationTimers() {
-  taskNotificationTimers.clear();
-  if (taskNotificationFallbackTimer) {
-    clearTimeout(taskNotificationFallbackTimer);
-    taskNotificationFallbackTimer = null;
-  }
-}
-
-function scheduleTaskNotificationDismiss() {
-  taskNotificationTimers.schedule();
-}
-
-function setTaskNotificationPaused(paused) {
-  taskNotificationTimers.setPaused(paused);
-}
-
-function showNextTaskNotification() {
-  if (taskNotificationWindowState.active() || taskNotificationQueue.length() === 0 || isQuitting) return;
-  const targetWindow = createTaskNotificationWindow();
-  if (!taskNotificationWindowState.isReady() || !targetWindow || targetWindow.isDestroyed()) return;
-
-  const nextNotification = taskNotificationQueue.takeNext();
-  if (!taskNotificationWindowState.start(nextNotification)) return;
-  taskNotificationTimers.reset();
-  targetWindow.setBounds(getTaskNotificationBounds(getTargetDisplay()));
-  targetWindow.showInactive();
-  targetWindow.webContents.send('task-notification:show', {
-    ...taskNotificationWindowState.active(),
-    pendingCount: getPendingTaskNotificationCount(),
-    visibleMs: TASK_NOTIFICATION_VISIBLE_MS,
-  });
-  scheduleTaskNotificationDismiss();
-}
-
-function beginTaskNotificationDismiss() {
-  const eventId = taskNotificationWindowState.beginLeaving();
-  if (!eventId) return;
-  clearTaskNotificationTimers();
-  if (notificationWindow && !notificationWindow.isDestroyed() && taskNotificationWindowState.isReady()) {
-    notificationWindow.webContents.send('task-notification:hide', eventId);
-  }
-  taskNotificationFallbackTimer = setTimeout(
-    () => finishTaskNotification(eventId),
-    TASK_NOTIFICATION_LEAVE_MS + 120
-  );
-}
-
-function finishTaskNotification(eventId) {
-  if (taskNotificationWindowState.active()?.eventId !== eventId) return;
-  clearTaskNotificationTimers();
-  const completedWindow = notificationWindow;
-  if (completedWindow && !completedWindow.isDestroyed()) completedWindow.hide();
-  taskNotificationWindowState.finish(eventId);
-  taskNotificationTimers.reset();
-  setTimeout(() => {
-    showNextTaskNotification();
-    const policy = taskNotificationWindowPolicy({
-      active: Boolean(taskNotificationWindowState.active()),
-      queueLength: taskNotificationQueue.length(),
-    });
-    if (
-      policy === 'dispose'
-      && notificationWindow === completedWindow
-      && completedWindow
-      && !completedWindow.isDestroyed()
-    ) {
-      completedWindow.destroy();
-    }
-  }, 80);
-}
+function createTaskNotificationWindow() { return taskNotificationController.ensureWindow(); }
+function clearTaskNotificationTimers() { taskNotificationController.clearTimers(); }
+function scheduleTaskNotificationDismiss() { taskNotificationTimers.schedule(); }
+function setTaskNotificationPaused(paused) { taskNotificationTimers.setPaused(paused); }
+function showNextTaskNotification() { taskNotificationController.showNext(); }
+function beginTaskNotificationDismiss() { taskNotificationController.beginDismiss(); }
+function finishTaskNotification(eventId) { taskNotificationController.finish(eventId); }
 
 const taskNotificationServer = createTaskNotificationServer({
   http,
@@ -770,24 +697,11 @@ const startTaskNotificationServer = () => taskNotificationServer.start();
 const stopTaskNotificationServer = () => taskNotificationServer.stop();
 
 ipcMain.on('task-notification:hover', (event, paused) => {
-  if (
-    notificationWindow &&
-    !notificationWindow.isDestroyed() &&
-    event.sender === notificationWindow.webContents
-  ) {
-    setTaskNotificationPaused(paused === true);
-  }
+  taskNotificationController.handleHover(event.sender, paused);
 });
 
 ipcMain.on('task-notification:dismissed', (event, eventId) => {
-  if (
-    notificationWindow &&
-    !notificationWindow.isDestroyed() &&
-    event.sender === notificationWindow.webContents &&
-    typeof eventId === 'string'
-  ) {
-    finishTaskNotification(eventId);
-  }
+  taskNotificationController.handleDismissed(event.sender, eventId);
 });
 
 function createWindow() {

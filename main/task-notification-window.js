@@ -1,6 +1,5 @@
 function createTaskNotificationWindowFactory({
   BrowserWindow,
-  path,
   preloadPath,
   htmlPath,
   getBounds,
