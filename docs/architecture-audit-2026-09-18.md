@@ -334,3 +334,11 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `tests/transcription-ipc.test.js`
 - 修复 `before-quit` 仍调用已删除 `clearFinanceBackgroundTimer()` 的退出路径缺陷，改由 `financeBackgroundService.dispose()` 统一清理
 - 全部 Node 单元测试为 297 项：296 通过，1 项按平台跳过
+
+### 已完成：首页天气与音乐 IPC 拆分
+
+- 新增 `main/ipc/home.js`
+- 将天气查询、天气详情、音乐库、播放来源、在线目录浏览、本地导入和音频/封面读取等 20 个 `home:*` handler 移出 `main.js`
+- 保留拥有主窗口的文件选择器、音频扩展名过滤、取消返回结构和文件夹导入入口
+- 天气与音乐领域规则继续由 `home-services.js` 和 `home-media.js` 负责
+- 新增 `tests/home-ipc.test.js`

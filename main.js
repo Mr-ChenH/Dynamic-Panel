@@ -52,6 +52,7 @@ const { registerNotesIpc } = require('./main/ipc/notes');
 const { registerClipboardIpc } = require('./main/ipc/clipboard');
 const { registerAiIpc } = require('./main/ipc/ai');
 const { registerTranscriptionIpc } = require('./main/ipc/transcription');
+const { registerHomeIpc } = require('./main/ipc/home');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -2577,37 +2578,7 @@ ipcMain.handle('credentials:copy', async (event, payload) => {
 
 const homeWeather = require('./home-services').createWeatherService();
 const homeMusic = require('./home-media').createMusicLibrary({ filePath: getJsonSettingsPath('music-library.json') });
-ipcMain.handle('home:weather-search', (event, query) => homeWeather.search(query));
-ipcMain.handle('home:weather', (event, location) => homeWeather.weather(location));
-ipcMain.handle('home:music-library', () => homeMusic.list());
-ipcMain.handle('home:music-mode', (event, mode) => homeMusic.setMode(mode));
-ipcMain.handle('home:music-select-playlist', (event, payload) => homeMusic.selectPlaylist(payload));
-ipcMain.handle('home:music-refresh-source', (event, sourceId) => homeMusic.refreshSource(sourceId));
-ipcMain.handle('home:music-add-source', (event, payload) => homeMusic.addCatalogSource(payload));
-ipcMain.handle('home:music-remove-source', (event, sourceId) => homeMusic.removeCatalogSource(sourceId));
-ipcMain.handle('home:music-browse-categories', (event, payload) => homeMusic.browseOnlineCategories(payload));
-ipcMain.handle('home:music-search-playlists', (event, payload) => homeMusic.browseOnlineSearch(payload));
-ipcMain.handle('home:music-browse-category', (event, payload) => homeMusic.browseOnlineCategory(payload));
-ipcMain.handle('home:music-browse-recommend', (event, payload) => homeMusic.browseOnlineRecommend(payload));
-ipcMain.handle('home:music-browse-user-playlists', (event, payload) => homeMusic.browseOnlineUserPlaylists(payload));
-ipcMain.handle('home:music-select-online-playlist', (event, payload) => homeMusic.browseOnlinePlaylist(payload));
-ipcMain.handle('home:music-choose-files', async () => {
-  const choice = await showOwnedOpenDialog({
-    title: '添加本地音乐', properties: ['openFile', 'multiSelections'],
-    filters: [{ name: '音频文件', extensions: ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'opus', 'flac', 'webm'] }],
-  });
-  if (choice.canceled || !choice.filePaths.length) return { ok: false, error: 'cancelled' };
-  return homeMusic.addLocal(choice.filePaths);
-});
-ipcMain.handle('home:music-choose-folder', async () => {
-  const choice = await showOwnedOpenDialog({ title: '添加音乐文件夹', properties: ['openDirectory'] });
-  if (choice.canceled || !choice.filePaths.length) return { ok: false, error: 'cancelled' };
-  return homeMusic.addFolder(choice.filePaths[0]);
-});
-ipcMain.handle('home:music-add-network', (event, payload) => homeMusic.addNetwork(payload));
-ipcMain.handle('home:music-remove', (event, trackId) => homeMusic.remove(trackId));
-ipcMain.handle('home:music-load', (event, trackId) => homeMusic.load(trackId));
-ipcMain.handle('home:music-cover', (event, trackId) => homeMusic.loadCover(trackId));
+registerHomeIpc({ ipcMain, weatherService: homeWeather, musicLibrary: homeMusic, showOwnedOpenDialog });
 
 // ============ 百炼实时语音转写 ============
 function getTranscriptionSettingsPath() {
