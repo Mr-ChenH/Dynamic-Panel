@@ -1167,11 +1167,13 @@ if (topbarEl) {
     // The tab pills are slightly shorter than the topbar. Keep the small
     // area directly below them inside the tab hit region; otherwise a click
     // on the pill's lower edge is mistaken for a blank-topbar collapse.
-    const tabsRect = document.getElementById('tabs')?.getBoundingClientRect();
     const tabHitSlop = 8;
-    if (tabsRect
-      && e.clientX >= tabsRect.left && e.clientX <= tabsRect.right
-      && e.clientY >= tabsRect.top && e.clientY <= tabsRect.bottom + tabHitSlop) return;
+    const overTabEdge = [...document.querySelectorAll('#tabs .tab:not([hidden])')].some((tab) => {
+      const rect = tab.getBoundingClientRect();
+      return e.clientX >= rect.left && e.clientX <= rect.right
+        && e.clientY >= rect.top && e.clientY <= rect.bottom + tabHitSlop;
+    });
+    if (overTabEdge) return;
     e.stopPropagation();
     setMode(false);
   });
