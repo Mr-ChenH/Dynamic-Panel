@@ -61,6 +61,7 @@ const { registerSettingsIpc } = require('./main/ipc/settings');
 const { createShortcutService } = require('./main/shortcut-service');
 const { createCredentialsVault } = require('./main/credentials-vault');
 const { registerCredentialsIpc } = require('./main/ipc/credentials');
+const { registerLinksIpc } = require('./main/ipc/links');
 registerCaptureScheme();
 let captureService = null;
 let captureQuitPending = false;
@@ -1880,8 +1881,12 @@ const linkInspector = createLinkInspector({
   maxRedirects: LINK_FETCH_MAX_REDIRECTS,
 });
 const { inspectLink } = linkInspector;
-
-ipcMain.handle('links:inspect', (event, url) => inspectLink(url, event.sender.id));
+registerLinksIpc({
+  ipcMain,
+  inspectLink,
+  getAIModelService: () => aiModelService,
+  crypto,
+});
 
 registerFinanceIpc({
   ipcMain,
@@ -1893,24 +1898,6 @@ registerFinanceIpc({
   readFinanceSettings,
   writeFinanceSettings: (settings) => writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), settings),
   isMainWindowSender: (sender) => Boolean(mainWindow && !mainWindow.isDestroyed() && sender === mainWindow.webContents),
-});
-
-ipcMain.handle('smart:organize-material', async (event, payload) => {
-  const text = String(payload && payload.text || '').trim();
-  const kind = payload && payload.kind === 'note' ? 'note' : 'recording';
-  const sourceId = String(payload && payload.sourceId || '').trim().slice(0, 100);
-  const sourceRevision = crypto.createHash('sha256').update(`${kind}\0${sourceId}\0${text}`).digest('hex');
-  if (!text) return { ok: false, error: 'empty_text' };
-  if (text.length > 12000) return { ok: false, error: 'input_too_long', limit: 12000 };
-  if (!aiModelService) return { ok: false, error: 'not_configured' };
-  return aiModelService.run(event.sender.id, {
-    requestId: `legacy-${crypto.randomUUID()}`,
-    action: kind === 'note' ? 'nameNote' : 'nameRecording',
-    context: { sourceType: kind, sourceId: sourceId || sourceRevision, sourceRevision, text },
-    referenceTime: new Date().toISOString(),
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-    categories: {},
-  });
 });
 
 const WINDOWS_LIST_JXA = `
