@@ -251,3 +251,34 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 目前最高风险是“开发环境正常、打包应用启动失败”的 `main/` 文件遗漏。其次是 Electron 面板收起集成测试不稳定，以及 `main.js` 中录音转录和 IPC 注册仍然高耦合。
 
 本报告之后的第一阶段重构应只处理发布完整性和检查覆盖，完成后再进入转录服务拆分，保证每一步可以独立回归和定位。
+
+## 实施进度
+
+### 已完成：发布完整性
+
+提交：`bf23c3f refactor: cover extracted main modules in packaging checks`
+
+- electron-builder 增加 `main/**/*.js`
+- 桌面语法检查自动扫描 `main/`
+- 新增 `tests/build-integrity.test.js`
+- 验证 `main.js` 中的 `./main/*.js` 引用都能解析
+
+### 已完成：转录会话服务拆分
+
+提交：`f0d03ae refactor: extract transcription session service`
+
+- 新增 `main/transcription-service.js`
+- 提取 WebSocket session、音频帧、interim/final 文本、finish 超时和关闭清理
+- 保留原有 `transcription:start`、`transcription:audio`、`transcription:finish` 和 `transcription:event`
+- 新增 `tests/transcription-service.test.js`
+
+### 已完成：财务后台刷新拆分
+
+提交：`20fc653 refactor: extract finance background refresh`
+
+- 新增 `main/finance-background-refresh.js`
+- 提取 timer、generation、requestId、取消、payload 归一化和 renderer 快照推送
+- 保留财务刷新 IPC、启动预热、配置变更和退出清理行为
+- 新增 `tests/finance-background-refresh.test.js`
+
+相关定向检查当前通过 44 项测试，且 `main.js`、新模块和桌面检查脚本均通过 `node --check`。
