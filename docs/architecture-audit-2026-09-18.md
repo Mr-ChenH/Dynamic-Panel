@@ -300,3 +300,11 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 通过依赖注入保留工作区路径校验和系统文件管理器定位行为
 - 新增 `tests/recordings-ipc.test.js`
 - 保持录音文件只通过 `workspaceFiles.getSafeRecordingPath()` 暴露
+
+### 已完成：笔记图片 IPC 注册拆分
+
+- 新增 `main/ipc/notes.js`
+- 将 `notes:save-image`、`notes:choose-images`、`notes:read-image` 和 `notes:delete-images` 移出 `main.js`
+- 保留单图 20MB 输入限制、最多 12 个文件、PNG 回读上限和笔记目录边界校验
+- 删除笔记图片时继续拒绝符号链接根目录、符号链接笔记目录和越界路径
+- 新增 `tests/notes-ipc.test.js`
