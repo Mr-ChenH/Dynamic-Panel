@@ -2312,7 +2312,15 @@ ipcMain.handle('window:metrics', () => {
 });
 
 // Tab 仅改变内容；固定展开尺寸下不再触发原生窗口 resize。
+ipcMain.on('window:keep-open', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+  cancelPanelBlurCollapse();
+  if (currentMode === 'expanded' && !mainWindow.isFocused()) mainWindow.focus();
+});
+
 ipcMain.handle('window:set-tab', (event, tab) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+  cancelPanelBlurCollapse();
   currentTab = Object.prototype.hasOwnProperty.call(TAB_SIZES, tab) ? tab : 'home';
 });
 

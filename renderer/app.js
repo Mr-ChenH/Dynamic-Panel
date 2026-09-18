@@ -1011,8 +1011,12 @@ if (tabIndicator) {
 }
 
 Array.from(document.querySelectorAll('.tab[data-tab]')).forEach((btn) => {
+  btn.addEventListener('pointerdown', () => {
+    window.notchAPI?.keepPanelOpen?.();
+  });
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
+    window.notchAPI?.keepPanelOpen?.();
     setActiveTab(btn.dataset.tab);
   });
   btn.addEventListener('keydown', (e) => {

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   beginCollapse: () => ipcRenderer.invoke('window:begin-collapse'),
   setCollapsedHover: (hovering) => ipcRenderer.send('window:set-collapsed-hover', hovering === true),
   setTab: (tab) => ipcRenderer.invoke('window:set-tab', tab),
+  keepPanelOpen: () => ipcRenderer.send('window:keep-open'),
   ensureMicrophone: () => ipcRenderer.invoke('media:microphone'),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
