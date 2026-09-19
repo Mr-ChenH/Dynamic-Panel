@@ -9,6 +9,7 @@ const financeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', '
 const financeBackgroundJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-background-refresh.js'), 'utf8');
 const financeConfigResolverJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-config-resolver.js'), 'utf8');
 const financeProviderSettingsJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-provider-settings.js'), 'utf8');
+const financeHttpClientJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-http-client.js'), 'utf8');
 const homeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'home.js'), 'utf8');
 const systemIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'system.js'), 'utf8');
 const windowIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'window.js'), 'utf8');
@@ -680,7 +681,9 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.doesNotMatch(mainJs, /api\.tushare\.pro/);
   assert.doesNotMatch(mainJs, /TUSHARE_API_TOKEN/);
   assert.match(mainJs, /FINANCE_FETCH_MAX_REQUEST_BYTES/);
-  assert.match(mainJs, /method === 'POST'/);
+  assert.match(mainJs, /createFinanceHttpClient/);
+  assert.match(financeHttpClientJs, /method === 'POST'/);
+  assert.match(financeHttpClientJs, /response_too_large/);
   assert.match(financeIpcJs, /finance:history/);
   assert.match(financeIpcJs, /finance:fundamentals/);
   assert.match(financeIpcJs, /finance:cancel/);

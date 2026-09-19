@@ -47,6 +47,7 @@ const { createTaskNotificationController } = require('./main/task-notification-c
 const { createTodoReminderService } = require('./main/todo-reminder-service');
 const { createFinanceConfigResolver } = require('./main/finance-config-resolver');
 const { createFinanceProviderSettings } = require('./main/finance-provider-settings');
+const { createFinanceHttpClient } = require('./main/finance-http-client');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
@@ -1301,6 +1302,16 @@ const {
   fetchPinnedAIEndpoint,
 } = networkSecurity;
 
+const financeHttpClient = createFinanceHttpClient({
+  allowedOrigins: FINANCE_ALLOWED_ORIGINS,
+  resolvePinnedEndpoint: resolvePinnedAIEndpoint,
+  fetchPinnedEndpoint: fetchPinnedAIEndpoint,
+  timeoutMs: FINANCE_FETCH_TIMEOUT_MS,
+  maxResponseBytes: FINANCE_FETCH_MAX_BYTES,
+  maxRequestBytes: FINANCE_FETCH_MAX_REQUEST_BYTES,
+});
+const requestFinanceJson = financeHttpClient.requestJson;
+
 const PRIVACY_SETTINGS_PANES = privacySettingsPanesFor(process.platform);
 registerSystemIpc({
   ipcMain,
@@ -1398,82 +1409,6 @@ async function promptForMissingPermissions() {
   // 否则用户打开设置面板可能找不到 Dynamic Panel 这一项、只能手动拖进去。
   if (missing.includes('accessibility')) systemPreferences.isTrustedAccessibilityClient(true);
   shell.openExternal(PRIVACY_SETTINGS_PANES[missing[0]]);
-}
-
-async function requestFinanceJson(value, options = {}) {
-  let url;
-  try { url = new URL(value); } catch (error) { throw Object.assign(new Error('invalid_endpoint'), { code: 'invalid_endpoint' }); }
-  if (!FINANCE_ALLOWED_ORIGINS.has(url.origin) || url.username || url.password) {
-    throw Object.assign(new Error('unsafe_endpoint'), { code: 'unsafe_endpoint' });
-  }
-  const method = options.method === 'POST' ? 'POST' : 'GET';
-  if (options.method && !['GET', 'POST'].includes(options.method)) throw Object.assign(new Error('invalid_request'), { code: 'invalid_request' });
-  const body = method === 'POST' ? String(options.body || '') : '';
-  if (Buffer.byteLength(body, 'utf8') > FINANCE_FETCH_MAX_REQUEST_BYTES) throw Object.assign(new Error('invalid_request'), { code: 'invalid_request' });
-  if (options.signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
-  const endpoint = await resolvePinnedAIEndpoint(url.toString());
-  if (options.signal?.aborted) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
-  if (!endpoint) throw Object.assign(new Error('unsafe_endpoint'), { code: 'unsafe_endpoint' });
-  const controller = new AbortController();
-  let timedOut = false;
-  const onExternalAbort = () => controller.abort();
-  if (options.signal?.aborted) onExternalAbort();
-  else options.signal?.addEventListener('abort', onExternalAbort, { once: true });
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, FINANCE_FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetchPinnedAIEndpoint(endpoint, {
-      method,
-      headers: options.headers,
-      body: body || undefined,
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      let retryAfterMs = null;
-      try {
-        const bodyText = await readResponseText(response);
-        const body = JSON.parse(bodyText);
-        retryAfterMs = Number.isFinite(Number(body?.retry_after_ms)) ? Number(body.retry_after_ms) : null;
-      } catch (error) {}
-      throw Object.assign(new Error(`http_${response.status}`), { code: `http_${response.status}`, retryAfterMs });
-    }
-    const responseType = options.responseType === 'text' ? 'text' : 'json';
-    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-    if (responseType === 'json' && contentType && !contentType.includes('application/json')) {
-      try { await response.body?.cancel(); } catch (error) {}
-      throw Object.assign(new Error('invalid_response_type'), { code: 'invalid_response' });
-    }
-    const reader = response.body?.getReader();
-    if (!reader) throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' });
-    const chunks = [];
-    let size = 0;
-    while (true) {
-      const { done, value: chunk } = await reader.read();
-      if (done) break;
-      size += chunk.byteLength;
-      if (size > FINANCE_FETCH_MAX_BYTES) {
-        await reader.cancel();
-        throw Object.assign(new Error('response_too_large'), { code: 'response_too_large' });
-      }
-      chunks.push(Buffer.from(chunk));
-    }
-    const bytes = Buffer.concat(chunks);
-    if (responseType === 'text') {
-      try { return new TextDecoder(options.encoding || 'utf-8').decode(bytes); }
-      catch (error) { throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' }); }
-    }
-    try { return JSON.parse(bytes.toString('utf8')); }
-    catch (error) { throw Object.assign(new Error('invalid_response'), { code: 'invalid_response' }); }
-  } catch (error) {
-    if (options.signal?.aborted && !timedOut) throw Object.assign(new Error('cancelled'), { code: 'cancelled' });
-    if (error?.name === 'AbortError' || timedOut) throw Object.assign(new Error('timeout'), { code: 'timeout' });
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-    options.signal?.removeEventListener('abort', onExternalAbort);
-  }
 }
 
 async function readResponseText(response) {
