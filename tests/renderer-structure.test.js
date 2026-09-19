@@ -16,6 +16,7 @@ const windowIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'w
 const shortcutServiceJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'shortcut-service.js'), 'utf8');
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
+const shortcutRecorderControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'shortcut-recorder-controller.js'), 'utf8');
 const todoListControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-list-controller.js'), 'utf8');
 const todoEditorControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-editor-controller.js'), 'utf8');
 const todoMutationControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-mutation-controller.js'), 'utf8');
@@ -386,8 +387,12 @@ test('global shortcuts expose configurable panel, launcher, screenshot, screen r
   assert.match(workspaceAppSettingsJs, /settingsVideoShortcutChange/);
   assert.match(workspaceRecordingLifecycleJs, /onAudioRecordingShortcut/);
   assert.match(workspaceRecordingLifecycleJs, /await window\.NotchPanel\?\.navigate\(\{ tab: 'recordings' \}\)/);
-  assert.match(appJs, /shortcutRecorderAction/);
-  assert.match(appJs, /saveRecordedShortcut/);
+  assert.ok(html.indexOf('shortcut-recorder-controller.js') < html.indexOf('app.js'));
+  assert.match(shortcutRecorderControllerJs, /keyEventToAccelerator/);
+  assert.match(shortcutRecorderControllerJs, /setShortcut/);
+  assert.match(shortcutRecorderControllerJs, /notch:record-shortcut/);
+  assert.doesNotMatch(appJs, /shortcutRecorderAction/);
+  assert.doesNotMatch(appJs, /saveRecordedShortcut/);
 });
 
 test('Windows collapsed notch stays compact and grows only on approach', () => {

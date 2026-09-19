@@ -22,7 +22,7 @@
 | --- | ---: | --- |
 | `main.js` | 2101 | 主进程装配器仍混合 provider service、IPC 装配和部分平台实现 |
 | `renderer/styles.css` | 5744 | 多模块样式和主题覆盖集中，存在重复覆盖和加载顺序依赖 |
-| `renderer/app.js` | 957 | 主 shell 装配和少量待办兼容入口仍在此处；待办数据、业务变更、交互、时间范围和 AI facade 已迁移 |
+| `renderer/app.js` | 860 | 主 shell 装配和少量待办兼容入口仍在此处；待办数据、业务变更、交互、时间范围、AI facade 和快捷键录制已迁移 |
 | `renderer/notes-controller.js` | 2066 | 笔记分类、编辑、Markdown 预览和附件 UI 集中在独立控制器 |
 | `renderer/workspace.js` | 605 | 已退化为链接/录音/设置控制器装配器，录音 UI 投影已迁移 |
 | `finance-service.js` | 2212 | 多 provider、缓存、并发取消和结果归一化集中 |
@@ -122,7 +122,7 @@ main/ipc/ai.js
 
 ### 5. renderer 文件低内聚
 
-`renderer/app.js` 已将 shell、面板公共控制器、无状态 Dock 动效、笔记控制器、剪贴板控制器、番茄钟、首页布局、待办列表/范围投影、日期编辑器、待办业务变更、时间范围控制和 AI facade 下沉；目前主要保留主 shell 状态与兼容入口。
+`renderer/app.js` 已将 shell、面板公共控制器、无状态 Dock 动效、笔记控制器、剪贴板控制器、番茄钟、首页布局、待办列表/范围投影、日期编辑器、待办业务变更、时间范围控制、AI facade 和快捷键录制 controller 下沉；目前主要保留主 shell 状态与兼容入口。
 
 `renderer/workspace.js` 已通过显式 host 注入拆出当前窗口、密钥、链接、录音生命周期、转写、AI 设置和通用应用设置；剩余主要职责是录音 UI 投影和模块装配。
 
@@ -452,7 +452,8 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/todo-mutation-controller.js`，迁移待办新增、编辑、完成切换、删除撤销、批量删除、范围选择和行/输入事件绑定；通过 host 注入数据、持久化、日期编辑器和渲染依赖
 - 新增 `renderer/todo-scope-controller.js`，迁移今天/本周/以后/全部切换、键盘导航、逾期跳转、选中状态清理和草稿截止时间刷新；通过 host 注入待办状态和渲染依赖
 - 新增 `renderer/todo-api-controller.js`，迁移 `NotchTodo` 快照、聊天上下文、AI 批量新增与撤销，并保留原 facade 返回结构
-- `renderer/app.js` 当前约 957 行，保留主 shell 装配和兼容入口；`renderer/todo-list-controller.js` 约 236 行，`renderer/todo-editor-controller.js` 约 238 行，`renderer/todo-mutation-controller.js` 约 287 行，`renderer/todo-scope-controller.js` 约 74 行，`renderer/todo-api-controller.js` 约 88 行，`renderer/home-layout-controller.js` 约 475 行，`renderer/clipboard-controller.js` 约 473 行，`renderer/pomodoro-controller.js` 约 163 行，`renderer/notes-controller.js` 约 2066 行，`renderer/recordings.css` 约 87 行
+- 新增 `renderer/shortcut-recorder-controller.js`，迁移快捷键录制浮层的按键解析、修饰键校验、IPC 保存、Toast、焦点和事件生命周期；`app.js` 通过注入 `setMode` 和 Toast 保留外部行为
+- `renderer/app.js` 当前约 860 行，保留主 shell 装配和兼容入口；`renderer/todo-list-controller.js` 约 236 行，`renderer/todo-editor-controller.js` 约 238 行，`renderer/todo-mutation-controller.js` 约 287 行，`renderer/todo-scope-controller.js` 约 74 行，`renderer/todo-api-controller.js` 约 88 行，`renderer/shortcut-recorder-controller.js` 约 120 行，`renderer/home-layout-controller.js` 约 475 行，`renderer/clipboard-controller.js` 约 473 行，`renderer/pomodoro-controller.js` 约 163 行，`renderer/notes-controller.js` 约 2066 行，`renderer/recordings.css` 约 75 行
 - `renderer/workspace.js` 当前约 605 行，保留链接/录音生命周期/设置控制器装配
 - `main.js` 当前约 2101 行；当前窗口、待办提醒、转写存储、财务存储、provider 更新、金融 HTTP 请求、系统应用图标读取、自动粘贴目标和托盘图标已通过独立 service 装配
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查，包括 `renderer/todo-mutation-controller.js`
