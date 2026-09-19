@@ -20,7 +20,7 @@
 
 | 文件 | 行数 | 主要问题 |
 | --- | ---: | --- |
-| `main.js` | 2205 | 主进程装配器仍混合 provider service、IPC 装配和部分平台实现 |
+| `main.js` | 2101 | 主进程装配器仍混合 provider service、IPC 装配和部分平台实现 |
 | `renderer/styles.css` | 5810 | 多模块样式和主题覆盖集中，存在重复覆盖和加载顺序依赖 |
 | `renderer/app.js` | 957 | 主 shell 装配和少量待办兼容入口仍在此处；待办数据、业务变更、交互、时间范围和 AI facade 已迁移 |
 | `renderer/notes-controller.js` | 2066 | 笔记分类、编辑、Markdown 预览和附件 UI 集中在独立控制器 |
@@ -245,7 +245,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 
 目前最高风险已从打包模块遗漏和启动顺序回归下降为 `renderer/app.js` 与 `renderer/styles.css` 的维护成本、`main.js` 剩余 provider service/平台装配，以及通知真实生命周期覆盖不足。核心 Electron 启动、面板收起、工作区保留和 capture 验收当前均已通过。
 
-后续继续保持一次一个领域、独立提交和完整回归；笔记领域、剪贴板 store/UI、番茄钟、首页布局、录音 UI 投影、待办列表/范围视图、待办日期编辑器、待办业务变更、待办时间范围控制、待办 AI facade、待办提醒、转写配置存储、当前窗口 service、系统应用图标 service、财务配置存储、provider 更新和金融 HTTP client 已完成，下一步拆分主 shell 与主进程剩余 provider/平台装配。
+后续继续保持一次一个领域、独立提交和完整回归；笔记领域、剪贴板 store/UI、番茄钟、首页布局、录音 UI 投影、待办列表/范围视图、待办日期编辑器、待办业务变更、待办时间范围控制、待办 AI facade、待办提醒、转写配置存储、当前窗口 service、系统应用图标 service、托盘图标、自动粘贴目标、财务配置存储、provider 更新和金融 HTTP client 已完成，下一步拆分主 shell 与主进程剩余 provider/平台装配。
 
 ## 实施进度
 
@@ -445,6 +445,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `main/finance-http-client.js`，迁移金融请求的 origin 白名单、固定 DNS endpoint、GET/POST 边界、取消/超时、响应类型和请求/响应大小限制；通过依赖注入网络实现
 - 新增 `main/system-app-icon-service.js`，迁移当前窗口应用图标的 ICNS PNG 解析、macOS JXA fallback、并发队列和超时；当前窗口 service 通过 host 注入图标读取能力
 - 新增 `main/paste-target-service.js`，迁移剪贴板自动粘贴的前台应用识别、内部 bundle 排除、JXA 粘贴和目标状态；快捷键与剪贴板 IPC 通过 host 访问
+- 新增 `main/tray-icon.js`，迁移托盘刘海 PNG 编码、抗锯齿形状生成和 Windows/macOS 图标工厂；通过单测覆盖 PNG 输出和平台资源选择
 - 新增 `renderer/todo-list-controller.js`，迁移待办列表 HTML、截止时间投影、时间范围统计、完成项折叠、排序动效和范围规划器；通过 getter 注入数据、范围、选中和编辑状态，保留 `renderList` / `renderTodoPlanner` 兼容入口
 - 新增 `renderer/todo-editor-controller.js`，迁移截止日期日历、快捷日期、时间选择、弹层生命周期和默认截止时间刷新；通过 getter 注入数据、范围、保存和列表重渲染依赖，保留旧编辑器函数入口
 - 新增 `renderer/todo-mutation-controller.js`，迁移待办新增、编辑、完成切换、删除撤销、批量删除、范围选择和行/输入事件绑定；通过 host 注入数据、持久化、日期编辑器和渲染依赖
@@ -452,7 +453,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/todo-api-controller.js`，迁移 `NotchTodo` 快照、聊天上下文、AI 批量新增与撤销，并保留原 facade 返回结构
 - `renderer/app.js` 当前约 957 行，保留主 shell 装配和兼容入口；`renderer/todo-list-controller.js` 约 236 行，`renderer/todo-editor-controller.js` 约 238 行，`renderer/todo-mutation-controller.js` 约 287 行，`renderer/todo-scope-controller.js` 约 74 行，`renderer/todo-api-controller.js` 约 88 行，`renderer/home-layout-controller.js` 约 475 行，`renderer/clipboard-controller.js` 约 473 行，`renderer/pomodoro-controller.js` 约 163 行，`renderer/notes-controller.js` 约 2066 行
 - `renderer/workspace.js` 当前约 605 行，保留链接/录音生命周期/设置控制器装配
-- `main.js` 当前约 2205 行；当前窗口、待办提醒、转写存储、财务存储、provider 更新、金融 HTTP 请求、系统应用图标读取和自动粘贴目标已通过独立 service 装配
+- `main.js` 当前约 2101 行；当前窗口、待办提醒、转写存储、财务存储、provider 更新、金融 HTTP 请求、系统应用图标读取、自动粘贴目标和托盘图标已通过独立 service 装配
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查，包括 `renderer/todo-mutation-controller.js`
 - `main.js` 直接 `ipcMain.handle/on` 注册已降为 0，领域 IPC 均由独立注册器装配
 - 完整 `npm test` 当前为 359 项：358 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
