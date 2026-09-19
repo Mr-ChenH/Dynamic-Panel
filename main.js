@@ -48,6 +48,7 @@ const { createTodoReminderService } = require('./main/todo-reminder-service');
 const { createFinanceConfigResolver } = require('./main/finance-config-resolver');
 const { createFinanceProviderSettings } = require('./main/finance-provider-settings');
 const { createFinanceHttpClient } = require('./main/finance-http-client');
+const { createSystemAppIconService } = require('./main/system-app-icon-service');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
@@ -1462,13 +1463,14 @@ registerFinanceIpc({
   isMainWindowSender: (sender) => Boolean(mainWindow && !mainWindow.isDestroyed() && sender === mainWindow.webContents),
 });
 
+const systemAppIconService = createSystemAppIconService({ fs, path, execFile, platform: process.platform });
 const currentWindowService = require('./main/current-window-service').createCurrentWindowService({
   execFile,
   platform: process.platform,
   processId: process.pid,
   normalizeWindowRows,
-  withTimeout,
-  readWindowAppIcon,
+  withTimeout: systemAppIconService.withTimeout,
+  readWindowAppIcon: systemAppIconService.readWindowAppIcon,
 });
 
 registerWindowsIpc({
@@ -1546,152 +1548,6 @@ registerTaskNotificationIpc({
     return activateActiveTaskNotification(eventId);
   },
 });
-
-// 当前窗口模块仍需要安全读取本机应用图标。
-// 优先直接从 .icns 提取内嵌 PNG；失败时通过独立 JXA 进程向 NSWorkspace 取系统图标。
-// 不直接调用 app.getFileIcon：它曾在部分 .app 上触发 Electron 内部 FATAL Check，
-// 独立进程即使失败也不会带崩主进程。
-const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
-// icns 内 PNG 块按"贴近 48px 网格展示"优先：128 → 256 → 64@2x …
-const ICNS_PREF = ['ic07', 'ic12', 'ic08', 'ic11', 'ic13', 'ic09', 'ic14', 'ic05', 'ic04'];
-
-function extractPngFromIcns(buf) {
-  if (buf.length < 8 || buf.toString('ascii', 0, 4) !== 'icns') return null;
-  const candidates = [];
-  let off = 8;
-  while (off + 8 <= buf.length) {
-    const type = buf.toString('ascii', off, off + 4);
-    const len = buf.readUInt32BE(off + 4);
-    if (len < 8 || off + len > buf.length) break;
-    const data = buf.subarray(off + 8, off + len);
-    if (data.length > 8 && data.subarray(0, 4).equals(PNG_SIG)) {
-      candidates.push({ type, data });
-    }
-    off += len;
-  }
-  if (!candidates.length) return null; // 老式 RLE 图标 → 交给渲染层首字母兜底
-  candidates.sort((a, b) => {
-    const ia = ICNS_PREF.indexOf(a.type);
-    const ib = ICNS_PREF.indexOf(b.type);
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-  });
-  return candidates[0].data;
-}
-
-async function readEmbeddedAppIcon(appPath) {
-  try {
-    const resDir = path.join(appPath, 'Contents', 'Resources');
-    const files = await fs.promises.readdir(resDir);
-    const icns = files.filter((f) => f.toLowerCase().endsWith('.icns'));
-    if (!icns.length) return null;
-    // 优先 AppIcon.icns，其次名字含 app/icon 的，避免选中文档类型图标
-    const score = (n) => {
-      const s = n.toLowerCase();
-      if (s === 'appicon.icns') return 0;
-      if (s.includes('app')) return 1;
-      if (s.includes('icon')) return 2;
-      return 3;
-    };
-    icns.sort((a, b) => score(a) - score(b) || a.length - b.length);
-    const buf = await fs.promises.readFile(path.join(resDir, icns[0]));
-    const png = extractPngFromIcns(buf);
-    return png ? `data:image/png;base64,${png.toString('base64')}` : null;
-  } catch (e) {
-    return null; // 单个应用读不到图标不影响整体
-  }
-}
-
-const SYSTEM_ICON_JXA = `
-ObjC.import('AppKit');
-function run(argv) {
-  const size = 96;
-  const source = $.NSWorkspace.sharedWorkspace.iconForFile(argv[0]);
-  const image = $.NSImage.alloc.initWithSize($.NSMakeSize(size, size));
-  image.lockFocus;
-  source.drawInRectFromRectOperationFraction(
-    $.NSMakeRect(0, 0, size, size),
-    $.NSZeroRect,
-    $.NSCompositingOperationSourceOver,
-    1
-  );
-  image.unlockFocus;
-  const rep = $.NSBitmapImageRep.imageRepWithData(image.TIFFRepresentation);
-  const data = rep.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $({}));
-  return ObjC.unwrap(data.base64EncodedStringWithOptions(0));
-}`;
-
-function readSystemAppIconNow(appPath) {
-  return new Promise((resolve) => {
-    execFile(
-      '/usr/bin/osascript',
-      ['-l', 'JavaScript', '-e', SYSTEM_ICON_JXA, appPath],
-      { timeout: 4000, maxBuffer: 2 * 1024 * 1024 },
-      (error, stdout) => {
-        const base64 = typeof stdout === 'string' ? stdout.trim() : '';
-        if (error || !base64 || !/^[A-Za-z0-9+/=]+$/.test(base64)) {
-          resolve(null);
-          return;
-        }
-        resolve(`data:image/png;base64,${base64}`);
-      }
-    );
-  });
-}
-
-const SYSTEM_ICON_CONCURRENCY = 2;
-const SYSTEM_ICON_QUEUE_TIMEOUT_MS = 10000;
-let systemIconActive = 0;
-const systemIconQueue = [];
-
-function pumpSystemIconQueue() {
-  while (systemIconActive < SYSTEM_ICON_CONCURRENCY && systemIconQueue.length) {
-    const job = systemIconQueue.shift();
-    if (job.cancelled) continue;
-    systemIconActive++;
-    readSystemAppIconNow(job.appPath)
-      .then(job.finish, () => job.finish(null))
-      .finally(() => {
-        systemIconActive--;
-        pumpSystemIconQueue();
-      });
-  }
-}
-
-function readSystemAppIcon(appPath) {
-  if (process.platform !== 'darwin') return Promise.resolve(null);
-  return new Promise((resolve) => {
-    const job = {
-      appPath,
-      cancelled: false,
-      settled: false,
-      timer: null,
-      finish(value) {
-        if (job.settled) return;
-        job.settled = true;
-        if (job.timer) clearTimeout(job.timer);
-        resolve(value);
-      },
-    };
-    job.timer = setTimeout(() => {
-      job.cancelled = true;
-      job.finish(null);
-    }, SYSTEM_ICON_QUEUE_TIMEOUT_MS);
-    systemIconQueue.push(job);
-    pumpSystemIconQueue();
-  });
-}
-
-async function readWindowAppIcon(appPath) {
-  const systemIcon = await withTimeout(readSystemAppIcon(appPath), 2800, null);
-  return systemIcon || readEmbeddedAppIcon(appPath);
-}
-
-function withTimeout(promise, ms, fallback) {
-  return Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
-}
 
 const FRONTMOST_APP_JXA = `
 ObjC.import('AppKit');
