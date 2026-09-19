@@ -51,6 +51,7 @@ const { createSystemAppIconService } = require('./main/system-app-icon-service')
 const { createPasteTargetService } = require('./main/paste-target-service');
 const { createPermissionService } = require('./main/permission-service');
 const { createAppSettingsService } = require('./main/app-settings-service');
+const { createLauncherSettingsStore } = require('./main/launcher-settings-store');
 const { createNotchTrayIcon } = require('./main/tray-icon');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
@@ -704,6 +705,15 @@ function writeJsonFile(filePath, value) {
   }
 }
 
+const launcherSettingsStore = createLauncherSettingsStore({
+  readJsonFile,
+  writeJsonFile,
+  getSettingsPath: getJsonSettingsPath,
+  statFile: (file) => fs.statSync(file),
+});
+const launcherConfig = launcherSettingsStore.read;
+const writeLauncherSettings = launcherSettingsStore.write;
+
 const appSettingsService = createAppSettingsService({
   readJsonFile,
   writeJsonFile,
@@ -885,15 +895,6 @@ function isValidPanelShortcut(shortcut) {
 
 function isValidOptionalShortcut(shortcut) {
   return isValidShortcutAccelerator(shortcut, { allowEmpty: true });
-}
-
-function launcherConfig() {
-  const file=path.join(app.getPath('userData'),'launcher-settings.json');
-  let candidate={}; try { if(fs.statSync(file).size<=65536) candidate=readJsonFile(file,{}); } catch {}
-  const stored=candidate&&typeof candidate==='object'&&!Array.isArray(candidate)?candidate:{};
-  const defaults={apps:true,workspace:true,clipboard:false,extensions:true};
-  const sources=Object.fromEntries(Object.entries(defaults).map(([key,value])=>[key,typeof stored.sources?.[key]==='boolean'?stored.sources[key]:value]));
-  return { executeTimeoutMs: Math.max(500, Math.min(10000, Number(stored.executeTimeoutMs) || 5000)), queryTimeoutMs: Math.max(300, Math.min(5000, Number(stored.queryTimeoutMs) || 800)), shortcut: typeof stored.shortcut === 'string' && stored.shortcut.length <= 100 ? stored.shortcut : 'CommandOrControl+Space', sources };
 }
 
 const shortcutService = createShortcutService({
@@ -1105,7 +1106,7 @@ const settingsController = createSettingsController({
   isValidPanelShortcut,
   isValidOptionalShortcut,
   launcherConfig,
-  writeLauncherSettings: (settings) => writeJsonFile(path.join(app.getPath('userData'), 'launcher-settings.json'), settings),
+  writeLauncherSettings,
   setLauncherShortcut,
   setPanelShortcut,
   setActionShortcut,
@@ -1217,7 +1218,7 @@ registerLauncherIpc({
   launcherConfig,
   getShortcutState: () => shortcutService.state(),
   setLauncherShortcut,
-  writeLauncherSettings: (settings) => writeJsonFile(path.join(app.getPath('userData'), 'launcher-settings.json'), settings),
+  writeLauncherSettings,
   app,
   path,
   fs,
