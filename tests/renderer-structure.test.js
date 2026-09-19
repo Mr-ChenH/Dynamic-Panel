@@ -15,6 +15,7 @@ const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'd
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-domain.js'), 'utf8');
 const clipboardStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-store.js'), 'utf8');
+const clipboardControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-controller.js'), 'utf8');
 const notesControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-controller.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
@@ -192,8 +193,8 @@ test('credential storage and selection state stay outside the workspace coordina
 });
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
-  assert.match(appJs, /const starOutlineSvg\s*=/);
-  assert.match(appJs, /const starFilledSvg\s*=/);
+  assert.match(clipboardControllerJs, /const starOutlineSvg\s*=/);
+  assert.match(clipboardControllerJs, /const starFilledSvg\s*=/);
 });
 
 test('clipboard history and image state live in a shared persistent store', () => {
@@ -204,14 +205,29 @@ test('clipboard history and image state live in a shared persistent store', () =
   assert.match(clipboardStoreJs, /onNewClipEntry/);
   assert.match(clipboardStoreJs, /readClipImage/);
   assert.match(clipboardStoreJs, /deleteClipImages/);
-  assert.match(appJs, /NotchClipboardStore\.createController/);
-  assert.match(appJs, /clipboardStore\.subscribe/);
-  assert.match(appJs, /clipboardStore\.toggleFavorite/);
-  assert.match(appJs, /clipboardStore\.removeEntry/);
-  assert.match(appJs, /clipboardStore\.clear/);
+  assert.match(clipboardControllerJs, /NotchClipboardStore\.createController/);
+  assert.match(clipboardControllerJs, /clipboardStore\.subscribe/);
+  assert.match(clipboardControllerJs, /clipboardStore\.toggleFavorite/);
+  assert.match(clipboardControllerJs, /clipboardStore\.removeEntry/);
+  assert.match(clipboardControllerJs, /clipboardStore\.clear/);
   assert.doesNotMatch(appJs, /function loadClipHistory\(/);
   assert.doesNotMatch(appJs, /function loadClipFavorites\(/);
   assert.doesNotMatch(appJs, /window\.notchAPI\.onNewClipEntry/);
+});
+
+test('clipboard history UI and home favorites use a dedicated controller', () => {
+  assert.ok(html.indexOf('clipboard-controller.js') < html.indexOf('app.js'));
+  assert.match(clipboardControllerJs, /function renderClipList\(/);
+  assert.match(clipboardControllerJs, /function renderClipFavs\(/);
+  assert.match(clipboardControllerJs, /clip-toolbar/);
+  assert.match(clipboardControllerJs, /toggleClipFavorite/);
+  assert.match(clipboardControllerJs, /deleteClipEntry/);
+  assert.match(clipboardControllerJs, /window\.NotchClipboardController/);
+  assert.match(appJs, /NotchClipboardController\.createController/);
+  assert.doesNotMatch(appJs, /function renderClipList\(/);
+  assert.doesNotMatch(appJs, /function renderClipFavs\(/);
+  assert.doesNotMatch(appJs, /function toggleClipFavorite\(/);
+  assert.doesNotMatch(appJs, /function deleteClipEntry\(/);
 });
 
 test('credential styles load as a dedicated module while shared theme selectors remain in the shell stylesheet', () => {
@@ -267,7 +283,7 @@ test('light theme covers recording and clipboard surfaces', () => {
 test('clipboard history renders a dated timeline with filtered result counts', () => {
   assert.match(html, /id="clip-result-count"/);
   assert.match(clipboardDomainJs, /groupByDay/);
-  assert.match(appJs, /clip-timeline-group/);
+  assert.match(clipboardControllerJs, /clip-timeline-group/);
   assert.match(clipboardDomainJs, /formatMoment/);
   assert.match(stylesCss, /\.clip-timeline-group::before/);
   assert.match(stylesCss, /\.clip-timeline-node/);
