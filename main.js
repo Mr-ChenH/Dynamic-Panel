@@ -49,6 +49,7 @@ const { createFinanceProviderSettings } = require('./main/finance-provider-setti
 const { createFinanceHttpClient } = require('./main/finance-http-client');
 const { createSystemAppIconService } = require('./main/system-app-icon-service');
 const { createPasteTargetService } = require('./main/paste-target-service');
+const { createPermissionService } = require('./main/permission-service');
 const { createNotchTrayIcon } = require('./main/tray-icon');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
@@ -1248,69 +1249,20 @@ registerLauncherIpc({
 });
 
 // ============ 启动时的权限自检 ============
-// DMG 装的是全新二进制，TCC 授权不会从开发版继承，而这几项缺失时的表现都是「静默失效」：
-// 缺「屏幕录制」→ CGWindowList 照样返回窗口但标题全空，当前窗口看起来像真的没窗口；
-// 缺「辅助功能」→ 枚举、聚焦窗口和汽水音乐发按键全部无效。
-// 系统对前者根本不弹提示，所以只能由应用自己说，否则用户完全无从下手。
-const PERMISSION_PROMPT_SKIP_FILE = 'permission-prompt-skipped';
-
-// 先尊重系统的明确状态，尤其不能在 not-determined 时调用 desktopCapturer，
-// 否则启动自检本身就会抢先弹出系统录屏框。只有系统报告 granted 时才通过
-// 无缩略图的窗口标题做二次确认；未知状态 fail-open，等用户实际使用时再申请。
-async function hasScreenRecordingAccess() {
-  const policy = screenRecordingProbePolicy(systemPreferences.getMediaAccessStatus('screen'));
-  if (!policy.inspectWindowTitles) return policy.hasAccess;
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ['window'],
-      thumbnailSize: { width: 0, height: 0 },
-      fetchWindowIcons: false,
-    });
-    if (sources.length === 0) return true; // 拿不到源无法判定，不误报
-    return sources.some((source) => String(source.name || '').trim().length > 0);
-  } catch (error) {
-    return true; // 探测本身失败时不打扰用户
-  }
-}
-
-async function promptForMissingPermissions() {
-  if (process.platform !== 'darwin') return;
-  const skipFlag = path.join(app.getPath('userData'), PERMISSION_PROMPT_SKIP_FILE);
-  if (fs.existsSync(skipFlag)) return;
-
-  const missing = [];
-  // 传 false 只查询不弹系统框：先把缺失项攒齐一次性告知，避免连弹两个系统对话框。
-  if (!systemPreferences.isTrustedAccessibilityClient(false)) missing.push('accessibility');
-  if (!await hasScreenRecordingAccess()) missing.push('screen-recording');
-  if (missing.length === 0) return;
-
-  const names = missing.map((key) => (key === 'accessibility' ? '辅助功能' : '屏幕录制'));
-  const { response, checkboxChecked } = await dialog.showMessageBox({
-    type: 'info',
-    message: `Dynamic Panel 需要「${names.join('」和「')}」权限`,
-    detail: [
-      '缺少这些权限时，「当前窗口」会读不到任何窗口，汽水音乐的播放控制也不会生效。',
-      '',
-      '授权后需要重新启动 Dynamic Panel 才会生效。',
-      'ad-hoc 签名的应用每次重新打包都要重新授权一次，这是没有开发者账号分发的固有限制。',
-    ].join('\n'),
-    buttons: ['打开系统设置', '以后再说'],
-    defaultId: 0,
-    cancelId: 1,
-    checkboxLabel: '不再提示',
-    checkboxChecked: false,
-  });
-
-  if (checkboxChecked) {
-    try { fs.writeFileSync(skipFlag, new Date().toISOString()); } catch (error) {}
-  }
-  if (response !== 0) return;
-
-  // 顺带用 true 触发一次系统的辅助功能提示：这一步会把应用登记进系统设置的列表里，
-  // 否则用户打开设置面板可能找不到 Dynamic Panel 这一项、只能手动拖进去。
-  if (missing.includes('accessibility')) systemPreferences.isTrustedAccessibilityClient(true);
-  shell.openExternal(PRIVACY_SETTINGS_PANES[missing[0]]);
-}
+// 权限查询、无缩略图录屏探测和 macOS 隐私设置跳转由独立 service 管理。
+const permissionService = createPermissionService({
+  platform: process.platform,
+  systemPreferences,
+  desktopCapturer,
+  screenRecordingProbePolicy,
+  app,
+  path,
+  fs,
+  dialog,
+  shell,
+  privacySettingsPanes: PRIVACY_SETTINGS_PANES,
+});
+const { hasScreenRecordingAccess, promptForMissingPermissions } = permissionService;
 
 async function readResponseText(response) {
   if (!response.body) return '';
