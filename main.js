@@ -45,6 +45,7 @@ const { createTaskNotificationWindowState } = require('./main/task-notification-
 const { createTaskNotificationWindowFactory } = require('./main/task-notification-window');
 const { createTaskNotificationController } = require('./main/task-notification-controller');
 const { createTodoReminderService } = require('./main/todo-reminder-service');
+const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
 const { registerFinanceIpc } = require('./main/ipc/finance');
@@ -2135,42 +2136,17 @@ const homeMusic = require('./home-media').createMusicLibrary({ filePath: getJson
 registerHomeIpc({ ipcMain, weatherService: homeWeather, musicLibrary: homeMusic, showOwnedOpenDialog });
 
 // ============ 百炼实时语音转写 ============
-function getTranscriptionSettingsPath() {
-  return path.join(app.getPath('userData'), TRANSCRIPTION_SETTINGS_FILE);
-}
-
-function readStoredTranscriptionSettings() {
-  const currentPath = getTranscriptionSettingsPath();
-  const legacyPath = path.join(app.getPath('appData'), 'notch-todo', TRANSCRIPTION_SETTINGS_FILE);
-  const readSettings = (settingsPath) => {
-    try {
-      const value = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-      return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-    } catch (error) {
-      return {};
-    }
-  };
-  const current = readSettings(currentPath);
-  const legacy = currentPath === legacyPath ? {} : readSettings(legacyPath);
-  const selected = selectTranscriptionSettings(current, legacy);
-  if (!Object.keys(current).length && Object.keys(selected).length && currentPath !== legacyPath) {
-    try {
-      fs.mkdirSync(path.dirname(currentPath), { recursive: true });
-      fs.writeFileSync(currentPath, JSON.stringify(selected), { mode: 0o600 });
-    } catch (error) {
-      // 迁移失败时仍从旧目录读取，避免已有密钥突然失效。
-    }
-  }
-  return selected;
-}
-
-function writeTranscriptionSettings(settings) {
-  const settingsPath = getTranscriptionSettingsPath();
-  const temporaryPath = `${settingsPath}.tmp`;
-  fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-  fs.writeFileSync(temporaryPath, JSON.stringify(settings), { mode: 0o600 });
-  fs.renameSync(temporaryPath, settingsPath);
-}
+const transcriptionSettingsStore = createTranscriptionSettingsStore({
+  fs,
+  path,
+  getUserDataPath: () => app.getPath('userData'),
+  getLegacyAppDataPath: () => app.getPath('appData'),
+  fileName: TRANSCRIPTION_SETTINGS_FILE,
+  selectSettings: selectTranscriptionSettings,
+});
+const getTranscriptionSettingsPath = transcriptionSettingsStore.path;
+const readStoredTranscriptionSettings = transcriptionSettingsStore.read;
+const writeTranscriptionSettings = transcriptionSettingsStore.write;
 
 function getAIDiagnosticsPath() {
   return path.join(app.getPath('userData'), AI_DIAGNOSTICS_FILE);
