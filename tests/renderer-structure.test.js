@@ -47,6 +47,7 @@ const workspaceAISettingsJs = fs.readFileSync(path.join(__dirname, '..', 'render
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
+const recordingsCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'recordings.css'), 'utf8');
 const credentialsCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'credentials.css'), 'utf8');
 const todoPlannerCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-planner.css'), 'utf8');
 const todoListCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-list.css'), 'utf8');
@@ -302,6 +303,15 @@ test('light theme covers weather surfaces and preserves weather accents', () => 
   assert.match(homeCss, /:root\[data-theme='light'\] \.weather-detail-hero/);
   assert.match(homeCss, /:root\[data-theme='light'\] \.weather-detail-section/);
   assert.match(homeCss, /:root\[data-theme='light'\] #home-weather-results/);
+});
+
+test('recording library styles load before shell overrides', () => {
+  assert.ok(html.indexOf('recordings.css') < html.indexOf('styles.css'));
+  assert.match(recordingsCss, /\.recordings-page/);
+  assert.match(recordingsCss, /\.recording-live-audio/);
+  assert.match(recordingsCss, /\.recording-transcript-editor/);
+  assert.doesNotMatch(stylesCss, /\/\* ============ 录制资料库 ============ \*\//);
+  assert.doesNotMatch(stylesCss, /\.recording-live-audio \{/);
 });
 
 test('light theme covers recording and clipboard surfaces', () => {

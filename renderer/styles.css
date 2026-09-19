@@ -2353,9 +2353,7 @@ body {
 .command-add,
 .group-link-add,
 .link-title-edit,
-.group-name-input,
-.recording-title-input,
-.recording-transcript-editor {
+.group-name-input {
   border: 1px solid transparent;
   outline: none;
   background: var(--surface-2);
@@ -2374,9 +2372,7 @@ body {
 
 .command-add:focus,
 .group-link-add:focus,
-.link-title-edit:focus,
-.recording-title-input:focus,
-.recording-transcript-editor:focus { border-color: var(--hairline); background: var(--surface-3); }
+.link-title-edit:focus { border-color: var(--hairline); background: var(--surface-3); }
 
 .command-list { display: flex; flex-direction: column; gap: 5px; }
 .command-item {
@@ -2408,8 +2404,7 @@ body {
 }
 .command-edit { flex: 1; min-width: 0; padding: 6px 0; border: 0; outline: none; background: transparent; color: var(--text-1); font: var(--fs-code) var(--font-mono); }
 .command-actions,
-.link-actions,
-.recording-transcript-head > div { display: flex; align-items: center; gap: 2px; }
+.link-actions { display: flex; align-items: center; gap: 2px; }
 .icon-button {
   width: 26px;
   height: 26px;
@@ -2529,67 +2524,6 @@ body {
 .link-title-edit { width: 100%; min-width: 0; padding: 8px; border-radius: var(--r-input); font-size: var(--fs-small); }
 .links-empty { grid-column: 1 / -1; height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-2); color: var(--text-4); font-size: var(--fs-small); text-align: center; }
 .links-empty strong { color: var(--text-2); font-size: var(--fs-body); font-weight: 550; }
-
-/* ============ 录制资料库 ============ */
-.recordings-page { height: 100%; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: var(--s-3); }
-.recording-library,
-.recording-detail { min-width: 0; min-height: 0; border: 1px solid var(--hairline-soft); border-radius: var(--r-tile); background: var(--surface-1); }
-.recording-library { display: flex; flex-direction: column; padding: var(--s-3); }
-.recording-library-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin-bottom: var(--s-3); }
-.recording-library-head > div { display: flex; flex-direction: column; gap: 2px; }
-.recording-library-head > .recording-library-actions { flex-direction: row; align-items: center; gap: 6px; }
-.recording-library-head strong { color: var(--text-1); font-size: var(--fs-heading-3); font-weight: 600; }
-.recording-list { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
-.recording-item { width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) 28px; align-items: center; gap: 6px; padding: 6px 7px 6px 10px; overflow: hidden; border: 1px solid transparent; border-radius: var(--r-input); background: transparent; color: inherit; font-family: var(--font); text-align: left; transition: background var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease); }
-.recording-item-main { min-width: 0; width: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 4px 0; overflow: hidden; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.recording-item-delete { width: 28px; height: 28px; padding: 6px; border: 0; border-radius: var(--r-input); background: transparent; color: var(--text-4); cursor: pointer; opacity: .58; transition: opacity var(--d-fast) var(--ease), background var(--d-fast) var(--ease), color var(--d-fast) var(--ease); }
-.recording-item:hover .recording-item-delete,
-.recording-item:focus-within .recording-item-delete { opacity: 1; }
-.recording-item-delete:hover { background: rgba(255,95,87,.13); color: #ff847e; }
-.recording-item-delete svg { width: 16px; height: 16px; }
-.recording-item:hover { background: var(--surface-2); }
-.recording-item.active { border-color: var(--hairline); background: var(--surface-2); }
-.recording-item.is-live { grid-template-columns: minmax(0, 1fr); border-color: rgba(255,95,87,.24); background: rgba(255,95,87,.055); }
-.recording-item.is-live strong::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 7px;
-  border-radius: 50%;
-  background: var(--p0);
-  box-shadow: 0 0 0 4px rgba(255,95,87,.1);
-  vertical-align: 1px;
-  animation: recording-pulse 1.6s var(--ease) infinite;
-}
-.recording-item strong,
-.recording-item span,
-.recording-item time { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recording-item strong { color: var(--text-1); font-size: var(--fs-small); font-weight: 550; }
-.recording-item span { color: var(--text-3); font-size: var(--fs-caption); }
-.recording-item time { color: var(--text-4); font: var(--fs-micro) var(--font-mono); }
-.recording-list-empty,
-.recording-detail-empty { height: 100%; display: grid; place-items: center; padding: var(--s-6); color: var(--text-4); font-size: var(--fs-small); text-align: center; }
-.recording-detail { display: flex; flex-direction: column; padding: var(--s-4); }
-.recording-detail-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: var(--s-3); }
-.recording-title-input { width: 100%; padding: 6px 8px; border-radius: var(--r-input); background: transparent; font-size: var(--fs-heading-2); font-weight: 600; }
-.recording-detail-head span { padding-left: 8px; color: var(--text-3); font: var(--fs-caption) var(--font-mono); }
-.recording-audio { min-height: 48px; display: flex; align-items: center; margin-bottom: var(--s-4); padding: 6px 10px; border-radius: var(--r-input); background: var(--surface-2); color: var(--text-4); font-size: var(--fs-small); }
-.recording-audio audio { width: 100%; height: 32px; }
-.recording-transcript-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); margin-bottom: var(--s-2); }
-.recording-transcript-editor { flex: 1; min-height: 0; width: 100%; resize: none; padding: var(--s-3); border-radius: var(--r-input); font-size: var(--fs-body); line-height: 1.7; user-select: text; -webkit-user-select: text; }
-.recording-live-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-4); }
-.recording-live-state { display: flex; align-items: center; gap: 8px; }
-.recording-live-state strong { color: var(--text-1); font-size: var(--fs-heading-2); font-weight: 620; }
-.recording-live-head time { color: var(--text-2); font: var(--fs-heading-3) var(--font-mono); font-variant-numeric: tabular-nums; }
-.recording-live-audio { display: flex; flex-direction: column; gap: 5px; margin-bottom: var(--s-4); padding: 14px; border: 1px solid rgba(255,95,87,.16); border-radius: var(--r-input); background: linear-gradient(135deg, rgba(255,95,87,.08), rgba(255,255,255,.025)); }
-.recording-live-audio strong { color: var(--text-1); font-size: var(--fs-small); font-weight: 580; }
-.recording-live-audio span { color: var(--text-3); font-size: var(--fs-caption); }
-.recording-live-controls { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
-.recording-live-controls .workspace-button { min-width: 72px; }
-.recording-live-transcript[readonly] { cursor: default; }
-.recording-live-feedback { min-height: 18px; margin: 8px 2px 0; color: var(--text-3); font-size: var(--fs-caption); }
-.recording-live-configure[hidden] { display: none; }
 
 @media (max-width: 1050px) {
   .panel {
