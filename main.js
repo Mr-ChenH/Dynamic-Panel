@@ -49,6 +49,7 @@ const { createFinanceConfigResolver } = require('./main/finance-config-resolver'
 const { createFinanceProviderSettings } = require('./main/finance-provider-settings');
 const { createFinanceHttpClient } = require('./main/finance-http-client');
 const { createSystemAppIconService } = require('./main/system-app-icon-service');
+const { createPasteTargetService } = require('./main/paste-target-service');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
@@ -92,6 +93,10 @@ const { resolveLaunchPath } = require('./launcher/paths');
 const launcherFocus = require('./launcher/focus').createFocusService();
 const launcherApplications = require('./launcher/application-actions').createApplicationActions({readShortcut:file=>shell.readShortcutLink(file),owner:()=>mainWindow&&!mainWindow.isDestroyed()?mainWindow.getNativeWindowHandle().readBigUInt64LE(0):null});
 const PLATFORM_CAPABILITIES = platformPolicy.capabilities(process.platform);
+const pasteTargetService = createPasteTargetService({
+  execFile,
+  automaticPaste: PLATFORM_CAPABILITIES.automaticPaste,
+});
 const {
   validNoteId,
   parseNoteImageReference,
@@ -356,7 +361,6 @@ let panelBlurTimer = null;
 let panelBlurGeneration = 0;
 let launcherService;
 let launcherManaging = false;
-let previousPasteTarget = null;
 let aiModelService = null;
 let aiContextGeneration = 0;
 
@@ -1042,7 +1046,7 @@ const shortcutService = createShortcutService({
       mainWindow.webContents.send('shortcut:toggle-panel');
       return;
     }
-    await rememberPasteTarget();
+    await pasteTargetService.remember();
     hideWhenCollapsed = false;
     if (!mainWindow.isVisible()) mainWindow.show();
     mainWindow.focus();
@@ -1249,7 +1253,7 @@ registerWindowIpc({
   ipcMain,
   isMainWindowSender,
   setMode: async (mode) => {
-    if (mode === 'expanded') await rememberPasteTarget();
+    if (mode === 'expanded') await pasteTargetService.remember();
     const normalized = mode === 'launcher' ? 'launcher' : mode === 'expanded' ? 'expanded' : 'collapsed';
     applyMode(normalized, normalized === 'launcher' ? getTargetDisplay() : undefined);
   },
@@ -1548,54 +1552,6 @@ registerTaskNotificationIpc({
     return activateActiveTaskNotification(eventId);
   },
 });
-
-const FRONTMOST_APP_JXA = `
-ObjC.import('AppKit');
-function run() {
-  const app = $.NSWorkspace.sharedWorkspace.frontmostApplication;
-  if (!app) return '{}';
-  return JSON.stringify({
-    name: ObjC.unwrap(app.localizedName) || '',
-    bundleId: ObjC.unwrap(app.bundleIdentifier) || '',
-    path: app.bundleURL ? (ObjC.unwrap(app.bundleURL.path) || '') : ''
-  });
-}`;
-
-const PASTE_TO_APP_JXA = `
-ObjC.import('AppKit');
-function run(argv) {
-  const bundleId = String(argv[0] || '');
-  if (!bundleId) return 'missing';
-  const apps = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(bundleId);
-  if (!apps || apps.count === 0) return 'missing';
-  apps.objectAtIndex(0).activateWithOptions($.NSApplicationActivateIgnoringOtherApps);
-  delay(0.18);
-  Application('System Events').keystroke('v', { using: 'command down' });
-  return 'ok';
-}`;
-
-function readFrontmostApp() {
-  if (!PLATFORM_CAPABILITIES.automaticPaste) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', FRONTMOST_APP_JXA], { timeout: 2200 }, (error, stdout) => {
-      if (error) return resolve(null);
-      try {
-        const value = JSON.parse(String(stdout || '').trim());
-        resolve(value && value.path ? value : null);
-      } catch (parseError) {
-        resolve(null);
-      }
-    });
-  });
-}
-
-async function rememberPasteTarget() {
-  const current = await readFrontmostApp();
-  if (current && !['com.github.Electron', 'com.vibecoding.notch-todo', 'com.dynamicpanel.app'].includes(current.bundleId)) {
-    previousPasteTarget = current;
-  }
-  return previousPasteTarget;
-}
 
 const credentialsVault = createCredentialsVault({
   fs,
@@ -2082,18 +2038,6 @@ function waitForCollapsedPanel(timeoutMs = 950) {
   });
 }
 
-function pasteToPreviousApp(target) {
-  return new Promise((resolve) => {
-    const bundleId = String(target?.bundleId || '');
-    if (!bundleId) return resolve(false);
-    execFile('/usr/bin/osascript', [
-      '-l', 'JavaScript', '-e', PASTE_TO_APP_JXA, bundleId,
-    ], { timeout: 3000 }, (error, stdout) => {
-      resolve(!error && String(stdout || '').trim() === 'ok');
-    });
-  });
-}
-
 registerClipboardIpc({
   ipcMain,
   fs,
@@ -2101,10 +2045,10 @@ registerClipboardIpc({
   writeClipboardEntry,
   automaticPaste: PLATFORM_CAPABILITIES.automaticPaste,
   isAccessibilityTrusted: () => process.platform !== 'darwin' || systemPreferences.isTrustedAccessibilityClient(true),
-  getPreviousPasteTarget: () => previousPasteTarget,
+  getPreviousPasteTarget: () => pasteTargetService.getPreviousTarget(),
   requestRendererCollapse,
   waitForCollapsedPanel,
-  pasteToPreviousApp,
+  pasteToPreviousApp: pasteTargetService.pasteToPreviousApp,
 });
 
 function ensureFirstRunAutoLaunch() {
