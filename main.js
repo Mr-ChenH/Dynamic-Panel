@@ -46,6 +46,7 @@ const { createTaskNotificationWindowFactory } = require('./main/task-notificatio
 const { createTaskNotificationController } = require('./main/task-notification-controller');
 const { createTodoReminderService } = require('./main/todo-reminder-service');
 const { createFinanceConfigResolver } = require('./main/finance-config-resolver');
+const { createFinanceProviderSettings } = require('./main/finance-provider-settings');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
@@ -899,74 +900,19 @@ function publicFinanceSettings() {
   };
 }
 
-function updateFinanceProvider(payload) {
-  const providerId = String(payload?.providerId || '');
-  if (!['coingecko', 'binance', 'alpha-vantage', 'alpaca', 'twelve-data', 'sec-edgar', 'cn-stock', 'cn-tencent', 'cn-eastmoney', 'cn-sina'].includes(providerId)) return { ok: false, error: 'invalid_provider' };
-  const current = readFinanceSettings();
-  const apiKey = String(payload?.apiKey || '').trim();
-  const keyId = String(payload?.keyId || '').trim();
-  const secretKey = String(payload?.secretKey || '').trim();
-  const rawContact = String(payload?.contact || '').trim();
-  const contact = normalizeSecEdgarContact(rawContact);
-  if (apiKey.length > 512 || keyId.length > 256 || secretKey.length > 512 || rawContact.length > 160) return { ok: false, error: 'invalid_credential' };
-  if (providerId === 'sec-edgar' && rawContact && !contact) return { ok: false, error: 'invalid_contact' };
-  if ((apiKey || keyId || secretKey || contact) && !safeStorage.isEncryptionAvailable()) return { ok: false, error: 'secure_storage_unavailable' };
-  const providers = { ...current.providers };
-  if (providerId === 'coingecko') {
-    providers.coingecko = {
-      enabled: payload?.enabled !== false,
-      encryptedApiKey: payload?.removeCredential === true ? '' : apiKey
-        ? safeStorage.encryptString(apiKey).toString('base64') : current.providers.coingecko.encryptedApiKey,
-      verification: null,
-    };
-  } else if (providerId === 'binance') {
-    providers.binance = { enabled: payload?.enabled !== false, verification: null };
-  } else if (providerId === 'alpha-vantage') {
-    providers['alpha-vantage'] = {
-      enabled: payload?.enabled === true,
-      encryptedApiKey: payload?.removeCredential === true ? '' : apiKey
-        ? safeStorage.encryptString(apiKey).toString('base64') : current.providers['alpha-vantage'].encryptedApiKey,
-      verification: null,
-    };
-  } else if (providerId === 'alpaca') {
-    providers.alpaca = {
-      enabled: payload?.enabled === true,
-      feed: payload?.feed === 'sip' ? 'sip' : 'iex',
-      encryptedKeyId: payload?.removeCredential === true ? '' : keyId
-        ? safeStorage.encryptString(keyId).toString('base64') : current.providers.alpaca.encryptedKeyId,
-      encryptedSecretKey: payload?.removeCredential === true ? '' : secretKey
-        ? safeStorage.encryptString(secretKey).toString('base64') : current.providers.alpaca.encryptedSecretKey,
-      verification: null,
-    };
-  } else if (providerId === 'twelve-data') {
-    providers['twelve-data'] = {
-      enabled: payload?.enabled === true,
-      encryptedApiKey: payload?.removeCredential === true ? '' : apiKey
-        ? safeStorage.encryptString(apiKey).toString('base64') : current.providers['twelve-data'].encryptedApiKey,
-      verification: null,
-    };
-  } else if (providerId === 'sec-edgar') {
-    providers['sec-edgar'] = {
-      enabled: payload?.enabled === true,
-      encryptedContact: payload?.removeCredential === true ? '' : contact
-        ? safeStorage.encryptString(contact).toString('base64') : current.providers['sec-edgar'].encryptedContact,
-      verification: null,
-    };
-  } else if (providerId === 'cn-stock') {
-    providers['cn-stock'] = {
-      enabled: payload?.enabled === true,
-      encryptedApiKey: payload?.removeCredential === true ? '' : apiKey
-        ? safeStorage.encryptString(apiKey).toString('base64') : current.providers['cn-stock'].encryptedApiKey,
-      verification: null,
-    };
-  } else {
-    providers[providerId] = { enabled: payload?.enabled !== false, verification: null };
-  }
-  if (!writeJsonFile(getJsonSettingsPath(FINANCE_SETTINGS_FILE), { schemaVersion: 2, refreshSeconds: current.refreshSeconds, providers })) return { ok: false, error: 'save_failed' };
-  getFinanceService().clearCache({ includeQuotaProtected: true });
-  financeBackgroundService.invalidate();
-  return publicFinanceSettings();
-}
+const financeProviderSettings = createFinanceProviderSettings({
+  readSettings: readFinanceSettings,
+  writeSettings: writeFinanceSettings,
+  normalizeSecEdgarContact,
+  isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+  encryptString: (value) => safeStorage.encryptString(value),
+  onSaved: () => {
+    getFinanceService().clearCache({ includeQuotaProtected: true });
+    financeBackgroundService.invalidate();
+    return publicFinanceSettings();
+  },
+});
+const updateFinanceProvider = (payload) => financeProviderSettings.update(payload);
 
 const financeBackgroundService = createFinanceBackgroundRefresh({
   getFinanceService,
