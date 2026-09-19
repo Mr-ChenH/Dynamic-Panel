@@ -118,116 +118,6 @@ setInterval(() => {
   renderAll();
 }, 60_000);
 
-// 渲染重建 innerHTML 后，给指定条目挂一次性动画类；动画结束即卸载，不污染后续渲染
-function flashItemClass(priority, id, cls) {
-  const el = document.querySelector(
-    `.todo-item[data-priority="${priority}"][data-id="${id}"]`
-  );
-  if (!el) return;
-  el.classList.add(cls);
-  el.addEventListener('animationend', () => el.classList.remove(cls), { once: true });
-}
-
-function flashCheckboxPop(priority, id) {
-  const box = document.querySelector(
-    `.todo-item[data-priority="${priority}"][data-id="${id}"] .checkbox`
-  );
-  if (!box) return;
-  box.classList.add('pop');
-  box.addEventListener('animationend', () => box.classList.remove('pop'), { once: true });
-}
-
-function addTodo(priority, text, deadline) {
-  const item = window.NotchDomain.createTodo(text, deadline, generateId(), Date.now());
-  if (!item) return false;
-  const previousPositions = captureTodoPositions(priority);
-  data[priority].push(item);
-  saveData(data);
-  renderList(priority, { previousPositions });
-  updateCount(priority);
-  flashItemClass(priority, item.id, 'enter');
-  const added = document.querySelector(
-    `.todo-item[data-priority="${priority}"][data-id="${item.id}"]`
-  );
-  if (added) {
-    requestAnimationFrame(() => {
-      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      added.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
-    });
-  }
-  return true;
-}
-
-function editTodo(priority, id, text, deadline) {
-  const index = (data[priority] || []).findIndex((item) => item.id === id);
-  if (index < 0) return false;
-  const updated = window.NotchDomain.updateTodo(data[priority][index], text, deadline);
-  if (!updated) return false;
-  const previousPositions = captureTodoPositions(priority);
-  data[priority][index] = updated;
-  saveData(data);
-  renderList(priority, { previousPositions, focusId: id, focusAction: 'edit' });
-  updateCount(priority);
-  return true;
-}
-
-function toggleTodo(priority, id) {
-  const list = data[priority];
-  const idx = list.findIndex((t) => t.id === id);
-  if (idx === -1) return;
-  const previousPositions = captureTodoPositions(priority);
-  const restoreFocus = document.activeElement?.closest('.todo-item')?.dataset.id === id;
-  list[idx].done = !list[idx].done;
-  const nowDone = list[idx].done;
-  if (nowDone) todoCompletedExpanded[priority] = true;
-  saveData(data);
-  renderList(priority, {
-    previousPositions,
-    focusId: restoreFocus ? id : '',
-    focusAction: 'toggle',
-  });
-  updateCount(priority);
-  if (nowDone) requestAnimationFrame(() => flashCheckboxPop(priority, id)); // 勾选弹一下
-}
-
-function deleteTodo(priority, id) {
-  const list = data[priority];
-  const index = list.findIndex((t) => t.id === id);
-  if (index === -1) return;
-  const [removed] = list.splice(index, 1);
-  const itemEl = document.querySelector(
-    `.todo-item[data-priority="${priority}"][data-id="${CSS.escape(id)}"]`
-  );
-  const shouldRestoreFocus = !!(itemEl && itemEl.contains(document.activeElement));
-  const nearbyId = itemEl && (itemEl.nextElementSibling || itemEl.previousElementSibling)?.dataset.id;
-  saveData(data);
-  renderList(priority);
-  updateCount(priority);
-  if (shouldRestoreFocus) {
-    const nextFocus =
-      (nearbyId && document.querySelector(`.todo-item[data-id="${CSS.escape(nearbyId)}"] [data-action="toggle"]`)) ||
-      document.querySelector(`.add-row input[data-priority="${priority}"]`);
-    if (nextFocus) nextFocus.focus({ preventScroll: true });
-  }
-  const summary = removed.text.length > 18 ? `${removed.text.slice(0, 18)}…` : removed.text;
-  showStatusToast(`已删除“${summary}”`, {
-    actionLabel: '撤销',
-    duration: 5000,
-    onAction: () => {
-      if (list.some((item) => item.id === removed.id)) return;
-      list.splice(Math.min(index, list.length), 0, removed);
-      saveData(data);
-      renderList(priority);
-      updateCount(priority);
-      const restored = document.querySelector(
-        `.todo-item[data-priority="${priority}"][data-id="${CSS.escape(id)}"] [data-action="toggle"]`
-      );
-      if (restored) restored.focus({ preventScroll: true });
-      showStatusToast('已撤销删除');
-    },
-  });
-}
-
 let isExpanded = false;
 let modeBusy = false;
 let pendingMode = null;
@@ -955,129 +845,37 @@ window.applyDefaultTodoDeadline = applyDefaultTodoDeadline;
 window.resetTodoDraftDeadline = resetTodoDraftDeadline;
 window.refreshDefaultTodoDeadlines = refreshDefaultTodoDeadlines;
 
-PRIORITIES.forEach((priority) => {
-  const input = document.querySelector(`.add-row input[data-priority="${priority}"]`);
-  const deadlineInput = document.querySelector(`.todo-deadline-trigger[data-deadline-priority="${priority}"]`);
-  if (!input) return;
-  applyDefaultTodoDeadline(deadlineInput);
-
-  const submitTodo = () => {
-    const value = input.value;
-    if (!value.trim()) return;
-    if (!deadlineInput || !deadlineInput.dataset.deadline) {
-      deadlineInput?.classList.add('invalid');
-      openTodoEditor(priority);
-      return;
-    }
-    if (!addTodo(priority, value, deadlineInput.dataset.deadline)) {
-      deadlineInput.classList.add('invalid');
-      showStatusToast('截止时间格式不正确');
-      return;
-    }
-    input.value = '';
-    const editorContext = todoEditorController.getContext();
-    if (editorContext?.mode === 'add' && editorContext.priority === priority) closeTodoEditor();
-    resetTodoDraftDeadline(deadlineInput);
-    deadlineInput.classList.remove('invalid');
-    input.focus({ preventScroll: true });
-  };
-
-  input.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
-    e.preventDefault();
-    if (e.repeat) return;
-    submitTodo();
-  });
-  deadlineInput?.addEventListener('click', () => openTodoEditor(priority));
+const todoMutationController = window.NotchTodoMutation.createTodoMutationController({
+  priorities: PRIORITIES,
+  document,
+  window,
+  domain: window.NotchDomain,
+  getData: () => data,
+  saveData,
+  generateId,
+  captureTodoPositions,
+  renderList,
+  renderAll,
+  updateCount,
+  todosVisibleInScope,
+  getTimeScope: () => todoTimeScope,
+  getSelections: () => todoSelections,
+  getSelectionAnchors: () => todoSelectionAnchors,
+  setSelection: (priority, value) => { todoSelections[priority] = value; },
+  setSelectionAnchor: (priority, value) => { todoSelectionAnchors[priority] = value; },
+  getCompletedExpanded: () => todoCompletedExpanded,
+  getEditingTodo: () => editingTodo,
+  setEditingTodo: (value) => { editingTodo = value; },
+  openTodoEditor,
+  closeTodoEditor,
+  applyDefaultTodoDeadline,
+  resetTodoDraftDeadline,
+  getTodoEditorContext: () => todoEditorController.getContext(),
+  showStatusToast,
 });
-
-PRIORITIES.forEach((priority) => {
-  const list = document.querySelector(`.todo-list[data-priority="${priority}"]`);
-  if (!list) return;
-  list.addEventListener('click', (e) => {
-    const completedToggle = e.target.closest('[data-todo-completed-toggle]');
-    if (completedToggle) {
-      const targetPriority = completedToggle.dataset.todoCompletedToggle;
-      todoCompletedExpanded[targetPriority] = !todoCompletedExpanded[targetPriority];
-      renderList(targetPriority);
-      requestAnimationFrame(() => document.querySelector(`[data-todo-completed-toggle="${targetPriority}"]`)?.focus({ preventScroll: true }));
-      return;
-    }
-    const item = e.target.closest('.todo-item');
-    if (!item) return;
-    const id = item.dataset.id;
-    if (e.shiftKey) {
-      e.preventDefault();
-      const result = window.NotchDomain.updateRangeSelection(
-        todosVisibleInScope(priority).map((todo) => todo.id),
-        [...todoSelections[priority]],
-        id,
-        todoSelectionAnchors[priority],
-        true
-      );
-      todoSelections[priority] = new Set(result.selected);
-      todoSelectionAnchors[priority] = result.anchor;
-      renderList(priority);
-      return;
-    }
-    const target = e.target.closest('[data-action]');
-    if (!target) return;
-    const action = target.dataset.action;
-    if (action === 'toggle') {
-      toggleTodo(priority, id);
-    } else if (action === 'edit') {
-      const todo = (data[priority] || []).find((item) => item.id === id);
-      if (todo) {
-        editingTodo = { priority, id };
-        renderList(priority);
-        requestAnimationFrame(() => document.querySelector(`.todo-item[data-id="${CSS.escape(id)}"] .todo-inline-name`)?.focus({ preventScroll: true }));
-      }
-    } else if (action === 'edit-deadline') {
-      const todo = (data[priority] || []).find((candidate) => candidate.id === id);
-      if (todo) openTodoEditor(priority, todo, target);
-    } else if (action === 'save-edit') {
-      const todo = (data[priority] || []).find((candidate) => candidate.id === id);
-      const name = item.querySelector('.todo-inline-name')?.value.trim() || '';
-      if (!todo || !name || !todo.deadline) return;
-      editingTodo = null;
-      editTodo(priority, id, name, todo.deadline);
-    } else if (action === 'reschedule-today') {
-      const todo = (data[priority] || []).find((candidate) => candidate.id === id);
-      const deadline = window.NotchDomain.defaultTodoDeadlineForScope('today', new Date());
-      if (!todo || !deadline) return;
-      editTodo(priority, id, todo.text, deadline);
-      showStatusToast('已移到今天');
-    } else if (action === 'delete') {
-      deleteTodo(priority, id);
-    }
-  });
-  list.addEventListener('keydown', (event) => {
-    const item = event.target.closest('.todo-item');
-    if (!item || !event.target.matches('.todo-inline-name')) return;
-    if (event.key === 'Escape') {
-      editingTodo = null;
-      renderList(priority);
-    } else if (event.key === 'Enter' && !event.isComposing) {
-      event.preventDefault();
-      item.querySelector('[data-action="save-edit"]')?.click();
-    }
-  });
-});
-
-document.querySelectorAll('.todo-bulk-delete[data-bulk-priority]').forEach((button) => {
-  button.addEventListener('click', () => {
-    const priority = button.dataset.bulkPriority;
-    const selected = todoSelections[priority];
-    if (!selected || !selected.size) return;
-    data[priority] = (data[priority] || []).filter((item) => !selected.has(item.id));
-    selected.clear();
-    todoSelectionAnchors[priority] = null;
-    saveData(data);
-    renderList(priority);
-    updateCount(priority);
-    showStatusToast('已删除所选待办');
-  });
-});
+todoMutationController.bindAddRows();
+todoMutationController.bindLists();
+todoMutationController.bindBulkDelete();
 
 // ============ 首页 · 时钟·日期 ============
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
