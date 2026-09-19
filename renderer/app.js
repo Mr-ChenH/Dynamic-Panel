@@ -23,13 +23,8 @@ let todoCategoryNames = loadTodoCategoryNames();
 const todoSelections = Object.fromEntries(PRIORITIES.map((priority) => [priority, new Set()]));
 const todoSelectionAnchors = Object.fromEntries(PRIORITIES.map((priority) => [priority, null]));
 let editingTodo = null;
-const TODO_TIME_SCOPES = ['today', 'week', 'later', 'all'];
 let todoTimeScope = 'today';
 const todoCompletedExpanded = Object.fromEntries(PRIORITIES.map((priority) => [priority, false]));
-const todoScopeButtons = Array.from(document.querySelectorAll('[data-todo-scope]'));
-const todoScopePeriod = document.getElementById('todo-scope-period');
-const todoOverdueJump = document.getElementById('todo-overdue-jump');
-const todoOverdueCount = document.getElementById('todo-overdue-count');
 
 function loadTodoCategoryNames() {
   try {
@@ -740,51 +735,11 @@ document.querySelectorAll('.todo-category-name[data-category]').forEach((input) 
 
 applyTodoCategoryNames();
 
-function refreshScopedTodoDraftDeadlines(now = new Date()) {
-  document.querySelectorAll('.todo-deadline-trigger[data-deadline-priority]').forEach((trigger) => {
-    if (trigger.dataset.deadlineSource === 'manual') return;
-    delete trigger.dataset.deadline;
-    delete trigger.dataset.deadlineSource;
-    applyDefaultTodoDeadline(trigger, now);
-  });
-}
-
-function setTodoTimeScope(scope, { focusOverdue = false } = {}) {
-  if (!TODO_TIME_SCOPES.includes(scope)) return false;
-  todoTimeScope = scope;
-  editingTodo = null;
-  PRIORITIES.forEach((priority) => {
-    todoSelections[priority].clear();
-    todoSelectionAnchors[priority] = null;
-    todoCompletedExpanded[priority] = false;
-  });
-  closeTodoEditor();
-  refreshScopedTodoDraftDeadlines();
-  renderAll();
-  if (focusOverdue) {
-    requestAnimationFrame(() => document.querySelector('.todo-item.overdue [data-action="toggle"]')?.focus({ preventScroll: true }));
-  }
-  return true;
-}
-
-todoScopeButtons.forEach((button, index) => {
-  button.addEventListener('click', () => setTodoTimeScope(button.dataset.todoScope));
-  button.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    event.preventDefault();
-    const offset = event.key === 'ArrowRight' ? 1 : -1;
-    const next = todoScopeButtons[(index + offset + todoScopeButtons.length) % todoScopeButtons.length];
-    next.focus({ preventScroll: true });
-    setTodoTimeScope(next.dataset.todoScope);
-  });
-});
-
-todoOverdueJump?.addEventListener('click', () => setTodoTimeScope('today', { focusOverdue: true }));
 document.getElementById('todo-ai-add')?.addEventListener('click', () => window.NotchAI?.openText?.('extractTodos'));
 
 window.NotchTodo = {
   getTimeScope: () => todoTimeScope,
-  setTimeScope: (scope) => setTodoTimeScope(scope),
+  setTimeScope: (scope) => todoScopeController.setTimeScope(scope),
   getScopeCounts: () => ({ ...window.NotchDomain.todoTimeScopeCounts(allTodoItems()) }),
   snapshot: () => Object.fromEntries(PRIORITIES.map((priority) => [priority, (data[priority] || []).map((todo) => ({ ...todo }))])),
   chatContexts: () => PRIORITIES.flatMap((priority) => (data[priority] || []).map((todo) => ({
@@ -876,6 +831,26 @@ const todoMutationController = window.NotchTodoMutation.createTodoMutationContro
 todoMutationController.bindAddRows();
 todoMutationController.bindLists();
 todoMutationController.bindBulkDelete();
+
+const todoScopeController = window.NotchTodoScope.createTodoScopeController({
+  priorities: PRIORITIES,
+  scopes: ['today', 'week', 'later', 'all'],
+  document,
+  window,
+  getData: () => data,
+  getScope: () => todoTimeScope,
+  setScope: (scope) => { todoTimeScope = scope; },
+  getSelections: () => todoSelections,
+  getSelectionAnchors: () => todoSelectionAnchors,
+  getCompletedExpanded: () => todoCompletedExpanded,
+  setEditingTodo: (value) => { editingTodo = value; },
+  closeTodoEditor,
+  applyDefaultDeadline: applyDefaultTodoDeadline,
+  renderAll,
+  showOverdueFocus: () => document.querySelector('.todo-item.overdue [data-action="toggle"]')?.focus({ preventScroll: true }),
+});
+todoScopeController.bindControls();
+document.getElementById('todo-ai-add')?.addEventListener('click', () => window.NotchAI?.openText?.('extractTodos'));
 
 // ============ 首页 · 时钟·日期 ============
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -989,7 +964,7 @@ window.NotchPanelHost = {
     if (target.tab === 'links' && target.id && !window.NotchWorkspace.selectLink(target.id)) throw Error('链接已不存在');
     if (target.create === 'note') window.NotchNotes.create();
     if (target.tab === 'todo') {
-      setTodoTimeScope('all');
+      todoScopeController.setTimeScope('all');
       if (target.id) {
         const priority = PRIORITIES.find((p) => (data[p] || []).some((t) => String(t.id) === String(target.id)));
         if (priority) { todoCompletedExpanded[priority] = true; renderList(priority); }
