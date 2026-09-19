@@ -16,6 +16,7 @@ const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 
 const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-domain.js'), 'utf8');
 const clipboardStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-store.js'), 'utf8');
 const clipboardControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-controller.js'), 'utf8');
+const pomodoroControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'pomodoro-controller.js'), 'utf8');
 const notesControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-controller.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
@@ -228,6 +229,17 @@ test('clipboard history UI and home favorites use a dedicated controller', () =>
   assert.doesNotMatch(appJs, /function renderClipFavs\(/);
   assert.doesNotMatch(appJs, /function toggleClipFavorite\(/);
   assert.doesNotMatch(appJs, /function deleteClipEntry\(/);
+});
+
+test('pomodoro state and controls use a dedicated injected controller', () => {
+  assert.ok(html.indexOf('pomodoro-controller.js') < html.indexOf('app.js'));
+  assert.match(pomodoroControllerJs, /dynamic-panel-pomodoro-duration-v3/);
+  assert.match(pomodoroControllerJs, /notifyPomodoro/);
+  assert.match(pomodoroControllerJs, /showStatusToast/);
+  assert.match(pomodoroControllerJs, /NotchPomodoroController/);
+  assert.match(appJs, /NotchPomodoroController\.createController/);
+  assert.doesNotMatch(appJs, /function renderPomodoro\(/);
+  assert.doesNotMatch(appJs, /pomodoroToggle\?\.addEventListener/);
 });
 
 test('credential styles load as a dedicated module while shared theme selectors remain in the shell stylesheet', () => {

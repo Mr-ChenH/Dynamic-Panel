@@ -22,7 +22,7 @@
 | --- | ---: | --- |
 | `main.js` | 2848 | 主进程装配器仍混合财务配置、当前窗口扫描、转写配置和待办提醒调度 |
 | `renderer/styles.css` | 5810 | 多模块样式和主题覆盖集中，存在重复覆盖和加载顺序依赖 |
-| `renderer/app.js` | 2163 | 待办和首页布局状态仍然混合，剪贴板 UI 已迁移 |
+| `renderer/app.js` | 2024 | 待办和首页布局状态仍然混合，剪贴板 UI 与番茄钟已迁移 |
 | `renderer/notes-controller.js` | 2066 | 笔记分类、编辑、Markdown 预览和附件 UI 集中在独立控制器 |
 | `renderer/workspace.js` | 678 | 已退化为链接/录音/设置控制器装配器，仍保留录音 UI 投影 |
 | `finance-service.js` | 2212 | 多 provider、缓存、并发取消和结果归一化集中 |
@@ -234,8 +234,8 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 
 ## 建议重构顺序
 
-1. 拆分首页布局、待办控制器和番茄钟
-3. 从 `workspace.js` 提取剩余录音 UI 投影
+1. 拆分首页布局和待办控制器
+2. 从 `workspace.js` 提取剩余录音 UI 投影
 4. 从 `main.js` 提取财务配置、当前窗口扫描、转写配置和待办提醒服务
 5. 将 `renderer/styles.css` 的 notes、clipboard、recordings、待办四象限和 theme 拆成领域样式
 6. 拆分大型 Electron 验收和 domain 测试
@@ -246,7 +246,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 
 目前最高风险已从打包模块遗漏和启动顺序回归下降为 `renderer/app.js` 与 `renderer/styles.css` 的维护成本、`main.js` 剩余领域实现，以及通知真实生命周期覆盖不足。核心 Electron 启动、面板收起、工作区保留和 capture 验收当前均已通过。
 
-后续继续保持一次一个领域、独立提交和完整回归；笔记领域、剪贴板共享 store 和剪贴板 UI 控制器已完成，下一步拆分首页布局、待办和番茄钟，再处理主进程剩余领域实现。
+后续继续保持一次一个领域、独立提交和完整回归；笔记领域、剪贴板共享 store、剪贴板 UI 控制器和番茄钟 controller 已完成，下一步拆分首页布局和待办，再处理主进程剩余领域实现。
 
 ## 实施进度
 
@@ -435,8 +435,9 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/notes-controller.js`，迁移首页 Markdown 速记、资料库列表、分类/标签、自动保存、AI 命名、图片粘贴/拖入/选择、预览和 `NotchNotes` facade；LocalStorage、IPC 和公共 API 保持兼容
 - 新增 `renderer/clipboard-store.js`，迁移剪贴板历史/收藏 LocalStorage、规范化、FIFO 淘汰、图片缓存与清理、变更版本和 `onNewClipEntry` 订阅；通过兼容访问器保持旧测试和 renderer 事件行为
 - 新增 `renderer/clipboard-controller.js`，迁移剪贴板历史时间线、首页收藏投影、筛选/清空工具栏、复制/收藏/删除事件和 `NotchClipboard` facade；store 通过显式 host 注入，旧渲染函数和状态访问器继续作为兼容入口
-- `renderer/app.js` 当前约 2163 行，保留待办、首页布局和主 shell 装配；`renderer/clipboard-controller.js` 约 473 行，`renderer/notes-controller.js` 约 2066 行
+- 新增 `renderer/pomodoro-controller.js`，迁移番茄钟 LocalStorage、输入校验、倒计时、进度渲染、重置和完成通知；通过显式 host 注入 `showStatusToast` 与 `notchAPI`
+- `renderer/app.js` 当前约 2024 行，保留待办、首页布局和主 shell 装配；`renderer/clipboard-controller.js` 约 473 行，`renderer/pomodoro-controller.js` 约 163 行，`renderer/notes-controller.js` 约 2066 行
 - `renderer/workspace.js` 当前约 678 行，只保留录音 UI 投影和各 workspace 模块装配
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 直接 `ipcMain.handle/on` 注册已降为 0，领域 IPC 均由独立注册器装配
-- 完整 `npm test` 当前为 345 项：344 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
+- 完整 `npm test` 当前为 346 项：345 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
