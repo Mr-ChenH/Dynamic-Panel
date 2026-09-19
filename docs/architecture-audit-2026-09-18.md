@@ -434,6 +434,8 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/workspace-transcription-pipeline.js`，统一管理百炼 PCM/WebAudio 链路、连接缓冲、转写事件和浏览器 SpeechRecognition 回退，并集中释放相关资源
 - 新增 `renderer/workspace-recording-lifecycle.js`，统一管理麦克风 reservation、MediaRecorder、暂停/恢复/停止、草稿提升、保存事务、录音快捷键和退出清理；`workspace.js` 只注入转写、持久化、渲染与 UI 投影依赖
 - 新增 `tests/workspace-recording-lifecycle.test.js`，覆盖草稿成功提升、暂停/恢复、保存失败回滚以及退出资源释放
+- 新增 `renderer/workspace-ai-settings.js`，迁移 AI 厂商导航、模型草稿、配置加载与保存、连接验证、诊断、迁移确认和录音配置跳转；录音生命周期与转写管线通过 getter 读取当前配置
+- `renderer/workspace.js` 当前约 900 行，保留通用应用设置、录音 UI 投影和各 workspace 模块装配
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 直接 `ipcMain.handle/on` 注册已降为 0，领域 IPC 均由独立注册器装配
-- 完整 `npm test` 当前为 341 项：340 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
+- 完整 `npm test` 当前为 342 项：341 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过

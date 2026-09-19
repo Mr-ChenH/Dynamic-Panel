@@ -28,6 +28,7 @@ const workspaceRecordingsApiJs = fs.readFileSync(path.join(__dirname, '..', 'ren
 const workspaceRecordingsViewJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-view.js'), 'utf8');
 const workspaceRecordingLifecycleJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recording-lifecycle.js'), 'utf8');
 const workspaceTranscriptionPipelineJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-transcription-pipeline.js'), 'utf8');
+const workspaceAISettingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-ai-settings.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
@@ -152,6 +153,17 @@ test('cloud and browser transcription pipelines stay outside the workspace coord
   assert.match(workspaceJs, /NotchWorkspaceTranscriptionPipeline\.createPipeline/);
   assert.doesNotMatch(workspaceJs, /function startCloudTranscription\(/);
   assert.doesNotMatch(workspaceJs, /let speechRecognition/);
+});
+
+test('AI provider settings and diagnostics stay outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-ai-settings.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceAISettingsJs, /setTranscriptionConfig/);
+  assert.match(workspaceAISettingsJs, /testConfiguredProvider/);
+  assert.match(workspaceAISettingsJs, /renderDiagnostics/);
+  assert.match(workspaceAISettingsJs, /llmModels:\s*normalizedModels/);
+  assert.match(workspaceJs, /NotchWorkspaceAISettings\.createController/);
+  assert.doesNotMatch(workspaceJs, /function renderAIProviderNavigation\(/);
+  assert.doesNotMatch(workspaceJs, /const llmProvider =/);
 });
 
 test('credential storage and selection state stay outside the workspace coordinator', () => {
@@ -737,10 +749,10 @@ test('AI providers configure directly inside the settings page', () => {
   assert.match(html, /class="ai-provider-config"/);
   assert.match(html, /id="llm-model-list"/);
   assert.match(html, /id="llm-model-add"/);
-  assert.match(workspaceJs, /llmModels:\s*normalizedModels/);
+  assert.match(workspaceAISettingsJs, /llmModels:\s*normalizedModels/);
   assert.doesNotMatch(html, /id="transcription-settings-backdrop"|id="settings-api-configure"|id="ai-service-tab-content"/);
-  assert.match(workspaceJs, /data-ai-provider/);
-  assert.match(workspaceJs, /NotchSettings\?\.select\('api'\)/);
+  assert.match(workspaceAISettingsJs, /data-ai-provider/);
+  assert.match(workspaceAISettingsJs, /NotchSettings\?\.select\('api'\)/);
   assert.match(aiCss, /\.ai-settings-layout[^}]*grid-template-columns:\s*196px minmax\(0,1fr\)/);
 });
 
