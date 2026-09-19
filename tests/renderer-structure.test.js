@@ -32,6 +32,7 @@ const workspaceLinksApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer
 const workspaceRecordingsApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-api.js'), 'utf8');
 const workspaceRecordingsViewJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-view.js'), 'utf8');
 const workspaceRecordingLifecycleJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recording-lifecycle.js'), 'utf8');
+const workspaceRecordingProjectionJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recording-projection.js'), 'utf8');
 const workspaceTranscriptionPipelineJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-transcription-pipeline.js'), 'utf8');
 const workspaceAppSettingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-app-settings.js'), 'utf8');
 const workspaceAISettingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-ai-settings.js'), 'utf8');
@@ -148,6 +149,17 @@ test('MediaRecorder and recording draft lifecycle stay outside the workspace coo
   assert.match(workspaceJs, /NotchWorkspaceRecordingLifecycle\.createLifecycle/);
   assert.doesNotMatch(workspaceJs, /function startRecordingAttempt\(/);
   assert.doesNotMatch(workspaceJs, /let mediaRecorder/);
+});
+
+test('recording UI projection stays outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-recording-projection.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceRecordingProjectionJs, /syncDraftUi/);
+  assert.match(workspaceRecordingProjectionJs, /notch:recording-state-changed/);
+  assert.match(workspaceRecordingProjectionJs, /getAIConfig/);
+  assert.match(workspaceRecordingProjectionJs, /NotchWorkspaceRecordingProjection/);
+  assert.match(workspaceJs, /recordingProjection\.update/);
+  assert.doesNotMatch(workspaceJs, /function updateRecordingUi\(/);
+  assert.doesNotMatch(workspaceJs, /function syncRecordingDraftUi\(/);
 });
 
 test('cloud and browser transcription pipelines stay outside the workspace coordinator', () => {

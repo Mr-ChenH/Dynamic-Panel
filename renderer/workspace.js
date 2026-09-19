@@ -310,14 +310,6 @@
   let strandsFrame = null;
   let strandsSamples = null;
   let strandsLevel = 0;
-  function isRecordingActive() {
-    return recordingLifecycle?.isActive() === true;
-  }
-
-  function isRecordingBusy() {
-    return recordingLifecycle?.isBusy() === true;
-  }
-
   function stopRecordingStrands() {
     if (strandsFrame) cancelAnimationFrame(strandsFrame);
     strandsFrame = null;
@@ -426,52 +418,38 @@
     }
   }
 
+  const recordingProjection = window.NotchWorkspaceRecordingProjection.createProjection({
+    Domain,
+    elements: {
+      homeRecorder,
+      recordingDot,
+      recordingStateLabel,
+      recordingTime,
+      liveTranscript,
+      recordingList,
+      recordingDetail,
+      recordingNew,
+      recordStart,
+      recordPause,
+      recordStop,
+    },
+    getLifecycle: () => recordingLifecycle,
+    getSelectedId: () => selectedRecordingId,
+    getAIConfig: () => aiSettingsController?.config() || {},
+    getAppSettings: () => appSettingsController,
+    currentText: () => recordingLifecycle?.currentText() || '',
+    currentFeedback: () => recordingLifecycle?.currentFeedback() || '正在录音',
+    formatClock,
+  });
+  const isRecordingActive = recordingProjection.isActive;
+  const isRecordingBusy = recordingProjection.isBusy;
+  const syncRecordingDraftUi = recordingProjection.syncDraftUi;
+  const updateRecordingUi = recordingProjection.update;
+  const currentRecordingText = () => recordingLifecycle?.currentText() || '';
+  const currentRecordingFeedback = () => recordingLifecycle?.currentFeedback() || '正在录音';
+
   function persistRecordings() {
     return saveJson(RECORDINGS_KEY, recordings.filter((recording) => !recording.isDraft));
-  }
-
-  function currentRecordingText() {
-    return recordingLifecycle?.currentText() || '';
-  }
-
-  function currentRecordingFeedback() {
-    return recordingLifecycle?.currentFeedback() || '正在录音';
-  }
-
-  function syncRecordingDraftUi() {
-    const draft = recordingLifecycle?.activeDraft();
-    if (!draft) return;
-    const durationMs = recordingLifecycle.stopDuration() || recordingLifecycle.currentDuration();
-    const text = currentRecordingText();
-    const status = recordingLifecycle.status();
-    draft.durationMs = durationMs;
-    draft.transcript = recordingLifecycle.transcript();
-    const row = recordingList?.querySelector(`.recording-item[data-id="${CSS.escape(draft.id)}"]`);
-    const preview = row?.querySelector('[data-recording-preview]');
-    const meta = row?.querySelector('[data-recording-meta]');
-    if (preview) preview.textContent = text || currentRecordingFeedback();
-    if (meta) meta.textContent = `${status === 'saving' ? '保存中' : status === 'paused' ? '已暂停' : '录音中'} · ${formatClock(durationMs)}`;
-    if (selectedRecordingId !== draft.id) return;
-    const detailState = recordingDetail?.querySelector('[data-recording-live-state]');
-    const detailDot = recordingDetail?.querySelector('[data-recording-live-dot]');
-    const detailTime = recordingDetail?.querySelector('[data-recording-live-time]');
-    const detailTranscript = recordingDetail?.querySelector('[data-recording-live-transcript]');
-    const detailFeedback = recordingDetail?.querySelector('[data-recording-live-feedback]');
-    const detailConfigure = recordingDetail?.querySelector('[data-action="configure-transcription"]');
-    const detailPause = recordingDetail?.querySelector('.recording-live-pause');
-    const detailStop = recordingDetail?.querySelector('.recording-live-stop');
-    if (detailState) detailState.textContent = status === 'saving' ? '正在保存' : status === 'paused' ? '已暂停' : '正在录音';
-    if (detailDot) detailDot.dataset.state = status;
-    if (detailTime) detailTime.textContent = formatClock(durationMs);
-    if (detailTranscript && detailTranscript.value !== text) detailTranscript.value = text;
-    if (detailFeedback) detailFeedback.textContent = text ? '转写内容会随录音实时更新' : currentRecordingFeedback();
-    const transcriptionConfig = aiSettingsController.config();
-    if (detailConfigure) detailConfigure.hidden = transcriptionConfig.configured && !transcriptionConfig.asrNeedsReentry;
-    if (detailPause) {
-      detailPause.textContent = status === 'paused' ? '继续' : '暂停';
-      detailPause.disabled = status === 'saving';
-    }
-    if (detailStop) detailStop.disabled = status === 'saving';
   }
 
   appSettingsController = window.NotchWorkspaceAppSettings.createController({
@@ -524,57 +502,6 @@
     setInterimTranscript: (value) => recordingLifecycle.setInterimTranscript(value),
     updateUi: () => updateRecordingUi(),
   });
-
-  function updateRecordingUi() {
-    const recordingActive = isRecordingActive();
-    const recordingBusy = isRecordingBusy();
-    const status = recordingLifecycle?.status() || 'idle';
-    const starting = recordingLifecycle?.isStarting() === true;
-    const visualState = starting ? 'requesting' : status;
-    if (homeRecorder) homeRecorder.dataset.state = visualState;
-    if (recordingDot) recordingDot.dataset.state = visualState;
-    if (recordingStateLabel) {
-      recordingStateLabel.textContent = starting
-        ? '等待录音权限'
-        : status === 'recording'
-        ? '正在录音'
-        : status === 'paused'
-          ? '已暂停'
-          : status === 'saving'
-            ? '正在保存'
-            : '快速录音';
-    }
-    if (recordingTime) recordingTime.textContent = formatClock(recordingActive ? recordingLifecycle.currentDuration() : 0);
-    if (recordStart) recordStart.disabled = recordingBusy;
-    if (recordPause) {
-      recordPause.disabled = !['recording', 'paused'].includes(status);
-      recordPause.setAttribute('aria-label', status === 'paused' ? '继续录音' : '暂停录音');
-      recordPause.classList.toggle('resume', status === 'paused');
-    }
-    if (recordStop) recordStop.disabled = !['recording', 'paused'].includes(status);
-    if (recordingNew) {
-      recordingNew.disabled = recordingBusy;
-      recordingNew.textContent = recordingBusy ? '录制' : '录音';
-      recordingNew.setAttribute('aria-label', starting
-        ? '正在请求麦克风权限'
-        : recordingActive ? '录音进行中' : '开始录音');
-    }
-    if (liveTranscript && recordingBusy) {
-      const text = currentRecordingText();
-      // asrNeedsReentry = 密文还在但当前应用解不开它。safeStorage 的密钥存在钥匙串里、
-      // ACL 绑代码签名，所以开发版存的 Key 装成 DMG 后就读不出来（ad-hoc 签名每次打包
-      // 都会换 cdhash，也是同样的结果）。这种情况下录音正常、只有转写不工作，
-      // 原来只在设置面板里提示一行，录音的人看不到，表现就是「能录但不转写」。
-      const fallback = currentRecordingFeedback();
-      liveTranscript.textContent = text || fallback;
-      liveTranscript.hidden = !(text || fallback);
-    }
-    syncRecordingDraftUi();
-    appSettingsController.renderHomeModules();
-    document.dispatchEvent(new CustomEvent('notch:recording-state-changed', {
-      detail: { active: recordingBusy },
-    }));
-  }
 
   const recordingsView = window.NotchWorkspaceRecordingsView.createView({
     Domain,
