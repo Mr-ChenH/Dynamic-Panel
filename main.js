@@ -45,6 +45,7 @@ const { createTaskNotificationWindowState } = require('./main/task-notification-
 const { createTaskNotificationWindowFactory } = require('./main/task-notification-window');
 const { createTaskNotificationController } = require('./main/task-notification-controller');
 const { createTodoReminderService } = require('./main/todo-reminder-service');
+const { createFinanceConfigResolver } = require('./main/finance-config-resolver');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
@@ -854,69 +855,12 @@ const financeSettingsStore = require('./main/finance-settings-store').createFina
 const readFinanceSettings = financeSettingsStore.read;
 const writeFinanceSettings = financeSettingsStore.write;
 
-function normalizeSecEdgarContact(value) {
-  const contact = String(value || '').trim().slice(0, 160);
-  return contact.includes('@') && !/[\r\n]/.test(contact) ? contact : '';
-}
-
-function resolveFinanceConfig() {
-  const stored = readFinanceSettings();
-  const environmentCoinGeckoKey = String(process.env.COINGECKO_API_KEY || '').trim();
-  const environmentAlphaVantageKey = String(process.env.ALPHA_VANTAGE_API_KEY || '').trim();
-  const environmentAlpacaKey = String(process.env.ALPACA_API_KEY_ID || '').trim();
-  const environmentAlpacaSecret = String(process.env.ALPACA_API_SECRET_KEY || '').trim();
-  const environmentTwelveDataKey = String(process.env.TWELVE_DATA_API_KEY || '').trim();
-  const environmentSecEdgarContact = normalizeSecEdgarContact(process.env.SEC_EDGAR_CONTACT);
-  const environmentQuantDashKey = String(process.env.QUANTDASH_API_KEY || '').trim();
-  const coinGeckoKey = environmentCoinGeckoKey || decryptStoredSecret(stored.providers.coingecko.encryptedApiKey).trim();
-  const alphaVantageKey = environmentAlphaVantageKey || decryptStoredSecret(stored.providers['alpha-vantage'].encryptedApiKey).trim();
-  const alpacaKey = environmentAlpacaKey || decryptStoredSecret(stored.providers.alpaca.encryptedKeyId).trim();
-  const alpacaSecret = environmentAlpacaSecret || decryptStoredSecret(stored.providers.alpaca.encryptedSecretKey).trim();
-  const twelveDataKey = environmentTwelveDataKey || decryptStoredSecret(stored.providers['twelve-data'].encryptedApiKey).trim();
-  const secEdgarContact = environmentSecEdgarContact || normalizeSecEdgarContact(decryptStoredSecret(stored.providers['sec-edgar'].encryptedContact));
-  const quantDashKey = environmentQuantDashKey || decryptStoredSecret(stored.providers['cn-stock'].encryptedApiKey).trim();
-  return {
-    coingecko: {
-      enabled: stored.providers.coingecko.enabled,
-      apiKey: coinGeckoKey,
-      credentialSource: environmentCoinGeckoKey ? 'environment' : coinGeckoKey ? 'stored' : 'none',
-    },
-    binance: {
-      enabled: stored.providers.binance.enabled,
-    },
-    alphaVantage: {
-      enabled: stored.providers['alpha-vantage'].enabled,
-      apiKey: alphaVantageKey,
-      credentialSource: environmentAlphaVantageKey ? 'environment' : alphaVantageKey ? 'stored' : 'none',
-    },
-    alpaca: {
-      enabled: stored.providers.alpaca.enabled,
-      feed: stored.providers.alpaca.feed,
-      keyId: alpacaKey,
-      secretKey: alpacaSecret,
-      credentialSource: environmentAlpacaKey && environmentAlpacaSecret ? 'environment' : alpacaKey && alpacaSecret ? 'stored' : 'none',
-    },
-    twelveData: {
-      enabled: stored.providers['twelve-data'].enabled,
-      apiKey: twelveDataKey,
-      credentialSource: environmentTwelveDataKey ? 'environment' : twelveDataKey ? 'stored' : 'none',
-    },
-    secEdgar: {
-      enabled: stored.providers['sec-edgar'].enabled,
-      contact: secEdgarContact,
-      credentialSource: environmentSecEdgarContact ? 'environment' : secEdgarContact ? 'stored' : 'none',
-    },
-    cnStock: {
-      enabled: stored.providers['cn-stock'].enabled,
-      apiKey: quantDashKey,
-      credentialSource: environmentQuantDashKey ? 'environment' : quantDashKey ? 'stored' : 'none',
-      label: 'QuantDash',
-    },
-    cnTencent: { enabled: stored.providers['cn-tencent'].enabled },
-    cnEastmoney: { enabled: stored.providers['cn-eastmoney'].enabled },
-    cnSina: { enabled: stored.providers['cn-sina'].enabled },
-  };
-}
+const financeConfigResolver = createFinanceConfigResolver({
+  readSettings: readFinanceSettings,
+  decryptStoredSecret,
+});
+const normalizeSecEdgarContact = financeConfigResolver.normalizeSecEdgarContact;
+const resolveFinanceConfig = financeConfigResolver.resolve;
 
 let financeService = null;
 function getFinanceService() {
