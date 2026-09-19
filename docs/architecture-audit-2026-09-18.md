@@ -22,7 +22,7 @@
 | --- | ---: | --- |
 | `main.js` | 2524 | 主进程装配器仍混合 provider service、IPC 装配和部分平台实现 |
 | `renderer/styles.css` | 5810 | 多模块样式和主题覆盖集中，存在重复覆盖和加载顺序依赖 |
-| `renderer/app.js` | 1386 | 待办业务变更、日期编辑器和主 shell 装配仍在此处；待办列表/范围投影已迁移 |
+| `renderer/app.js` | 1205 | 待办业务变更和主 shell 装配仍在此处；待办列表/范围投影和日期编辑器已迁移 |
 | `renderer/notes-controller.js` | 2066 | 笔记分类、编辑、Markdown 预览和附件 UI 集中在独立控制器 |
 | `renderer/workspace.js` | 605 | 已退化为链接/录音/设置控制器装配器，录音 UI 投影已迁移 |
 | `finance-service.js` | 2212 | 多 provider、缓存、并发取消和结果归一化集中 |
@@ -122,7 +122,7 @@ main/ipc/ai.js
 
 ### 5. renderer 文件低内聚
 
-`renderer/app.js` 已将 shell、面板公共控制器、无状态 Dock 动效、笔记控制器、剪贴板控制器、番茄钟、首页布局和待办列表/范围投影下沉，但仍同时处理待办业务变更、日期编辑器和主 shell 状态。
+`renderer/app.js` 已将 shell、面板公共控制器、无状态 Dock 动效、笔记控制器、剪贴板控制器、番茄钟、首页布局、待办列表/范围投影和日期编辑器下沉，但仍同时处理待办业务变更和主 shell 状态。
 
 `renderer/workspace.js` 已通过显式 host 注入拆出当前窗口、密钥、链接、录音生命周期、转写、AI 设置和通用应用设置；剩余主要职责是录音 UI 投影和模块装配。
 
@@ -234,7 +234,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 
 ## 建议重构顺序
 
-1. 继续拆分待办业务变更与日期编辑器
+1. 继续拆分待办业务变更与主 shell 装配
 2. 继续拆分 `main.js` 中 provider service、平台实现和 IPC 装配
 3. 将 `renderer/styles.css` 的 notes、clipboard、recordings、待办四象限和 theme 拆成领域样式
 6. 拆分大型 Electron 验收和 domain 测试
@@ -245,7 +245,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 
 目前最高风险已从打包模块遗漏和启动顺序回归下降为 `renderer/app.js` 与 `renderer/styles.css` 的维护成本、`main.js` 剩余领域实现，以及通知真实生命周期覆盖不足。核心 Electron 启动、面板收起、工作区保留和 capture 验收当前均已通过。
 
-后续继续保持一次一个领域、独立提交和完整回归；笔记领域、剪贴板 store/UI、番茄钟、首页布局、录音 UI 投影、待办提醒、转写配置存储、当前窗口 service 和财务配置存储已完成，下一步拆分待办 controller 与主进程剩余 provider/平台装配。
+后续继续保持一次一个领域、独立提交和完整回归；笔记领域、剪贴板 store/UI、番茄钟、首页布局、录音 UI 投影、待办列表/范围视图、待办日期编辑器、待办提醒、转写配置存储、当前窗口 service 和财务配置存储已完成，下一步拆分待办业务变更与主进程剩余 provider/平台装配。
 
 ## 实施进度
 
@@ -442,7 +442,8 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `main/current-window-service.js`，迁移 macOS JXA 窗口枚举、焦点缓存、应用图标缓存和目标聚焦；Windows 等平台保持 unsupported 返回
 - 新增 `main/finance-settings-store.js`，迁移财务 provider 配置 schema 归一化和持久化委托；safeStorage 解密和 provider service 仍由主进程装配
 - 新增 `renderer/todo-list-controller.js`，迁移待办列表 HTML、截止时间投影、时间范围统计、完成项折叠、排序动效和范围规划器；通过 getter 注入数据、范围、选中和编辑状态，保留 `renderList` / `renderTodoPlanner` 兼容入口
-- `renderer/app.js` 当前约 1386 行，保留待办业务变更、日期编辑器和主 shell 装配；`renderer/todo-list-controller.js` 约 236 行，`renderer/home-layout-controller.js` 约 475 行，`renderer/clipboard-controller.js` 约 473 行，`renderer/pomodoro-controller.js` 约 163 行，`renderer/notes-controller.js` 约 2066 行
+- 新增 `renderer/todo-editor-controller.js`，迁移截止日期日历、快捷日期、时间选择、弹层生命周期和默认截止时间刷新；通过 getter 注入数据、范围、保存和列表重渲染依赖，保留旧编辑器函数入口
+- `renderer/app.js` 当前约 1205 行，保留待办业务变更和主 shell 装配；`renderer/todo-list-controller.js` 约 236 行，`renderer/todo-editor-controller.js` 约 238 行，`renderer/home-layout-controller.js` 约 475 行，`renderer/clipboard-controller.js` 约 473 行，`renderer/pomodoro-controller.js` 约 163 行，`renderer/notes-controller.js` 约 2066 行
 - `renderer/workspace.js` 当前约 605 行，保留链接/录音生命周期/设置控制器装配
 - `main.js` 当前约 2580 行；当前窗口、待办提醒、转写存储和财务存储已通过独立 service 装配
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
