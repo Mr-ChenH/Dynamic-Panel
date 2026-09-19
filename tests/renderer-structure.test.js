@@ -17,6 +17,7 @@ const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer',
 const clipboardStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-store.js'), 'utf8');
 const clipboardControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-controller.js'), 'utf8');
 const pomodoroControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'pomodoro-controller.js'), 'utf8');
+const homeLayoutControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-layout-controller.js'), 'utf8');
 const notesControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-controller.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
@@ -464,12 +465,16 @@ test('a live recording can be paused, resumed, and stopped from the recordings t
 });
 
 test('homepage visibility has one storage key, exact validation, and lifecycle events', () => {
-  assert.match(appJs, /notch-home-hidden-modules-v1/);
-  assert.match(appJs, /validateHomeWidgetLayout/);
-  assert.match(appJs, /window\.NotchHome\s*=/);
-  assert.match(appJs, /notch:home-modules-changed/);
-  assert.match(appJs, /notch:home-layout-error/);
-  assert.match(appJs, /new Set\(homeTiles\.map\(\(tile\) => tile\.dataset\.homeModule\)\)/);
+  assert.ok(html.indexOf('home-layout-controller.js') < html.indexOf('app.js'));
+  assert.match(homeLayoutControllerJs, /notch-home-hidden-modules-v1/);
+  assert.match(homeLayoutControllerJs, /validateHomeWidgetLayout/);
+  assert.match(homeLayoutControllerJs, /const api = Object\.freeze/);
+  assert.match(homeLayoutControllerJs, /notch:home-modules-changed/);
+  assert.match(homeLayoutControllerJs, /notch:home-layout-error/);
+  assert.match(homeLayoutControllerJs, /new Set\(homeTiles\.map\(\(tile\) => tile\.dataset\.homeModule\)\)/);
+  assert.match(homeLayoutControllerJs, /isRecordingActive/);
+  assert.match(appJs, /NotchHomeLayoutController\.createController/);
+  assert.doesNotMatch(appJs, /function setHomeModuleVisible\(/);
 });
 
 test('retired homepage widgets keep migration data but have no user-facing entry', () => {
