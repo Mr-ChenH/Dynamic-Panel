@@ -2217,79 +2217,23 @@ if (clipfavListEl) {
 }
 
 // ============ 剪贴板历史 ============
-const CLIP_HISTORY_KEY = 'notch-clip-history';
-const CLIP_FAV_KEY = 'notch-clip-favorites';
 const CLIP_MAX = 100;
 const CLIP_URL_RE = /^https?:\/\//i;
 const starOutlineSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg>';
 const starFilledSvg = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z"/></svg>';
-
-function loadClipHistory() {
-  try {
-    const raw = localStorage.getItem(CLIP_HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(normalizeClipEntry).filter(Boolean);
-  } catch (e) {
-    return [];
-  }
-}
-
-function normalizeClipEntry(entry) {
-  if (!entry || typeof entry !== 'object') return null;
-  const type = ['text', 'url', 'image'].includes(entry.type) ? entry.type : 'text';
-  const text = typeof entry.text === 'string' ? entry.text : null;
-  const imagePath = typeof entry.imagePath === 'string' ? entry.imagePath : null;
-  if (type === 'image' ? !imagePath : text === null) return null;
-  return {
-    id: typeof entry.id === 'string' && entry.id ? entry.id : generateId(),
-    type,
-    text,
-    imagePath,
-    timestamp: Number.isFinite(entry.timestamp) && !Number.isNaN(new Date(entry.timestamp).getTime())
-      ? entry.timestamp
-      : Date.now(),
-  };
-}
-
-function saveClipHistory(list) {
-  try {
-    localStorage.setItem(CLIP_HISTORY_KEY, JSON.stringify(list));
-  } catch (e) {
-    // ignore quota errors
-  }
-}
-
-function loadClipFavorites() {
-  try {
-    const raw = localStorage.getItem(CLIP_FAV_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((p) => typeof p === 'string');
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveClipFavorites(list) {
-  try {
-    localStorage.setItem(CLIP_FAV_KEY, JSON.stringify(list));
-  } catch (e) {
-    // ignore quota errors
-  }
-}
-
-let clipHistory = loadClipHistory();
-let clipFavorites = loadClipFavorites();
+const clipboardStore = window.NotchClipboardStore.createController({
+  generateId,
+  Domain: window.NotchDomain,
+  notchAPI: window.notchAPI,
+  maxEntries: CLIP_MAX,
+});
+Object.defineProperties(window, {
+  clipHistory: { configurable: true, get: () => clipboardStore.history(), set: (value) => clipboardStore.replaceHistory(value) },
+  clipFavorites: { configurable: true, get: () => clipboardStore.favorites(), set: (value) => clipboardStore.replaceFavorites?.(value) },
+  clipImageCache: { configurable: true, get: () => clipboardStore.imageCache() },
+  clipDataVersion: { configurable: true, get: () => clipboardStore.version(), set: (value) => clipboardStore.setVersion(value) },
+});
 let clipFilter = 'all'; // all | text | image | faved
-const clipImageCache = new Map(); // imagePath -> dataUrl，仅内存
-
-// 脏标记 —— 单调递增版本号：凡影响 renderClipList / renderClipFavs 输出的变更都自增。
-// 宁可多自增（多一次重建）也不能漏（界面不更新）。
-// 注意：preloadClipImage 在图片入缓存后也要自增，确保二次渲染不被脏标记挡掉。
-let clipDataVersion = 0;
 let lastRenderedClipVersion = -1; // renderClipList 上次渲染时的版本号
 let lastRenderedFavsVersion = -1; // renderClipFavs 上次渲染时的版本号
 
@@ -2303,56 +2247,7 @@ let clipClearArmed = false;
 let clipRenderPending = false;
 
 async function preloadClipImage(imagePath) {
-  if (!imagePath) return;
-  if (clipImageCache.has(imagePath)) return;
-  if (!window.notchAPI || typeof window.notchAPI.readClipImage !== 'function') return;
-  try {
-    const dataUrl = await window.notchAPI.readClipImage(imagePath);
-    if (dataUrl) {
-      clipImageCache.set(imagePath, dataUrl);
-      clipDataVersion++; // 图片入缓存 → 版本自增，确保二次渲染不被脏标记挡掉（缩略图必须显示）
-    }
-  } catch (e) {
-    // ignore read errors
-  }
-}
-
-async function addClipEntry(raw) {
-  const id = generateId();
-  const entry = {
-    id,
-    type: raw.type || 'text',
-    text: raw.text || null,
-    imagePath: raw.imagePath || null,
-    timestamp: Date.now(),
-  };
-
-  // 每一次系统复制都是独立历史事件；相同内容也必须保留为两条记录。
-  const updated = window.NotchDomain.prependClipboardHistory(clipHistory, entry, CLIP_MAX);
-  clipHistory = updated.history;
-  const evicted = updated.evicted;
-  if (evicted.length > 0) {
-    const evictedPaths = evicted
-      .filter((e) => e.type === 'image' && e.imagePath)
-      .map((e) => e.imagePath);
-    if (evictedPaths.length > 0) {
-      if (window.notchAPI && typeof window.notchAPI.deleteClipImages === 'function') {
-        window.notchAPI.deleteClipImages(evictedPaths).catch(() => {});
-      }
-      evictedPaths.forEach((p) => clipImageCache.delete(p));
-    }
-  }
-
-  saveClipHistory(clipHistory);
-
-  // 图片条目预加载缩略图
-  if (entry.type === 'image' && entry.imagePath) {
-    await preloadClipImage(entry.imagePath);
-  }
-
-  clipDataVersion++; // clipHistory 已变（含 FIFO 淘汰）
-  renderClipList();
-  renderClipFavs();
+  return clipboardStore.preloadImage(imagePath);
 }
 
 function clipEntryHtml(entry, faved) {
@@ -2533,14 +2428,7 @@ function focusClipControl(ids, action = 'copy') {
 }
 
 function toggleClipFavorite(id, focusContext = null) {
-  const idx = clipFavorites.indexOf(id);
-  if (idx === -1) {
-    clipFavorites.push(id);
-  } else {
-    clipFavorites.splice(idx, 1);
-  }
-  clipDataVersion++; // clipFavorites 已变
-  saveClipFavorites(clipFavorites);
+  clipboardStore.toggleFavorite(id);
   renderClipList();
   renderClipFavs();
   if (focusContext && focusContext.restoreFocus) {
@@ -2556,15 +2444,9 @@ function toggleClipFavorite(id, focusContext = null) {
 }
 
 function deleteClipEntry(id, focusContext = null) {
-  const idx = clipHistory.findIndex((e) => e.id === id);
-  if (idx === -1) return;
-  const entry = clipHistory[idx];
-  const favoriteIndex = clipFavorites.indexOf(id);
-  clipHistory.splice(idx, 1);
-  clipFavorites = clipFavorites.filter((fid) => fid !== id);
-  clipDataVersion++; // clipHistory + clipFavorites 已变
-  saveClipHistory(clipHistory);
-  saveClipFavorites(clipFavorites);
+  const snapshot = clipboardStore.removeEntry(id);
+  if (!snapshot) return;
+  const { entry } = snapshot;
   renderClipList();
   renderClipFavs();
   if (focusContext && focusContext.restoreFocus) {
@@ -2574,14 +2456,7 @@ function deleteClipEntry(id, focusContext = null) {
     actionLabel: '撤销',
     duration: 5000,
     onAction: () => {
-      if (clipHistory.some((item) => item.id === id)) return;
-      clipHistory.splice(Math.min(idx, clipHistory.length), 0, entry);
-      if (favoriteIndex !== -1) {
-        clipFavorites.splice(Math.min(favoriteIndex, clipFavorites.length), 0, id);
-      }
-      clipDataVersion++;
-      saveClipHistory(clipHistory);
-      saveClipFavorites(clipFavorites);
+      if (!clipboardStore.restoreEntry(snapshot)) return;
       renderClipList();
       renderClipFavs();
       focusClipControl([id]);
@@ -2636,15 +2511,7 @@ if (clipClearBtn) {
 
 function clearClipHistory() {
   const removedCount = clipHistory.length;
-  const imagePaths = clipHistory
-    .filter((e) => e.type === 'image' && e.imagePath)
-    .map((e) => e.imagePath);
-  clipHistory = [];
-  clipFavorites = [];
-  clipImageCache.clear();
-  clipDataVersion++; // 全部数据已清空
-  saveClipHistory([]);
-  saveClipFavorites([]);
+  const imagePaths = clipboardStore.clear();
   if (imagePaths.length > 0 && window.notchAPI && typeof window.notchAPI.deleteClipImages === 'function') {
     window.notchAPI.deleteClipImages(imagePaths).catch(() => {});
   }
@@ -2683,12 +2550,11 @@ async function copyClipEntry(id) {
   return true;
 }
 
-// ---- IPC 推送监听 ----
-if (window.notchAPI && typeof window.notchAPI.onNewClipEntry === 'function') {
-  window.notchAPI.onNewClipEntry((raw) => {
-    addClipEntry(raw);
-  });
-}
+// ---- 剪贴板 store 变更监听 ----
+clipboardStore.subscribe(() => {
+  renderClipList();
+  renderClipFavs();
+});
 
 window.NotchClipboard = Object.freeze({
   chatContexts: () => clipHistory.filter((entry) => entry.type !== 'image' && entry.text?.trim()).map((entry) => ({

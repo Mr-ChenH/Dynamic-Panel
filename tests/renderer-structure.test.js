@@ -14,6 +14,7 @@ const shortcutServiceJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'sh
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-domain.js'), 'utf8');
+const clipboardStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-store.js'), 'utf8');
 const notesControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-controller.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
@@ -193,6 +194,24 @@ test('credential storage and selection state stay outside the workspace coordina
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
   assert.match(appJs, /const starFilledSvg\s*=/);
+});
+
+test('clipboard history and image state live in a shared persistent store', () => {
+  assert.ok(html.indexOf('clipboard-store.js') < html.indexOf('app.js'));
+  assert.match(clipboardStoreJs, /notch-clip-history/);
+  assert.match(clipboardStoreJs, /notch-clip-favorites/);
+  assert.match(clipboardStoreJs, /prependClipboardHistory/);
+  assert.match(clipboardStoreJs, /onNewClipEntry/);
+  assert.match(clipboardStoreJs, /readClipImage/);
+  assert.match(clipboardStoreJs, /deleteClipImages/);
+  assert.match(appJs, /NotchClipboardStore\.createController/);
+  assert.match(appJs, /clipboardStore\.subscribe/);
+  assert.match(appJs, /clipboardStore\.toggleFavorite/);
+  assert.match(appJs, /clipboardStore\.removeEntry/);
+  assert.match(appJs, /clipboardStore\.clear/);
+  assert.doesNotMatch(appJs, /function loadClipHistory\(/);
+  assert.doesNotMatch(appJs, /function loadClipFavorites\(/);
+  assert.doesNotMatch(appJs, /window\.notchAPI\.onNewClipEntry/);
 });
 
 test('credential styles load as a dedicated module while shared theme selectors remain in the shell stylesheet', () => {
