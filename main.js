@@ -44,6 +44,7 @@ const { createTaskNotificationTimers } = require('./main/task-notification-timer
 const { createTaskNotificationWindowState } = require('./main/task-notification-window-state');
 const { createTaskNotificationWindowFactory } = require('./main/task-notification-window');
 const { createTaskNotificationController } = require('./main/task-notification-controller');
+const { createTodoReminderService } = require('./main/todo-reminder-service');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
 const { registerFinanceIpc } = require('./main/ipc/finance');
@@ -341,8 +342,6 @@ const mediaPermissionCoordinator = createForegroundMediaPermissionCoordinator();
 
 let notificationWindow = null;
 let taskNotificationController = null;
-let todoReminderTimer = null;
-let scheduledTodoReminders = [];
 
 let windowsCollapsedHovering = false;
 let displayFollowTimer = null;
@@ -570,50 +569,13 @@ function enqueueTaskNotification(notification) {
   return taskNotificationQueue.enqueue(notification);
 }
 
-function clearTodoReminderTimer() {
-  if (todoReminderTimer) clearTimeout(todoReminderTimer);
-  todoReminderTimer = null;
-}
-
-function fireTodoReminder(todo) {
-  const deadline = Date.parse(String(todo.deadline || ''));
-  const notification = {
-    eventId: `todo-${todo.id}-${deadline}`,
-    source: 'todo',
-    taskId: String(todo.id || ''),
-    title: String(todo.text || '').trim() || '待办即将截止',
-    project: '',
-    detail: '将在 1 小时内截止',
-    deadline,
-    completedAt: Date.now(),
-  };
-  enqueueTaskNotification(notification);
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('todo:reminded', {
-      id: notification.taskId,
-      deadline: String(todo.deadline || ''),
-      remindedAt: notification.completedAt,
-    });
-  }
-}
-
-function scheduleNextTodoReminder() {
-  clearTodoReminderTimer();
-  const now = Date.now();
-  let nextDelay = Infinity;
-  for (const todo of scheduledTodoReminders) {
-    const status = todoReminderState(todo, now, TODO_REMINDER_LEAD_MS);
-    if (status.state === 'due') {
-      todo.remindedAt = now;
-      fireTodoReminder(todo);
-      continue;
-    }
-    if (status.state === 'scheduled') nextDelay = Math.min(nextDelay, status.delayMs);
-  }
-  if (Number.isFinite(nextDelay)) {
-    todoReminderTimer = setTimeout(scheduleNextTodoReminder, todoReminderTimerDelay(nextDelay));
-  }
-}
+const todoReminderService = createTodoReminderService({
+  reminderState: todoReminderState,
+  timerDelay: todoReminderTimerDelay,
+  leadMs: TODO_REMINDER_LEAD_MS,
+  enqueue: enqueueTaskNotification,
+  getMainWindow: () => mainWindow,
+});
 
 
 function getTaskNotificationBounds(display) {
@@ -1927,7 +1889,7 @@ async function activateActiveTaskNotification(eventId = null) {
 registerTaskNotificationIpc({
   ipcMain,
   scheduleReminders: (items) => {
-    scheduledTodoReminders = Array.isArray(items)
+    const normalized = Array.isArray(items)
       ? items
         .filter((item) => item && typeof item === 'object')
         .map((item) => ({
@@ -1939,8 +1901,7 @@ registerTaskNotificationIpc({
         }))
         .filter((item) => item.id && item.text)
       : [];
-    scheduleNextTodoReminder();
-    return { ok: true, count: scheduledTodoReminders.length };
+    return { ok: true, count: todoReminderService.setReminders(normalized) };
   },
   notifyPomodoro: (minutes) => {
     const safeMinutes = Math.max(1, Math.min(120, Math.round(Number(minutes) || 25)));
@@ -2837,7 +2798,7 @@ app.on('before-quit', (event) => {
 
 app.on('will-quit', () => {
   cancelCollapseWatchdog();
-  clearTodoReminderTimer();
+  todoReminderService.clear();
   stopHoverSpaceShortcut();
   stopDisplayFollowPolling();
   clearTaskNotificationTimers();
