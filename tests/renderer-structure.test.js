@@ -7,12 +7,14 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'
 const mainJs = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 const financeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'finance.js'), 'utf8');
 const financeBackgroundJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-background-refresh.js'), 'utf8');
+const financeConfigResolverJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'finance-config-resolver.js'), 'utf8');
 const homeIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'home.js'), 'utf8');
 const systemIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'system.js'), 'utf8');
 const windowIpcJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'ipc', 'window.js'), 'utf8');
 const shortcutServiceJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'shortcut-service.js'), 'utf8');
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
+const todoListControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-list-controller.js'), 'utf8');
 const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-domain.js'), 'utf8');
 const clipboardStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-store.js'), 'utf8');
 const clipboardControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-controller.js'), 'utf8');
@@ -321,9 +323,11 @@ test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', (
   assert.match(appJs, /migrateTodoCategoryNames/);
   assert.equal((html.match(/data-todo-scope="(?:today|week|later|all)"/g) || []).length, 4);
   assert.equal((html.match(/data-todo-date-shortcut="(?:today|tomorrow|weekend|next-week)"/g) || []).length, 4);
-  assert.match(appJs, /filterTodosByTimeScope\(data\[priority\]/);
-  assert.match(appJs, /todoTimeScopeCounts\(allTodoItems\(\)/);
-  assert.match(appJs, /data-todo-completed-toggle/);
+  assert.match(todoListControllerJs, /filterTodosByTimeScope\(/);
+  assert.match(todoListControllerJs, /todoTimeScopeCounts\(/);
+  assert.match(todoListControllerJs, /data-todo-completed-toggle/);
+  assert.match(appJs, /NotchTodoList\.createTodoListController/);
+  assert.doesNotMatch(appJs, /function todoItemHtml\(/);
   assert.match(appJs, /defaultTodoDeadlineForScope\(todoTimeScope/);
   assert.match(appJs, /window\.addEventListener\('focus', refreshTodoTemporalView\)/);
   assert.match(todoPlannerCss, /\.todo-scope-control/);
@@ -667,7 +671,7 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.match(mainJs, /api\.twelvedata\.com/);
   assert.match(mainJs, /data\.sec\.gov/);
   assert.match(mainJs, /api\.quantdash\.net/);
-  assert.match(mainJs, /QUANTDASH_API_KEY/);
+  assert.match(financeConfigResolverJs, /QUANTDASH_API_KEY/);
   assert.doesNotMatch(mainJs, /api\.tushare\.pro/);
   assert.doesNotMatch(mainJs, /TUSHARE_API_TOKEN/);
   assert.match(mainJs, /FINANCE_FETCH_MAX_REQUEST_BYTES/);
