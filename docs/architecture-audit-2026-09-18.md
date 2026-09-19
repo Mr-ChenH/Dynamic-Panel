@@ -20,11 +20,11 @@
 
 | 文件 | 行数 | 主要问题 |
 | --- | ---: | --- |
-| `main.js` | 2848 | 主进程装配器仍混合财务配置、当前窗口扫描、转写配置和待办提醒调度 |
+| `main.js` | 2580 | 主进程装配器仍混合 provider 配置解析、IPC 装配和部分平台实现 |
 | `renderer/styles.css` | 5810 | 多模块样式和主题覆盖集中，存在重复覆盖和加载顺序依赖 |
 | `renderer/app.js` | 1566 | 待办状态和主 shell 装配仍在此处，剪贴板、番茄钟和首页布局已迁移 |
 | `renderer/notes-controller.js` | 2066 | 笔记分类、编辑、Markdown 预览和附件 UI 集中在独立控制器 |
-| `renderer/workspace.js` | 678 | 已退化为链接/录音/设置控制器装配器，仍保留录音 UI 投影 |
+| `renderer/workspace.js` | 605 | 已退化为链接/录音/设置控制器装配器，录音 UI 投影已迁移 |
 | `finance-service.js` | 2212 | 多 provider、缓存、并发取消和结果归一化集中 |
 | `tests/notch-focus.electron.js` | 1524 | 面板交互和大量场景验收混在一个 Electron 测试文件 |
 | `tests/domain.test.js` | 1032 | 多领域 renderer domain 测试集中 |
@@ -235,9 +235,8 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 ## 建议重构顺序
 
 1. 拆分待办控制器
-2. 从 `workspace.js` 提取剩余录音 UI 投影
-3. 从 `main.js` 提取财务配置、当前窗口扫描、转写配置和待办提醒服务
-5. 将 `renderer/styles.css` 的 notes、clipboard、recordings、待办四象限和 theme 拆成领域样式
+2. 继续拆分 `main.js` 中 provider 配置解析、当前窗口平台实现和 IPC 装配
+3. 将 `renderer/styles.css` 的 notes、clipboard、recordings、待办四象限和 theme 拆成领域样式
 6. 拆分大型 Electron 验收和 domain 测试
 7. 增加通知真实 Electron 生命周期测试
 8. 完成全模块浅色主题和 electron-builder 产物实机验收
@@ -246,7 +245,7 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 
 目前最高风险已从打包模块遗漏和启动顺序回归下降为 `renderer/app.js` 与 `renderer/styles.css` 的维护成本、`main.js` 剩余领域实现，以及通知真实生命周期覆盖不足。核心 Electron 启动、面板收起、工作区保留和 capture 验收当前均已通过。
 
-后续继续保持一次一个领域、独立提交和完整回归；笔记领域、剪贴板共享 store、剪贴板 UI 控制器、番茄钟和首页布局 controller 已完成，下一步拆分待办，再处理主进程剩余领域实现。
+后续继续保持一次一个领域、独立提交和完整回归；笔记领域、剪贴板 store/UI、番茄钟、首页布局、录音 UI 投影、待办提醒、转写配置存储、当前窗口 service 和财务配置存储已完成，下一步拆分待办 controller 与主进程剩余 provider/平台装配。
 
 ## 实施进度
 
@@ -437,8 +436,14 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/clipboard-controller.js`，迁移剪贴板历史时间线、首页收藏投影、筛选/清空工具栏、复制/收藏/删除事件和 `NotchClipboard` facade；store 通过显式 host 注入，旧渲染函数和状态访问器继续作为兼容入口
 - 新增 `renderer/pomodoro-controller.js`，迁移番茄钟 LocalStorage、输入校验、倒计时、进度渲染、重置和完成通知；通过显式 host 注入 `showStatusToast` 与 `notchAPI`
 - 新增 `renderer/home-layout-controller.js`，迁移首页 Bento 顺序/尺寸/显隐持久化、布局校验、动效、长按拖拽、录音保护和 `NotchHome` facade；通过 host 注入提示和录音活动状态
+- 新增 `renderer/workspace-recording-projection.js`，迁移录音状态标签、按钮状态、实时转写、草稿行/详情同步和录音状态事件；录音生命周期、波形资源和列表 view 继续由 workspace 模块装配
+- 新增 `main/todo-reminder-service.js`，迁移待办提醒列表、到期判断、定时器重排、通知入队和主窗口事件
+- 新增 `main/transcription-settings-store.js`，迁移转写配置当前/旧目录读取、迁移和 600 权限原子写入
+- 新增 `main/current-window-service.js`，迁移 macOS JXA 窗口枚举、焦点缓存、应用图标缓存和目标聚焦；Windows 等平台保持 unsupported 返回
+- 新增 `main/finance-settings-store.js`，迁移财务 provider 配置 schema 归一化和持久化委托；safeStorage 解密和 provider service 仍由主进程装配
 - `renderer/app.js` 当前约 1566 行，保留待办和主 shell 装配；`renderer/home-layout-controller.js` 约 475 行，`renderer/clipboard-controller.js` 约 473 行，`renderer/pomodoro-controller.js` 约 163 行，`renderer/notes-controller.js` 约 2066 行
-- `renderer/workspace.js` 当前约 678 行，只保留录音 UI 投影和各 workspace 模块装配
+- `renderer/workspace.js` 当前约 605 行，保留链接/录音生命周期/设置控制器装配
+- `main.js` 当前约 2580 行；当前窗口、待办提醒、转写存储和财务存储已通过独立 service 装配
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 直接 `ipcMain.handle/on` 注册已降为 0，领域 IPC 均由独立注册器装配
-- 完整 `npm test` 当前为 346 项：345 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
+- 完整 `npm test` 当前为 352 项：351 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
