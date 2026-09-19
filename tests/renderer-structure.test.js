@@ -14,6 +14,7 @@ const shortcutServiceJs = fs.readFileSync(path.join(__dirname, '..', 'main', 'sh
 const launcherDomain = fs.readFileSync(path.join(__dirname, '..', 'launcher', 'domain.js'), 'utf8');
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-domain.js'), 'utf8');
+const notesControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-controller.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const workspaceWindowsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-windows.js'), 'utf8');
@@ -344,19 +345,24 @@ test('notes provide local-first creation, rich editing, and guarded image attach
   assert.match(html, /id="notes-tag-confirm"/);
   assert.match(html, /id="notes-list"/);
   assert.match(html, /id="notes-detail"/);
-  assert.match(appJs, /function createNote\(\)/);
-  assert.match(appJs, /NOTE_CATEGORIES_KEY = 'notch-note-categories-v1'/);
-  assert.match(appJs, /updateNoteCategory/);
-  assert.match(appJs, /removeNoteCategory/);
-  assert.match(appJs, /updateNoteTag/);
-  assert.match(appJs, /removeNoteTag/);
-  assert.match(appJs, /function renderNotesTaxonomy/);
-  assert.match(appJs, /function applyNoteTabIndentation/);
-  assert.match(appJs, /applyNoteTabIndentation\(editor, event\)/);
-  assert.match(appJs, /notesTaxonomyTree\?\.addEventListener/);
-  assert.match(appJs, /addEventListener\('paste'/);
-  assert.match(appJs, /addEventListener\('drop'/);
-  assert.match(appJs, /safeNoteImageReference/);
+  assert.ok(html.indexOf('notes-controller.js') < html.indexOf('app.js'));
+  assert.match(notesControllerJs, /window\.NotchNotesController/);
+  assert.match(notesControllerJs, /function createNote\(\)/);
+  assert.match(notesControllerJs, /NOTE_CATEGORIES_KEY = 'notch-note-categories-v1'/);
+  assert.match(notesControllerJs, /updateNoteCategory/);
+  assert.match(notesControllerJs, /removeNoteCategory/);
+  assert.match(notesControllerJs, /updateNoteTag/);
+  assert.match(notesControllerJs, /removeNoteTag/);
+  assert.match(notesControllerJs, /function renderNotesTaxonomy/);
+  assert.match(notesControllerJs, /function applyNoteTabIndentation/);
+  assert.match(notesControllerJs, /applyNoteTabIndentation\(editor, event\)/);
+  assert.match(notesControllerJs, /notesTaxonomyTree\?\.addEventListener/);
+  assert.match(notesControllerJs, /addEventListener\('paste'/);
+  assert.match(notesControllerJs, /addEventListener\('drop'/);
+  assert.match(notesControllerJs, /safeNoteImageReference/);
+  assert.match(appJs, /NotchNotesController\.createController/);
+  assert.doesNotMatch(appJs, /function createNote\(\)/);
+  assert.doesNotMatch(appJs, /function renderNotesTaxonomy\(/);
   assert.match(stylesCss, /\.notes-list \{[^}]*scrollbar-gutter:\s*stable[^}]*scrollbar-color:\s*transparent transparent/);
   assert.match(stylesCss, /\.notes-list:hover,\s*\.notes-list:focus-within \{[^}]*scrollbar-color:\s*var\(--scrollbar-thumb-hover\)/);
   assert.match(stylesCss, /\.notes-list::-webkit-scrollbar-button \{[^}]*display:\s*none[^}]*width:\s*0[^}]*height:\s*0/);
@@ -619,7 +625,7 @@ test('home quick capture routes notes and links through explicit modes', () => {
   assert.match(homeJs, /NotchDomain\.classifyHomeCapture/);
   assert.match(homeJs, /NotchWorkspace\?\.saveCapturedLink/);
   assert.match(homeJs, /NotchNotes\.saveCaptured/);
-  assert.match(appJs, /async saveCaptured\(content\)[\s\S]*?requestNoteTitle\(result\.note\)/);
+  assert.match(notesControllerJs, /async saveCaptured\(content\)[\s\S]*?requestNoteTitle\(result\.note\)/);
   assert.match(workspaceLinksApiJs, /async saveCapturedLink\(rawValue\)/);
 });
 
@@ -770,7 +776,7 @@ test('AI providers configure directly inside the settings page', () => {
 });
 
 test('automatic AI naming sends stable source identities', () => {
-  assert.match(appJs, /organizeMaterial\(\{ kind: 'note', sourceId: note\.id, text: expectedContent \}\)/);
+  assert.match(notesControllerJs, /organizeMaterial\(\{ kind: 'note', sourceId: note\.id, text: expectedContent \}\)/);
   assert.match(workspaceRecordingLifecycleJs, /organizeMaterial\(\{ kind: 'recording', sourceId: recording\.id, text: expectedTranscript \}\)/);
 });
 
