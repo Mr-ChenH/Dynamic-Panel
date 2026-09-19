@@ -430,8 +430,10 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/workspace-links-actions.js`，迁移链接分组重命名、分组内新增、Shift 多选、收藏/已读切换、删除、编辑和打开链接动作；拖拽排序继续留在协调器以保持 document 指针事件生命周期
 - 新增 `renderer/workspace-links-drag.js`，迁移链接长按拖拽、落点标记、跨组移动和补发 click 抑制；通过 host 注入排序、持久化和渲染回调
 - 新增 `renderer/workspace-links-api.js` 与 `renderer/workspace-recordings-api.js`，分别承接链接和录音的公共 API、资料上下文、AI 命名与撤销；`workspace.js` 仅组装兼容的 `NotchWorkspace` facade
-- 新增 `renderer/workspace-recordings-view.js`，迁移录音列表、详情、选择/删除事件和音频 Object URL 生命周期；MediaRecorder 生命周期仍由 `workspace.js` 协调
+- 新增 `renderer/workspace-recordings-view.js`，迁移录音列表、详情、选择/删除事件和音频 Object URL 生命周期
 - 新增 `renderer/workspace-transcription-pipeline.js`，统一管理百炼 PCM/WebAudio 链路、连接缓冲、转写事件和浏览器 SpeechRecognition 回退，并集中释放相关资源
+- 新增 `renderer/workspace-recording-lifecycle.js`，统一管理麦克风 reservation、MediaRecorder、暂停/恢复/停止、草稿提升、保存事务、录音快捷键和退出清理；`workspace.js` 只注入转写、持久化、渲染与 UI 投影依赖
+- 新增 `tests/workspace-recording-lifecycle.test.js`，覆盖草稿成功提升、暂停/恢复、保存失败回滚以及退出资源释放
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
-- `main.js` 当前约 2840 行，直接 `ipcMain` 注册仅剩待办提醒控制器边界
-- 完整 `npm test` 当前为 321 项：320 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
+- `main.js` 直接 `ipcMain.handle/on` 注册已降为 0，领域 IPC 均由独立注册器装配
+- 完整 `npm test` 当前为 341 项：340 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过

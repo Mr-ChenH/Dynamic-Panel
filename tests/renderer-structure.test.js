@@ -26,6 +26,7 @@ const workspaceLinksDragJs = fs.readFileSync(path.join(__dirname, '..', 'rendere
 const workspaceLinksApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-links-api.js'), 'utf8');
 const workspaceRecordingsApiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-api.js'), 'utf8');
 const workspaceRecordingsViewJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-view.js'), 'utf8');
+const workspaceRecordingLifecycleJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recording-lifecycle.js'), 'utf8');
 const workspaceTranscriptionPipelineJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-transcription-pipeline.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
@@ -129,6 +130,17 @@ test('recording library rendering and audio URL ownership stay outside the works
   assert.match(workspaceJs, /NotchWorkspaceRecordingsView\.createView/);
   assert.doesNotMatch(workspaceJs, /function renderRecordingDetail\(/);
   assert.doesNotMatch(workspaceJs, /let currentAudioUrl/);
+});
+
+test('MediaRecorder and recording draft lifecycle stay outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-recording-lifecycle.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceRecordingLifecycleJs, /new MediaRecorder/);
+  assert.match(workspaceRecordingLifecycleJs, /beginDraft/);
+  assert.match(workspaceRecordingLifecycleJs, /finalize/);
+  assert.match(workspaceRecordingLifecycleJs, /onAudioRecordingShortcut/);
+  assert.match(workspaceJs, /NotchWorkspaceRecordingLifecycle\.createLifecycle/);
+  assert.doesNotMatch(workspaceJs, /function startRecordingAttempt\(/);
+  assert.doesNotMatch(workspaceJs, /let mediaRecorder/);
 });
 
 test('cloud and browser transcription pipelines stay outside the workspace coordinator', () => {
@@ -250,8 +262,8 @@ test('global shortcuts expose configurable panel, launcher, screenshot, screen r
   assert.match(mainJs, /mode: 'video', region: true/);
   assert.match(mainJs, /captureService\.open\(request\)/);
   assert.match(workspaceJs, /settingsVideoShortcutChange/);
-  assert.match(workspaceJs, /onAudioRecordingShortcut/);
-  assert.match(workspaceJs, /await window\.NotchPanel\?\.navigate\(\{ tab: 'recordings' \}\)/);
+  assert.match(workspaceRecordingLifecycleJs, /onAudioRecordingShortcut/);
+  assert.match(workspaceRecordingLifecycleJs, /await window\.NotchPanel\?\.navigate\(\{ tab: 'recordings' \}\)/);
   assert.match(appJs, /shortcutRecorderAction/);
   assert.match(appJs, /saveRecordedShortcut/);
 });
@@ -360,7 +372,7 @@ test('home scratch note keeps only the save action', () => {
 
 test('recordings expose in-page API settings and create a live draft while recording', () => {
   assert.match(html, /id="recording-configure"/);
-  assert.match(workspaceJs, /function beginRecordingDraft\(\)/);
+  assert.match(workspaceRecordingLifecycleJs, /function beginDraft\(\)/);
   assert.match(workspaceRecordingsViewJs, /recordingLiveTranscript/);
   assert.match(workspaceRecordingsViewJs, /configure-transcription/);
 });
@@ -368,8 +380,9 @@ test('recordings expose in-page API settings and create a live draft while recor
 test('a live recording can be paused, resumed, and stopped from the recordings tab', () => {
   assert.match(workspaceRecordingsViewJs, /recording-live-pause/);
   assert.match(workspaceRecordingsViewJs, /recording-live-stop/);
-  assert.match(workspaceJs, /togglePauseRecording/);
-  assert.match(workspaceJs, /stopRecording/);
+  assert.match(workspaceRecordingLifecycleJs, /function togglePause\(\)/);
+  assert.match(workspaceRecordingLifecycleJs, /function stop\(\)/);
+  assert.match(workspaceRecordingLifecycleJs, /stopDurationMs = currentDuration\(\)/);
 });
 
 test('homepage visibility has one storage key, exact validation, and lifecycle events', () => {
@@ -733,7 +746,7 @@ test('AI providers configure directly inside the settings page', () => {
 
 test('automatic AI naming sends stable source identities', () => {
   assert.match(appJs, /organizeMaterial\(\{ kind: 'note', sourceId: note\.id, text: expectedContent \}\)/);
-  assert.match(workspaceJs, /organizeMaterial\(\{ kind: 'recording', sourceId: recording\.id, text: expectedTranscript \}\)/);
+  assert.match(workspaceRecordingLifecycleJs, /organizeMaterial\(\{ kind: 'recording', sourceId: recording\.id, text: expectedTranscript \}\)/);
 });
 
 test('hidden visual widgets stop presentation-only background work', () => {

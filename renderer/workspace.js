@@ -365,25 +365,8 @@
   let selectedRecordingId = recordings[0] && recordings[0].id;
   let recordingSelection = new Set();
   let recordingSelectionAnchor = selectedRecordingId || null;
-  let mediaStream = null;
-  let mediaRecorder = null;
-  let audioChunks = [];
-  let recordingStatus = 'idle';
-  let audioCaptureReserved = false;
-  function releaseAudioCapture() {
-    if (!audioCaptureReserved) return;
-    audioCaptureReserved = false;
-    window.notchAPI?.endAudioCapture?.().catch(() => {});
-  }
-  let recordingStartedAt = 0;
-  let pausedAt = 0;
-  let pausedTotalMs = 0;
-  let recordingTranscript = '';
-  let interimTranscript = '';
-  let recordingTimer = null;
-  let recordingStopDurationMs = 0;
-  let recordingCaptureIssue = '';
-  let recordingDraftId = '';
+  let recordingLifecycle = null;
+  let transcriptionPipeline = null;
   let transcriptionConfig = {
     configured: false,
     asrNeedsReentry: false,
@@ -414,21 +397,18 @@
   let removeAsrOnSave = false;
   let removeContentOnSave = false;
   let aiSettingsDirty = false;
-  let transcriptionFinishPromise = null;
   let strandsAudioContext = null;
   let strandsAudioSource = null;
   let strandsAnalyser = null;
   let strandsFrame = null;
   let strandsSamples = null;
   let strandsLevel = 0;
-  const recordingStartTask = Domain.createExclusiveAsyncTask(() => updateRecordingUi());
-
   function isRecordingActive() {
-    return ['recording', 'paused', 'saving'].includes(recordingStatus);
+    return recordingLifecycle?.isActive() === true;
   }
 
   function isRecordingBusy() {
-    return recordingStartTask.isPending() || isRecordingActive();
+    return recordingLifecycle?.isBusy() === true;
   }
 
   function stopRecordingStrands() {
@@ -459,7 +439,7 @@
       recordingStrands.height = height;
     }
     strandsAnalyser.getFloatTimeDomainData(strandsSamples);
-    const measured = recordingStatus === 'recording' ? Domain.calculateAudioLevel(strandsSamples) : 0;
+    const measured = recordingLifecycle?.status() === 'recording' ? Domain.calculateAudioLevel(strandsSamples) : 0;
     strandsLevel += (measured - strandsLevel) * (measured > strandsLevel ? 0.34 : 0.08);
     const context = recordingStrands.getContext('2d');
     context.clearRect(0, 0, width, height);
@@ -1029,11 +1009,11 @@
     }, 1200);
     if (
       transcriptionConfig.configured
-      && ['recording', 'paused'].includes(recordingStatus)
+      && ['recording', 'paused'].includes(recordingLifecycle.status())
       && !transcriptionPipeline.hasCloudSession()
     ) {
       transcriptionPipeline.stopBrowser();
-      transcriptionPipeline.startCloud(mediaStream);
+      transcriptionPipeline.startCloud(recordingLifecycle.stream());
     }
     updateRecordingUi();
     renderSettingsPanel();
@@ -1043,76 +1023,27 @@
     return saveJson(RECORDINGS_KEY, recordings.filter((recording) => !recording.isDraft));
   }
 
-  function currentDuration() {
-    return Domain.calculateRecordingDuration({
-      startedAt: recordingStartedAt,
-      status: recordingStatus,
-      pausedAt,
-      pausedTotalMs,
-      now: Date.now(),
-    });
-  }
-
-  function activeRecordingDraft() {
-    return recordingDraftId && recordings.find((recording) => recording.id === recordingDraftId) || null;
-  }
-
   function currentRecordingText() {
-    return `${recordingTranscript} ${interimTranscript}`.trim();
+    return recordingLifecycle?.currentText() || '';
   }
 
   function currentRecordingFeedback() {
-    if (recordingStartTask.isPending()) return '等待确认麦克风权限…';
-    if (recordingCaptureIssue) return recordingCaptureIssue;
-    if (recordingStatus === 'saving') return '正在保存录音…';
-    if (transcriptionConfig.asrNeedsReentry) return '转写密钥已失效 · 请重新配置 API Key';
-    if (transcriptionPipeline.status() === 'browser-error') return '未配置转写 API · 音频仍在录制';
-    if (transcriptionPipeline.status() === 'error') return '转写连接失败 · 音频仍在录制';
-    if (transcriptionPipeline.status() === 'connecting') return '正在连接转写服务';
-    if (recordingStatus === 'paused') return '录音已暂停';
-    if (!transcriptionConfig.configured && !currentRecordingText()) return '未配置转写 API · 音频仍会保存在本机';
-    return '正在录音';
-  }
-
-  function beginRecordingDraft() {
-    recordingDraftId = uid('recording');
-    const draft = {
-      ...Domain.createRecording({
-        id: recordingDraftId,
-        createdAt: recordingStartedAt,
-        durationMs: 0,
-        transcript: '',
-      }),
-      isDraft: true,
-    };
-    recordings.unshift(draft);
-    selectedRecordingId = draft.id;
-    recordingSelectionAnchor = draft.id;
-    renderRecordings();
-  }
-
-  function discardRecordingDraft() {
-    if (!recordingDraftId) return;
-    recordings = recordings.filter((recording) => recording.id !== recordingDraftId);
-    recordingSelection.delete(recordingDraftId);
-    selectedRecordingId = recordings[0]?.id || '';
-    recordingSelectionAnchor = selectedRecordingId || null;
-    recordingDraftId = '';
-    renderRecordings();
+    return recordingLifecycle?.currentFeedback() || '正在录音';
   }
 
   function syncRecordingDraftUi() {
-    const draft = activeRecordingDraft();
+    const draft = recordingLifecycle?.activeDraft();
     if (!draft) return;
-    const durationMs = recordingStopDurationMs || currentDuration();
+    const durationMs = recordingLifecycle.stopDuration() || recordingLifecycle.currentDuration();
     const text = currentRecordingText();
+    const status = recordingLifecycle.status();
     draft.durationMs = durationMs;
-    draft.transcript = recordingTranscript;
+    draft.transcript = recordingLifecycle.transcript();
     const row = recordingList?.querySelector(`.recording-item[data-id="${CSS.escape(draft.id)}"]`);
     const preview = row?.querySelector('[data-recording-preview]');
     const meta = row?.querySelector('[data-recording-meta]');
     if (preview) preview.textContent = text || currentRecordingFeedback();
-    if (meta) meta.textContent = `${recordingStatus === 'saving' ? '保存中' : recordingStatus === 'paused' ? '已暂停' : '录音中'} · ${formatClock(durationMs)}`;
+    if (meta) meta.textContent = `${status === 'saving' ? '保存中' : status === 'paused' ? '已暂停' : '录音中'} · ${formatClock(durationMs)}`;
     if (selectedRecordingId !== draft.id) return;
     const detailState = recordingDetail?.querySelector('[data-recording-live-state]');
     const detailDot = recordingDetail?.querySelector('[data-recording-live-dot]');
@@ -1122,60 +1053,81 @@
     const detailConfigure = recordingDetail?.querySelector('[data-action="configure-transcription"]');
     const detailPause = recordingDetail?.querySelector('.recording-live-pause');
     const detailStop = recordingDetail?.querySelector('.recording-live-stop');
-    if (detailState) detailState.textContent = recordingStatus === 'saving' ? '正在保存' : recordingStatus === 'paused' ? '已暂停' : '正在录音';
-    if (detailDot) detailDot.dataset.state = recordingStatus;
+    if (detailState) detailState.textContent = status === 'saving' ? '正在保存' : status === 'paused' ? '已暂停' : '正在录音';
+    if (detailDot) detailDot.dataset.state = status;
     if (detailTime) detailTime.textContent = formatClock(durationMs);
     if (detailTranscript && detailTranscript.value !== text) detailTranscript.value = text;
     if (detailFeedback) detailFeedback.textContent = text ? '转写内容会随录音实时更新' : currentRecordingFeedback();
     if (detailConfigure) detailConfigure.hidden = transcriptionConfig.configured && !transcriptionConfig.asrNeedsReentry;
     if (detailPause) {
-      detailPause.textContent = recordingStatus === 'paused' ? '继续' : '暂停';
-      detailPause.disabled = recordingStatus === 'saving';
+      detailPause.textContent = status === 'paused' ? '继续' : '暂停';
+      detailPause.disabled = status === 'saving';
     }
-    if (detailStop) detailStop.disabled = recordingStatus === 'saving';
+    if (detailStop) detailStop.disabled = status === 'saving';
   }
 
-  const transcriptionPipeline = window.NotchWorkspaceTranscriptionPipeline.createPipeline({
+  recordingLifecycle = window.NotchWorkspaceRecordingLifecycle.createLifecycle({
+    Domain,
+    elements: { liveTranscript, recordStart, recordPause, recordStop, recordingNew },
+    getRecordings: () => recordings,
+    setRecordings: (value) => { recordings = value; },
+    getSelectedId: () => selectedRecordingId,
+    setSelectedId: (value) => { selectedRecordingId = value; },
+    getSelection: () => recordingSelection,
+    setSelectionAnchor: (value) => { recordingSelectionAnchor = value; },
+    getConfig: () => transcriptionConfig,
+    getPipeline: () => transcriptionPipeline,
+    persist: persistRecordings,
+    render: () => renderRecordings(),
+    startStrands: startRecordingStrands,
+    stopStrands: stopRecordingStrands,
+    uid,
+    formatClock,
+    updateUi: () => updateRecordingUi(),
+  });
+  transcriptionPipeline = window.NotchWorkspaceTranscriptionPipeline.createPipeline({
     Domain,
     getConfig: () => transcriptionConfig,
-    getStream: () => mediaStream,
-    getRecordingStatus: () => recordingStatus,
-    getTranscript: () => recordingTranscript,
-    setTranscript: (value) => { recordingTranscript = value; },
-    getInterimTranscript: () => interimTranscript,
-    setInterimTranscript: (value) => { interimTranscript = value; },
+    getStream: () => recordingLifecycle.stream(),
+    getRecordingStatus: () => recordingLifecycle.status(),
+    getTranscript: () => recordingLifecycle.transcript(),
+    setTranscript: (value) => recordingLifecycle.setTranscript(value),
+    getInterimTranscript: () => recordingLifecycle.interimTranscript(),
+    setInterimTranscript: (value) => recordingLifecycle.setInterimTranscript(value),
     updateUi: () => updateRecordingUi(),
   });
 
   function updateRecordingUi() {
     const recordingActive = isRecordingActive();
     const recordingBusy = isRecordingBusy();
-    const visualState = recordingStartTask.isPending() ? 'requesting' : recordingStatus;
+    const status = recordingLifecycle?.status() || 'idle';
+    const starting = recordingLifecycle?.isStarting() === true;
+    const visualState = starting ? 'requesting' : status;
     if (homeRecorder) homeRecorder.dataset.state = visualState;
     if (recordingDot) recordingDot.dataset.state = visualState;
     if (recordingStateLabel) {
-      recordingStateLabel.textContent = recordingStartTask.isPending()
+      recordingStateLabel.textContent = starting
         ? '等待录音权限'
-        : recordingStatus === 'recording'
+        : status === 'recording'
         ? '正在录音'
-        : recordingStatus === 'paused'
+        : status === 'paused'
           ? '已暂停'
-          : recordingStatus === 'saving'
+          : status === 'saving'
             ? '正在保存'
             : '快速录音';
     }
-    if (recordingTime) recordingTime.textContent = formatClock(recordingActive ? currentDuration() : 0);
+    if (recordingTime) recordingTime.textContent = formatClock(recordingActive ? recordingLifecycle.currentDuration() : 0);
     if (recordStart) recordStart.disabled = recordingBusy;
     if (recordPause) {
-      recordPause.disabled = !['recording', 'paused'].includes(recordingStatus);
-      recordPause.setAttribute('aria-label', recordingStatus === 'paused' ? '继续录音' : '暂停录音');
-      recordPause.classList.toggle('resume', recordingStatus === 'paused');
+      recordPause.disabled = !['recording', 'paused'].includes(status);
+      recordPause.setAttribute('aria-label', status === 'paused' ? '继续录音' : '暂停录音');
+      recordPause.classList.toggle('resume', status === 'paused');
     }
-    if (recordStop) recordStop.disabled = !['recording', 'paused'].includes(recordingStatus);
+    if (recordStop) recordStop.disabled = !['recording', 'paused'].includes(status);
     if (recordingNew) {
       recordingNew.disabled = recordingBusy;
       recordingNew.textContent = recordingBusy ? '录制' : '录音';
-      recordingNew.setAttribute('aria-label', recordingStartTask.isPending()
+      recordingNew.setAttribute('aria-label', starting
         ? '正在请求麦克风权限'
         : recordingActive ? '录音进行中' : '开始录音');
     }
@@ -1196,242 +1148,6 @@
     }));
   }
 
-  function stopMediaTracks() {
-    stopRecordingStrands();
-    if (mediaStream) {
-      mediaStream.getTracks().forEach((track) => track.stop());
-      mediaStream = null;
-    }
-  }
-
-  function chooseRecordingMimeType() {
-    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
-    return candidates.find((type) => window.MediaRecorder && MediaRecorder.isTypeSupported(type)) || '';
-  }
-
-  async function finalizeRecording(blob, durationMs) {
-    recordingStatus = 'saving';
-    updateRecordingUi();
-    if (!blob || blob.size === 0) {
-      releaseAudioCapture();
-      recordingStatus = 'idle';
-      recordingCaptureIssue = '';
-      discardRecordingDraft();
-      if (liveTranscript) {
-        liveTranscript.textContent = '录音为空 · 请检查麦克风输入';
-        liveTranscript.hidden = false;
-      }
-      updateRecordingUi();
-      return;
-    }
-    let saved;
-    try {
-      saved = window.notchAPI && await window.notchAPI.saveRecording({
-        bytes: await blob.arrayBuffer(),
-        mimeType: blob.type || 'audio/webm',
-      });
-    } catch (error) {
-      saved = null;
-    }
-    if (saved && saved.ok) {
-      const draft = activeRecordingDraft();
-      const recording = Domain.createRecording({
-        id: draft?.id || uid('recording'),
-        createdAt: draft?.createdAt || Date.now(),
-        durationMs,
-        transcript: recordingTranscript,
-        audioPath: saved.audioPath,
-        mimeType: saved.mimeType || blob.type,
-      });
-      const draftIndex = recordings.findIndex((item) => item.id === recording.id);
-      if (draftIndex >= 0) recordings.splice(draftIndex, 1, recording);
-      else recordings.unshift(recording);
-      recordingDraftId = '';
-      selectedRecordingId = recording.id;
-      persistRecordings();
-      renderRecordings();
-      if (recording.transcript && transcriptionConfig.autoNameRecordings === true && window.notchAPI?.organizeMaterial) {
-        const expectedTitle = recording.title;
-        const expectedCategory = recording.category;
-        const expectedTranscript = recording.transcript;
-        window.notchAPI.organizeMaterial({ kind: 'recording', sourceId: recording.id, text: expectedTranscript }).then((metadata) => {
-          const target = recordings.find((item) => item.id === recording.id);
-          if (!target || target.title !== expectedTitle || target.category !== expectedCategory || target.transcript !== expectedTranscript || !metadata || !metadata.ok) return;
-          target.title = metadata.title || target.title;
-          target.category = metadata.category || target.category;
-          persistRecordings();
-          renderRecordings();
-        }).catch(() => {});
-      }
-      if (liveTranscript) {
-        liveTranscript.textContent = recording.transcript || (transcriptionConfig.configured
-          ? '录音已保存 · 暂无转写'
-          : '录音已保存 · 请配置转写 API');
-        liveTranscript.hidden = false;
-      }
-    } else {
-      discardRecordingDraft();
-      if (liveTranscript) {
-        liveTranscript.textContent = '录音保存失败，请检查本机存储权限';
-        liveTranscript.hidden = false;
-      }
-    }
-    recordingStatus = 'idle';
-    recordingStartedAt = 0;
-    releaseAudioCapture();
-    pausedAt = 0;
-    pausedTotalMs = 0;
-    audioChunks = [];
-    recordingTranscript = '';
-    interimTranscript = '';
-    recordingCaptureIssue = '';
-    updateRecordingUi();
-  }
-
-  async function startRecordingAttempt() {
-    if (recordingStatus !== 'idle' || !navigator.mediaDevices || !window.MediaRecorder) return;
-    try {
-      if (window.notchAPI?.beginAudioCapture) {
-        const reservation = await window.notchAPI.beginAudioCapture();
-        if (!reservation?.ok) {
-          if (liveTranscript) { liveTranscript.textContent = '请先结束当前截图或录屏，再开始录音。'; liveTranscript.hidden = false; }
-          return;
-        }
-        audioCaptureReserved = true;
-      }
-      if (window.notchAPI && !(await window.notchAPI.ensureMicrophone())) {
-        releaseAudioCapture();
-        if (liveTranscript) {
-          liveTranscript.textContent = '无法访问麦克风 · 请在系统设置中授权';
-          liveTranscript.hidden = false;
-        }
-        return;
-      }
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: false,
-      });
-      const audioTrack = mediaStream.getAudioTracks()[0];
-      if (!audioTrack || audioTrack.readyState !== 'live') throw new Error('audio_track_unavailable');
-      recordingCaptureIssue = '';
-      audioTrack.addEventListener('mute', () => {
-        if (!['recording', 'paused'].includes(recordingStatus)) return;
-        recordingCaptureIssue = '麦克风无输入 · 请检查系统音源';
-        updateRecordingUi();
-      });
-      audioTrack.addEventListener('unmute', () => {
-        recordingCaptureIssue = '';
-        updateRecordingUi();
-      });
-      startRecordingStrands(mediaStream);
-      const mimeType = chooseRecordingMimeType();
-      mediaRecorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
-      audioChunks = [];
-      recordingTranscript = '';
-      interimTranscript = '';
-      transcriptionPipeline.reset();
-      recordingStartedAt = Date.now();
-      recordingStopDurationMs = 0;
-      pausedTotalMs = 0;
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size) audioChunks.push(event.data);
-      };
-      mediaRecorder.onerror = () => {
-        recordingCaptureIssue = '录音中断 · 请重新开始';
-        updateRecordingUi();
-      };
-      mediaRecorder.onstop = async () => {
-        const durationMs = recordingStopDurationMs || currentDuration();
-        const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || mimeType || 'audio/webm' });
-        stopMediaTracks();
-        if (transcriptionFinishPromise) {
-          await transcriptionFinishPromise;
-          transcriptionFinishPromise = null;
-        }
-        finalizeRecording(blob, durationMs);
-      };
-      mediaRecorder.start(1000);
-      recordingStatus = 'recording';
-      transcriptionFinishPromise = null;
-      beginRecordingDraft();
-      if (transcriptionConfig.configured) {
-        transcriptionPipeline.startCloud(mediaStream);
-      } else {
-        transcriptionPipeline.startBrowser();
-      }
-      clearInterval(recordingTimer);
-      recordingTimer = setInterval(updateRecordingUi, 500);
-      updateRecordingUi();
-    } catch (error) {
-      stopMediaTracks();
-      recordingStatus = 'idle';
-      releaseAudioCapture();
-      recordingCaptureIssue = '';
-      discardRecordingDraft();
-      if (liveTranscript) {
-        liveTranscript.textContent = '无法开始录音 · 请检查麦克风权限';
-        liveTranscript.hidden = false;
-      }
-      updateRecordingUi();
-    }
-  }
-
-  function startRecording() {
-    return recordingStartTask.run(startRecordingAttempt);
-  }
-
-  function togglePauseRecording() {
-    if (!mediaRecorder) return;
-    if (recordingStatus === 'recording') {
-      mediaRecorder.pause();
-      pausedAt = Date.now();
-      recordingStatus = 'paused';
-      if (!transcriptionConfig.configured) transcriptionPipeline.stopBrowser();
-    } else if (recordingStatus === 'paused') {
-      pausedTotalMs += Date.now() - pausedAt;
-      pausedAt = 0;
-      mediaRecorder.resume();
-      recordingStatus = 'recording';
-      if (!transcriptionConfig.configured) transcriptionPipeline.startBrowser();
-    }
-    updateRecordingUi();
-  }
-
-  function stopRecording() {
-    if (!mediaRecorder || !['recording', 'paused'].includes(recordingStatus)) return;
-    recordingStopDurationMs = currentDuration();
-    recordingStatus = 'saving';
-    transcriptionPipeline.stopBrowser();
-    transcriptionFinishPromise = transcriptionPipeline.hasCloudSession()
-      ? transcriptionPipeline.finishCloud()
-      : Promise.resolve({ ok: false, error: 'not_active', transcript: recordingTranscript });
-    clearInterval(recordingTimer);
-    recordingTimer = null;
-    updateRecordingUi();
-    try {
-      mediaRecorder.stop();
-    } catch (error) {
-      stopMediaTracks();
-      releaseAudioCapture();
-      recordingStatus = 'idle';
-      discardRecordingDraft();
-      updateRecordingUi();
-    }
-  }
-
-  if (recordStart) recordStart.addEventListener('click', startRecording);
-  if (recordPause) recordPause.addEventListener('click', togglePauseRecording);
-  if (recordStop) recordStop.addEventListener('click', stopRecording);
-  if (recordingNew) recordingNew.addEventListener('click', startRecording);
-  window.notchAPI?.onAudioRecordingShortcut?.(async () => {
-    if (['recording', 'paused'].includes(recordingStatus)) {
-      stopRecording();
-      return;
-    }
-    if (recordingStatus !== 'idle' || recordingStartTask.isPending()) return;
-    await window.NotchPanel?.navigate({ tab: 'recordings' });
-    await startRecording();
-  });
   if (recordingConfigure) recordingConfigure.addEventListener('click', () => { void openTranscriptionSettings('transcription'); });
   if (transcriptionSettingsSave) transcriptionSettingsSave.addEventListener('click', saveTranscriptionSettings);
   aiProviderTranscription?.addEventListener('click', () => selectAIServicePanel('transcription'));
@@ -1790,15 +1506,15 @@
     setSelection: (value) => { recordingSelection = value; },
     getSelectionAnchor: () => recordingSelectionAnchor,
     setSelectionAnchor: (value) => { recordingSelectionAnchor = value; },
-    getStatus: () => recordingStatus,
+    getStatus: () => recordingLifecycle.status(),
     currentText: currentRecordingText,
     currentFeedback: currentRecordingFeedback,
     formatClock,
     formatShortDate,
     persist: persistRecordings,
     syncDraftUi: syncRecordingDraftUi,
-    pauseRecording: togglePauseRecording,
-    stopRecording,
+    pauseRecording: recordingLifecycle.togglePause,
+    stopRecording: recordingLifecycle.stop,
     openTranscriptionSettings,
     createIconButton,
     icons: { copy: COPY_ICON, open: OPEN_ICON, delete: DELETE_ICON },
@@ -1817,9 +1533,7 @@
   });
 
   window.addEventListener('beforeunload', () => {
-    releaseAudioCapture();
-    transcriptionPipeline.dispose();
-    stopMediaTracks();
+    recordingLifecycle.dispose();
     recordingsView.dispose();
   });
 
@@ -1856,8 +1570,7 @@
     persist: persistRecordings,
     render: renderRecordings,
     syncWorkspaceData,
-    getLinkContext: (id) => linksApi.linkContext(id),
-    startRecording,
+    startRecording: recordingLifecycle.start,
     isRecordingActive: isRecordingBusy,
   });
 
