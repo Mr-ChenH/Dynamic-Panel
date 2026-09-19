@@ -20,6 +20,7 @@ const todoListControllerJs = fs.readFileSync(path.join(__dirname, '..', 'rendere
 const todoEditorControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-editor-controller.js'), 'utf8');
 const todoMutationControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-mutation-controller.js'), 'utf8');
 const todoScopeControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-scope-controller.js'), 'utf8');
+const todoApiControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-api-controller.js'), 'utf8');
 const clipboardDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-domain.js'), 'utf8');
 const clipboardStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-store.js'), 'utf8');
 const clipboardControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-controller.js'), 'utf8');
@@ -342,6 +343,10 @@ test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', (
   assert.match(todoScopeControllerJs, /createTodoScopeController/);
   assert.match(todoScopeControllerJs, /bindControls/);
   assert.match(appJs, /NotchTodoScope\.createTodoScopeController/);
+  assert.match(todoApiControllerJs, /createTodoApiController/);
+  assert.match(todoApiControllerJs, /applyAIBatch/);
+  assert.match(todoApiControllerJs, /undoAIBatch/);
+  assert.match(appJs, /NotchTodoApi\.createTodoApiController/);
   assert.match(appJs, /todoScopeController\.setTimeScope/);
   assert.match(appJs, /NotchTodoMutation\.createTodoMutationController/);
   assert.doesNotMatch(appJs, /function (addTodo|editTodo|toggleTodo|deleteTodo)\(/);

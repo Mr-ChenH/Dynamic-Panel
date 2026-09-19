@@ -737,41 +737,20 @@ applyTodoCategoryNames();
 
 document.getElementById('todo-ai-add')?.addEventListener('click', () => window.NotchAI?.openText?.('extractTodos'));
 
-window.NotchTodo = {
+const todoApiController = window.NotchTodoApi.createTodoApiController({
+  priorities: PRIORITIES,
+  domain: window.NotchDomain,
+  getData: () => data,
+  setData: (next) => { data = next; },
   getTimeScope: () => todoTimeScope,
   setTimeScope: (scope) => todoScopeController.setTimeScope(scope),
-  getScopeCounts: () => ({ ...window.NotchDomain.todoTimeScopeCounts(allTodoItems()) }),
-  snapshot: () => Object.fromEntries(PRIORITIES.map((priority) => [priority, (data[priority] || []).map((todo) => ({ ...todo }))])),
-  chatContexts: () => PRIORITIES.flatMap((priority) => (data[priority] || []).map((todo) => ({
-    sourceType: 'todo',
-    sourceId: todo.id,
-    sourceTitle: todo.text,
-    sourceRevision: String(todo.updatedAt || todo.createdAt || ''),
-    text: [`状态：${todo.done ? '已完成' : '未完成'}`, `责任领域：${todoCategoryNames[priority] || priority}`, todo.deadline ? `截止时间：${todo.deadline}` : '截止时间：未设置'].join('\n'),
-    detail: `${todoCategoryNames[priority] || priority} · ${todo.done ? '已完成' : '未完成'}`,
-    updatedAt: todo.updatedAt || todo.createdAt || 0,
-  }))),
-  async applyAIBatch(candidates) {
-    const applied = window.NotchAIDomain?.createTodoBatch(data, candidates, () => generateId(), Date.now());
-    if (!applied?.ok) return applied || { ok: false, error: 'invalid_candidates' };
-    const previous = data;
-    data = applied.next;
-    if (!saveData(data)) { data = previous; return { ok: false, error: 'save_failed' }; }
-    renderAll();
-    const workspaceSynced = await syncWorkspaceSnapshot();
-    return { ok: true, count: applied.added.length, undo: applied.added, workspaceSynced };
-  },
-  async undoAIBatch(added) {
-    const result = window.NotchAIDomain?.undoTodoBatch(data, added);
-    if (!result) return { ok: false, error: 'invalid_undo' };
-    const previous = data;
-    data = result.next;
-    if (!saveData(data)) { data = previous; return { ok: false, error: 'save_failed' }; }
-    renderAll();
-    const workspaceSynced = await syncWorkspaceSnapshot();
-    return { ok: true, removed: result.removed.length, conflicts: result.conflicts.length, workspaceSynced };
-  },
-};
+  getCategoryNames: () => todoCategoryNames,
+  generateId,
+  saveData,
+  renderAll,
+  syncWorkspaceSnapshot,
+});
+window.NotchTodo = todoApiController;
 
 const todoEditorController = window.NotchTodoEditor.createTodoEditorController({
   document,
