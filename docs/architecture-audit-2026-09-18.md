@@ -20,10 +20,10 @@
 
 | 文件 | 行数 | 主要问题 |
 | --- | ---: | --- |
-| `main.js` | 3879 | 主进程总装配器，混合窗口、IPC、媒体、AI、财务、工作区和扩展系统 |
-| `renderer/styles.css` | 6185 | 多模块样式和主题覆盖集中，存在重复覆盖和加载顺序依赖 |
-| `renderer/app.js` | 5052 | shell、待办、剪贴板、笔记、首页和拖拽状态混合 |
-| `renderer/workspace.js` | 3515 | 设置、财务、音乐、录音、密钥、AI 和 workspace 混合 |
+| `main.js` | 2848 | 主进程装配器仍混合财务配置、当前窗口扫描、转写配置和待办提醒调度 |
+| `renderer/styles.css` | 5810 | 多模块样式和主题覆盖集中，存在重复覆盖和加载顺序依赖 |
+| `renderer/app.js` | 4786 | 待办、剪贴板、笔记和首页布局状态仍然混合 |
+| `renderer/workspace.js` | 678 | 已退化为链接/录音/设置控制器装配器，仍保留录音 UI 投影 |
 | `finance-service.js` | 2212 | 多 provider、缓存、并发取消和结果归一化集中 |
 | `tests/notch-focus.electron.js` | 1524 | 面板交互和大量场景验收混在一个 Electron 测试文件 |
 | `tests/domain.test.js` | 1032 | 多领域 renderer domain 测试集中 |
@@ -121,11 +121,11 @@ main/ipc/ai.js
 
 ### 5. renderer 文件低内聚
 
-`renderer/app.js` 同时处理 shell、Tab、待办、剪贴板、笔记、首页布局、主题、launcher 和拖拽。
+`renderer/app.js` 已将 shell、面板公共控制器、无状态 Dock 动效和部分纯数据逻辑下沉，但仍同时处理待办、剪贴板、笔记和首页布局状态。
 
-`renderer/workspace.js` 同时处理设置、财务、音乐、录音、密钥、AI、快捷键和 workspace。
+`renderer/workspace.js` 已通过显式 host 注入拆出当前窗口、密钥、链接、录音生命周期、转写、AI 设置和通用应用设置；剩余主要职责是录音 UI 投影和模块装配。
 
-建议建立显式 renderer context，再按领域拆分：
+后续继续按领域拆分：
 
 ```text
 renderer/shell.js
@@ -141,7 +141,7 @@ renderer/finance-settings.js
 
 ### 6. `renderer/styles.css` 过大
 
-当前约 6185 行，存在重复选择器、末尾追加修正、主题覆盖分散和 CSS 加载顺序依赖。
+当前约 5810 行，存在重复选择器、末尾追加修正、主题覆盖分散和 CSS 加载顺序依赖。
 
 建议拆分：
 
@@ -233,24 +233,21 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 
 ## 建议重构顺序
 
-1. 修复 `package.json`，加入 `main/**/*.js`
-2. 自动将 `main/*.js` 纳入语法检查
-3. 增加打包内容完整性测试
-4. 修复 `notch-focus.electron.js` 的收起失败
-5. 提取 `main/transcription-service.js`
-6. 提取 `main/finance-background-refresh.js`
-7. 拆分 `main.js` 的 IPC 注册
-8. 拆分 `renderer/app.js` 的 shell、待办和剪贴板
-9. 拆分 `renderer/workspace.js` 的设置、录音、音乐和密钥
-10. 将 `renderer/styles.css` 拆成模块样式和统一主题层
-11. 增加通知真实 Electron 生命周期测试
-12. 最后进行全模块浅色主题实机验收
+1. 从 `renderer/app.js` 提取笔记领域及图片、Markdown 边界
+2. 为剪贴板历史和首页收藏建立共享 store，再迁移完整剪贴板控制器
+3. 拆分首页布局、待办控制器和番茄钟
+4. 从 `workspace.js` 提取剩余录音 UI 投影
+5. 从 `main.js` 提取财务配置、当前窗口扫描、转写配置和待办提醒服务
+6. 将 `renderer/styles.css` 的 notes、clipboard、recordings、待办四象限和 theme 拆成领域样式
+7. 拆分大型 Electron 验收和 domain 测试
+8. 增加通知真实 Electron 生命周期测试
+9. 完成全模块浅色主题和 electron-builder 产物实机验收
 
 ## 当前结论
 
-目前最高风险已从打包模块遗漏和启动顺序回归下降为 renderer 大文件维护成本、通知真实生命周期覆盖不足，以及 launcher/待办提醒 IPC 仍集中在 `main.js`。核心 Electron 启动、面板收起、工作区保留和 capture 验收当前均已通过。
+目前最高风险已从打包模块遗漏和启动顺序回归下降为 `renderer/app.js` 与 `renderer/styles.css` 的维护成本、`main.js` 剩余领域实现，以及通知真实生命周期覆盖不足。核心 Electron 启动、面板收起、工作区保留和 capture 验收当前均已通过。
 
-本报告之后的第一阶段重构应只处理发布完整性和检查覆盖，完成后再进入转录服务拆分，保证每一步可以独立回归和定位。
+后续继续保持一次一个领域、独立提交和完整回归；优先拆分笔记与剪贴板共享状态，再处理主进程剩余领域实现。
 
 ## 实施进度
 
@@ -424,8 +421,8 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/todo-planner.css`，迁移待办时间范围规划栏、范围计数和逾期跳转样式；待办四象限及截止时间弹层样式暂保留在覆盖层中
 - 新增 `renderer/todo-list.css`，迁移待办列表文字、截止时间、逾期重排、添加行和已完成折叠样式；四象限边框与日期弹层覆盖继续保留在 shell 覆盖层中
 - 新增 `renderer/todo-editor.css`，迁移截止时间触发器、日期编辑器、快捷日期、日历网格和时间选择基础样式；文件在 `styles.css` 前加载，保留后续紧凑弹层覆盖
-- 新增 `renderer/workspace-links-domain.js`，承接 `notch-link-groups` 的规范化、链接上下文和 AI 对话资料行生成；链接 UI 事件与渲染暂由 `workspace.js` 协调，后续可在此边界继续下沉
-- 新增 `renderer/workspace-links-renderer.js`，通过显式 host 注入迁移链接列表渲染、筛选侧栏、分组分页和行操作控件；编辑、拖拽和持久化事件仍由 `workspace.js` 管理
+- 新增 `renderer/workspace-links-domain.js`，承接 `notch-link-groups` 的规范化、链接上下文和 AI 对话资料行生成
+- 新增 `renderer/workspace-links-renderer.js`，通过显式 host 注入迁移链接列表渲染、筛选侧栏、分组分页和行操作控件
 - 新增 `renderer/workspace-links-controller.js`，迁移链接筛选重置、侧栏导航、全部折叠、顶部新增和批量删除监听；链接编辑、拖拽和 AI 操作继续由协调器处理
 - 新增 `renderer/workspace-links-actions.js`，迁移链接分组重命名、分组内新增、Shift 多选、收藏/已读切换、删除、编辑和打开链接动作；拖拽排序继续留在协调器以保持 document 指针事件生命周期
 - 新增 `renderer/workspace-links-drag.js`，迁移链接长按拖拽、落点标记、跨组移动和补发 click 抑制；通过 host 注入排序、持久化和渲染回调
@@ -435,7 +432,8 @@ renderer 的 overview、ranking、quotes、history、fundamentals 和 search 都
 - 新增 `renderer/workspace-recording-lifecycle.js`，统一管理麦克风 reservation、MediaRecorder、暂停/恢复/停止、草稿提升、保存事务、录音快捷键和退出清理；`workspace.js` 只注入转写、持久化、渲染与 UI 投影依赖
 - 新增 `tests/workspace-recording-lifecycle.test.js`，覆盖草稿成功提升、暂停/恢复、保存失败回滚以及退出资源释放
 - 新增 `renderer/workspace-ai-settings.js`，迁移 AI 厂商导航、模型草稿、配置加载与保存、连接验证、诊断、迁移确认和录音配置跳转；录音生命周期与转写管线通过 getter 读取当前配置
-- `renderer/workspace.js` 当前约 900 行，保留通用应用设置、录音 UI 投影和各 workspace 模块装配
+- 新增 `renderer/workspace-app-settings.js`，迁移功能显隐、首页组件、五类快捷键、主题、默认页、工作区和开机启动设置；AI 配置和录音状态通过显式回调接入
+- `renderer/workspace.js` 当前约 678 行，只保留录音 UI 投影和各 workspace 模块装配
 - `scripts/test-desktop.js` 已将新增 renderer 模块纳入语法检查
 - `main.js` 直接 `ipcMain.handle/on` 注册已降为 0，领域 IPC 均由独立注册器装配
-- 完整 `npm test` 当前为 342 项：341 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过
+- 完整 `npm test` 当前为 343 项：342 通过，1 项按平台跳过；面板、保留工作区、startup 和 capture 四个 Electron 验收全部通过

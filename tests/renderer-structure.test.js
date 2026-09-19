@@ -28,6 +28,7 @@ const workspaceRecordingsApiJs = fs.readFileSync(path.join(__dirname, '..', 'ren
 const workspaceRecordingsViewJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recordings-view.js'), 'utf8');
 const workspaceRecordingLifecycleJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-recording-lifecycle.js'), 'utf8');
 const workspaceTranscriptionPipelineJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-transcription-pipeline.js'), 'utf8');
+const workspaceAppSettingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-app-settings.js'), 'utf8');
 const workspaceAISettingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace-ai-settings.js'), 'utf8');
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
@@ -155,6 +156,18 @@ test('cloud and browser transcription pipelines stay outside the workspace coord
   assert.doesNotMatch(workspaceJs, /let speechRecognition/);
 });
 
+test('general app settings stay outside the workspace coordinator', () => {
+  assert.ok(html.indexOf('workspace-app-settings.js') < html.indexOf('workspace.js'));
+  assert.match(workspaceAppSettingsJs, /setFeature/);
+  assert.match(workspaceAppSettingsJs, /setDefaultTab/);
+  assert.match(workspaceAppSettingsJs, /setAutoLaunch/);
+  assert.match(workspaceAppSettingsJs, /notch:record-shortcut/);
+  assert.match(workspaceJs, /NotchWorkspaceAppSettings\.createController/);
+  assert.doesNotMatch(workspaceJs, /settingsFeatureList/);
+  assert.doesNotMatch(workspaceJs, /settingsVideoShortcutChange/);
+  assert.doesNotMatch(workspaceJs, /function renderSettingsPanel\(/);
+});
+
 test('AI provider settings and diagnostics stay outside the workspace coordinator', () => {
   assert.ok(html.indexOf('workspace-ai-settings.js') < html.indexOf('workspace.js'));
   assert.match(workspaceAISettingsJs, /setTranscriptionConfig/);
@@ -273,7 +286,7 @@ test('global shortcuts expose configurable panel, launcher, screenshot, screen r
   assert.match(mainJs, /onActionShortcut: \(action\)/);
   assert.match(mainJs, /mode: 'video', region: true/);
   assert.match(mainJs, /captureService\.open\(request\)/);
-  assert.match(workspaceJs, /settingsVideoShortcutChange/);
+  assert.match(workspaceAppSettingsJs, /settingsVideoShortcutChange/);
   assert.match(workspaceRecordingLifecycleJs, /onAudioRecordingShortcut/);
   assert.match(workspaceRecordingLifecycleJs, /await window\.NotchPanel\?\.navigate\(\{ tab: 'recordings' \}\)/);
   assert.match(appJs, /shortcutRecorderAction/);
@@ -424,7 +437,7 @@ test('settings exposes every panel tab as a possible default opening page', () =
   assert.deepEqual(options, [
     'home', 'todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings',
   ]);
-  assert.match(workspaceJs, /setDefaultTab/);
+  assert.match(workspaceAppSettingsJs, /setDefaultTab/);
 });
 
 test('finance IPC turns expected cancellation into a structured result', () => {

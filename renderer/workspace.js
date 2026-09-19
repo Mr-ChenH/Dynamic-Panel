@@ -295,26 +295,6 @@
   const recordingDetail = document.getElementById('recording-detail');
   const recordingCount = document.getElementById('recording-count');
   const recordingBulkDelete = document.getElementById('recording-bulk-delete');
-  const settingsFeatureList = document.getElementById('settings-feature-list');
-  const settingsHomeModuleList = document.getElementById('settings-home-module-list');
-  const settingsShortcutValue = document.getElementById('settings-shortcut-value');
-  const settingsShortcutChange = document.getElementById('settings-shortcut-change');
-  const settingsLauncherShortcutValue = document.getElementById('settings-launcher-shortcut-value');
-  const settingsLauncherShortcutChange = document.getElementById('settings-launcher-shortcut-change');
-  const settingsScreenshotShortcutValue = document.getElementById('settings-screenshot-shortcut-value');
-  const settingsScreenshotShortcutChange = document.getElementById('settings-screenshot-shortcut-change');
-  const settingsVideoShortcutValue = document.getElementById('settings-video-shortcut-value');
-  const settingsVideoShortcutChange = document.getElementById('settings-video-shortcut-change');
-  const settingsAudioShortcutValue = document.getElementById('settings-audio-shortcut-value');
-  const settingsAudioShortcutChange = document.getElementById('settings-audio-shortcut-change');
-  const settingsDefaultTab = document.getElementById('settings-default-tab');
-  const settingsTheme = document.getElementById('settings-theme');
-  const settingsWorkspaceKind = document.getElementById('settings-workspace-kind');
-  const settingsWorkspacePath = document.getElementById('settings-workspace-path');
-  const settingsWorkspaceOpen = document.getElementById('settings-workspace-open');
-  const settingsWorkspaceChoose = document.getElementById('settings-workspace-choose');
-  const settingsAutoLaunch = document.getElementById('settings-auto-launch');
-  const settingsInlineNote = document.getElementById('settings-inline-note');
 
   let recordings = loadJson(RECORDINGS_KEY, []).map(Domain.createRecording).filter(Boolean);
   let selectedRecordingId = recordings[0] && recordings[0].id;
@@ -323,8 +303,7 @@
   let recordingLifecycle = null;
   let transcriptionPipeline = null;
   let aiSettingsController = null;
-  let settingsAppSettings = null;
-  let settingsWorkspace = null;
+  let appSettingsController = null;
   let strandsAudioContext = null;
   let strandsAudioSource = null;
   let strandsAnalyser = null;
@@ -447,107 +426,6 @@
     }
   }
 
-  function shortcutLabel(value) {
-    if (!value) return '未设置';
-    const mac = window.notchAPI?.platform === 'darwin';
-    return String(value).split('+').map((part) => ({
-      CommandOrControl: mac ? 'Cmd' : 'Ctrl',
-      Command: 'Cmd',
-      Control: 'Ctrl',
-      Option: 'Option',
-      Alt: mac ? 'Option' : 'Alt',
-    })[part] || part).join(' + ');
-  }
-
-  function setSettingsNote(message, error = false) {
-    if (!settingsInlineNote) return;
-    settingsInlineNote.textContent = message || '';
-    settingsInlineNote.classList.toggle('error', error);
-  }
-
-  function renderSettingsPanel() {
-    const summary = Domain.settingsSummary({
-      appSettings: settingsAppSettings,
-      workspace: settingsWorkspace,
-      transcription: aiSettingsController?.config(),
-    });
-    if (settingsShortcutValue) settingsShortcutValue.textContent = shortcutLabel(summary.shortcut);
-    if (settingsLauncherShortcutValue) settingsLauncherShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.launcher);
-    if (settingsScreenshotShortcutValue) settingsScreenshotShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenshot);
-    if (settingsVideoShortcutValue) settingsVideoShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.screenRecording);
-    if (settingsAudioShortcutValue) settingsAudioShortcutValue.textContent = shortcutLabel(settingsAppSettings?.shortcuts?.audioRecording);
-    if (settingsTheme) {
-      const theme = settingsAppSettings?.theme === 'light' ? 'light' : 'dark';
-      settingsTheme.querySelectorAll('[data-theme-value]').forEach((button) => {
-        const selected = button.dataset.themeValue === theme;
-        button.setAttribute('aria-pressed', String(selected));
-      });
-    }
-    if (settingsDefaultTab) {
-      const visibleTabs = new Set(Domain.visiblePanelTabs(
-        ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings'],
-        settingsAppSettings?.features
-      ));
-      Array.from(settingsDefaultTab.options).forEach((option) => {
-        const visible = visibleTabs.has(option.value);
-        option.hidden = !visible;
-        option.disabled = !visible;
-      });
-      settingsDefaultTab.value = visibleTabs.has(summary.defaultTab) ? summary.defaultTab : 'home';
-    }
-    if (settingsWorkspaceKind) settingsWorkspaceKind.textContent = summary.workspaceLabel;
-    if (settingsWorkspacePath) {
-      settingsWorkspacePath.textContent = summary.workspacePath || '默认数据目录';
-      settingsWorkspacePath.title = summary.workspacePath || '';
-    }
-    if (settingsAutoLaunch) settingsAutoLaunch.checked = summary.autoLaunch;
-    settingsFeatureList?.querySelectorAll('input[data-settings-feature]').forEach((input) => {
-      input.checked = settingsAppSettings?.features?.[input.dataset.settingsFeature] !== false;
-    });
-    renderHomeModuleSettings();
-  }
-
-  function renderHomeModuleSettings() {
-    const state = window.NotchHome?.getVisibility?.();
-    const hidden = new Set(state?.hiddenIds || []);
-    const recordingActive = window.NotchWorkspace?.isRecordingActive?.() ?? isRecordingActive();
-    settingsHomeModuleList?.querySelectorAll('input[data-settings-home-module]').forEach((input) => {
-      const moduleId = input.dataset.settingsHomeModule;
-      const unavailable = state?.unavailableIds?.includes(moduleId) === true;
-      input.closest('label').hidden = unavailable;
-      input.checked = !hidden.has(moduleId);
-      input.disabled = unavailable || state?.readOnly === true
-        || (moduleId === 'recorder' && recordingActive && input.checked);
-    });
-    const recorderNote = settingsHomeModuleList?.querySelector('[data-home-module-setting-note="recorder"]');
-    if (recorderNote) recorderNote.textContent = recordingActive ? '录音进行中' : '录音与转写';
-    const status = document.getElementById('settings-home-module-status');
-    if (status) {
-      status.textContent = state?.readOnly
-        ? '安全模式 · 暂不可修改'
-        : state?.persisted === false
-          ? '仅当前会话 · 未能保存'
-          : '隐藏后自动填充 · 至少保留一个';
-      status.dataset.state = state?.readOnly || state?.persisted === false ? 'warning' : 'saved';
-    }
-  }
-
-  async function refreshSettingsPanel() {
-    if (!window.notchAPI) return;
-    const [appSettings, workspace, config] = await Promise.all([
-      window.notchAPI.getAppSettings?.().catch(() => null),
-      window.notchAPI.getWorkspace?.().catch(() => null),
-      window.notchAPI.getTranscriptionConfig?.().catch(() => null),
-    ]);
-    if (appSettings) settingsAppSettings = appSettings;
-    if (workspace) settingsWorkspace = workspace;
-    if (config) {
-      aiSettingsController.acceptConfig(config);
-      updateRecordingUi();
-    }
-    renderSettingsPanel();
-  }
-
   function persistRecordings() {
     return saveJson(RECORDINGS_KEY, recordings.filter((recording) => !recording.isDraft));
   }
@@ -596,11 +474,21 @@
     if (detailStop) detailStop.disabled = status === 'saving';
   }
 
+  appSettingsController = window.NotchWorkspaceAppSettings.createController({
+    Domain,
+    getAIConfig: () => aiSettingsController?.config(),
+    acceptAIConfig: (config) => aiSettingsController.acceptConfig(config),
+    isRecordingActive,
+    updateRecordingUi,
+    showToast: (message) => {
+      if (typeof showStatusToast === 'function') showStatusToast(message);
+    },
+  });
   aiSettingsController = window.NotchWorkspaceAISettings.createController({
     Domain,
     setMode,
-    setSettingsNote,
-    renderSettingsPanel,
+    setSettingsNote: appSettingsController.setNote,
+    renderSettingsPanel: appSettingsController.render,
     updateRecordingUi,
     getRecordingLifecycle: () => recordingLifecycle,
     getTranscriptionPipeline: () => transcriptionPipeline,
@@ -682,129 +570,11 @@
       liveTranscript.hidden = !(text || fallback);
     }
     syncRecordingDraftUi();
-    renderHomeModuleSettings();
+    appSettingsController.renderHomeModules();
     document.dispatchEvent(new CustomEvent('notch:recording-state-changed', {
       detail: { active: recordingBusy },
     }));
   }
-
-  settingsFeatureList?.addEventListener('change', async (event) => {
-    const input = event.target.closest('input[data-settings-feature]');
-    if (!input || !window.notchAPI?.setFeature) return;
-    input.disabled = true;
-    const result = await window.notchAPI.setFeature(input.dataset.settingsFeature, input.checked)
-      .catch(() => ({ ok: false }));
-    input.disabled = false;
-    if (!result?.ok) {
-      input.checked = !input.checked;
-      setSettingsNote('功能显示设置保存失败，请重试。', true);
-      return;
-    }
-    settingsAppSettings = result.settings || settingsAppSettings;
-    renderSettingsPanel();
-    setSettingsNote('显示功能已更新。');
-  });
-  settingsHomeModuleList?.addEventListener('change', async (event) => {
-    const input = event.target.closest('input[data-settings-home-module]');
-    if (!input || !window.NotchHome?.setModuleVisible) return;
-    input.disabled = true;
-    const result = await window.NotchHome.setModuleVisible(
-      input.dataset.settingsHomeModule,
-      input.checked
-    );
-    renderHomeModuleSettings();
-    if (!result?.ok) {
-      const message = result?.error === 'at_least_one_required'
-        ? '首页至少保留一个组件'
-        : result?.error === 'recording_active'
-          ? '录音进行中，暂时不能隐藏快速录音'
-          : result?.error === 'layout_read_only'
-            ? '首页布局已进入安全模式，本次会话不能修改组件'
-            : result?.error === 'layout_invalid'
-              ? '新布局校验失败，原布局已保留'
-              : result?.error === 'dom_apply_failed'
-                ? '布局应用失败，原布局已恢复'
-                : '首页组件设置未更新';
-      if (typeof showStatusToast === 'function') showStatusToast(message);
-      return;
-    }
-    if (result.changed === false) return;
-    const message = result.persisted === false
-      ? '布局已更新，仅当前会话生效，设置未能保存'
-      : input.checked ? '首页组件已恢复' : '首页组件已隐藏';
-    if (typeof showStatusToast === 'function') showStatusToast(message);
-  });
-  const shortcutControls = [
-    [settingsShortcutChange, 'panel', () => settingsAppSettings?.shortcut || 'Space'],
-    [settingsLauncherShortcutChange, 'launcher', () => settingsAppSettings?.shortcuts?.launcher || ''],
-    [settingsScreenshotShortcutChange, 'screenshot', () => settingsAppSettings?.shortcuts?.screenshot || ''],
-    [settingsVideoShortcutChange, 'screenRecording', () => settingsAppSettings?.shortcuts?.screenRecording || ''],
-    [settingsAudioShortcutChange, 'audioRecording', () => settingsAppSettings?.shortcuts?.audioRecording || ''],
-  ];
-  shortcutControls.forEach(([button, action, current]) => button?.addEventListener('click', () => {
-    document.dispatchEvent(new CustomEvent('notch:record-shortcut', { detail: { action, current: current() } }));
-  }));
-  settingsTheme?.addEventListener('click', async (event) => {
-    const button = event.target.closest('[data-theme-value]');
-    if (!button || button.disabled || !window.notchAPI?.setTheme) return;
-    const theme = button.dataset.themeValue === 'light' ? 'light' : 'dark';
-    const buttons = [...settingsTheme.querySelectorAll('[data-theme-value]')];
-    buttons.forEach((item) => { item.disabled = true; });
-    const result = await window.notchAPI.setTheme(theme).catch(() => ({ ok: false }));
-    buttons.forEach((item) => { item.disabled = false; });
-    if (!result?.ok) {
-      renderSettingsPanel();
-      setSettingsNote('主题设置保存失败，请重试。', true);
-      return;
-    }
-    settingsAppSettings = result.settings || settingsAppSettings;
-    renderSettingsPanel();
-    setSettingsNote(theme === 'light' ? '已切换为亮色主题。' : '已切换为深色主题。');
-  });
-  settingsDefaultTab?.addEventListener('change', async () => {
-    if (!window.notchAPI?.setDefaultTab) return;
-    const previous = settingsAppSettings?.defaultTab || 'home';
-    settingsDefaultTab.disabled = true;
-    const result = await window.notchAPI.setDefaultTab(settingsDefaultTab.value).catch(() => ({ ok: false }));
-    settingsDefaultTab.disabled = false;
-    if (!result?.ok) {
-      settingsDefaultTab.value = previous;
-      setSettingsNote('默认展开页保存失败，请重试。', true);
-      return;
-    }
-    settingsAppSettings = result.settings || settingsAppSettings;
-    renderSettingsPanel();
-    setSettingsNote(`下次唤出将默认显示${settingsDefaultTab.selectedOptions[0]?.textContent || '所选页面'}。`);
-  });
-  settingsWorkspaceOpen?.addEventListener('click', () => {
-    window.notchAPI?.openWorkspace?.().catch(() => setSettingsNote('无法打开数据文件夹。', true));
-  });
-  settingsWorkspaceChoose?.addEventListener('click', async () => {
-    const changed = await window.notchAPI?.chooseWorkspace?.().catch(() => false);
-    if (!changed) return;
-    settingsWorkspace = await window.notchAPI?.getWorkspace?.().catch(() => settingsWorkspace);
-    renderSettingsPanel();
-    setSettingsNote('数据文件夹已更新。');
-  });
-  settingsAutoLaunch?.addEventListener('change', async () => {
-    if (!window.notchAPI?.setAutoLaunch) return;
-    settingsAutoLaunch.disabled = true;
-    const result = await window.notchAPI.setAutoLaunch(settingsAutoLaunch.checked).catch(() => ({ ok: false }));
-    settingsAutoLaunch.disabled = false;
-    if (!result?.ok) {
-      settingsAutoLaunch.checked = !settingsAutoLaunch.checked;
-      setSettingsNote('开机启动设置失败。', true);
-      return;
-    }
-    settingsAutoLaunch.checked = result.autoLaunch === true;
-    if (settingsAppSettings) settingsAppSettings.autoLaunch = result.autoLaunch === true;
-    setSettingsNote(result.autoLaunch ? '已开启开机自动启动。' : '已关闭开机自动启动。');
-  });
-  window.notchAPI?.onAppSettingsChanged?.((settings) => {
-    settingsAppSettings = settings;
-    renderSettingsPanel();
-  });
-  window.notchAPI?.onWorkspaceChanged?.(() => refreshSettingsPanel());
 
   const recordingsView = window.NotchWorkspaceRecordingsView.createView({
     Domain,
@@ -852,11 +622,11 @@
   renderRecordings();
   updateRecordingUi();
   aiSettingsController.load();
-  refreshSettingsPanel();
+  appSettingsController.refresh();
 
   window.NotchWorkspaceWindowsHost = {
-    refreshSettingsPanel,
-    refreshHomeModuleSettings: renderHomeModuleSettings,
+    refreshSettingsPanel: appSettingsController.refresh,
+    refreshHomeModuleSettings: appSettingsController.renderHomeModules,
   };
 
   const linksApi = window.NotchWorkspaceLinksApi.createApi({
