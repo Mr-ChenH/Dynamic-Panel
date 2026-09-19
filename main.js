@@ -50,6 +50,7 @@ const { createFinanceHttpClient } = require('./main/finance-http-client');
 const { createSystemAppIconService } = require('./main/system-app-icon-service');
 const { createPasteTargetService } = require('./main/paste-target-service');
 const { createPermissionService } = require('./main/permission-service');
+const { createAppSettingsService } = require('./main/app-settings-service');
 const { createNotchTrayIcon } = require('./main/tray-icon');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
@@ -677,17 +678,6 @@ function setAutoLaunch(enabled) {
   }
 }
 
-const DEFAULT_FEATURES = {
-  home: true,
-  todo: true,
-  finance: true,
-  notes: true,
-  links: true,
-  recordings: true,
-  credentials: true,
-  clip: false,
-};
-
 function getJsonSettingsPath(name) {
   return path.join(app.getPath('userData'), name);
 }
@@ -714,36 +704,30 @@ function writeJsonFile(filePath, value) {
   }
 }
 
-function readAppSettings() {
-  const stored = readJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE));
-  const features = { ...DEFAULT_FEATURES, ...(stored.features || {}), home: true };
-  const shortcuts = stored.shortcuts && typeof stored.shortcuts === 'object' && !Array.isArray(stored.shortcuts)
-    ? stored.shortcuts : {};
-  return {
-    features,
-    shortcut: isValidPanelShortcut(stored.shortcut) ? stored.shortcut : 'Space',
-    shortcuts: {
-      screenshot: isValidOptionalShortcut(shortcuts.screenshot) ? shortcuts.screenshot : '',
-      screenRecording: isValidOptionalShortcut(shortcuts.screenRecording) ? shortcuts.screenRecording : '',
-      audioRecording: isValidOptionalShortcut(shortcuts.audioRecording) ? shortcuts.audioRecording : '',
-    },
-    defaultTab: normalizeDefaultTabPreference(stored.defaultTab, features),
-    theme: stored.theme === 'light' ? 'light' : 'dark',
-  };
-}
-
-function publicAppSettings() {
-  const settings = readAppSettings();
-  return {
-    ...settings,
-    shortcuts: { ...settings.shortcuts, launcher: launcherConfig().shortcut },
-    autoLaunch: isAutoLaunchEnabled(),
-  };
-}
-
-function saveAppSettings(settings) {
-  return writeJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE), settings);
-}
+const appSettingsService = createAppSettingsService({
+  readJsonFile,
+  writeJsonFile,
+  getSettingsPath: getJsonSettingsPath,
+  fileName: APP_SETTINGS_FILE,
+  defaultFeatures: {
+    home: true,
+    todo: true,
+    finance: true,
+    notes: true,
+    links: true,
+    recordings: true,
+    credentials: true,
+    clip: false,
+  },
+  normalizeDefaultTabPreference,
+  isValidPanelShortcut,
+  isValidOptionalShortcut,
+  launcherConfig,
+  isAutoLaunchEnabled,
+});
+const readAppSettings = appSettingsService.read;
+const publicAppSettings = appSettingsService.publicSettings;
+const saveAppSettings = appSettingsService.save;
 
 const financeSettingsStore = require('./main/finance-settings-store').createFinanceSettingsStore({
   readJsonFile,
