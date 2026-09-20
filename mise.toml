@@ -72,7 +72,7 @@ run = "npm run pack"
 [tasks.package]
 description = "Create the Windows NSIS installer or macOS DMG for the current platform"
 depends = ["check"]
-run = '''node -e "const { spawnSync } = require('node:child_process'); const script = process.platform === 'win32' ? 'build:win' : process.platform === 'darwin' ? 'build' : ''; if (!script) { console.error('Packaging is supported only on Windows and macOS.'); process.exit(1); } const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'; const result = spawnSync(npm, ['run', script], { stdio: 'inherit' }); process.exit(result.status ?? 1);"'''
+run = '''node -e "const { spawnSync } = require('node:child_process'); const script = process.platform === 'win32' ? 'build:win' : process.platform === 'darwin' ? 'build' : ''; if (!script) { console.error('Packaging is supported only on Windows and macOS.'); process.exit(1); } const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'; const result = spawnSync(npm, ['run', script], { stdio: 'inherit', shell: process.platform === 'win32' }); if (result.error) { console.error(result.error); process.exit(1); } process.exit(result.status ?? 1);"'''
 raw = true
 
 [tasks."package:windows"]
