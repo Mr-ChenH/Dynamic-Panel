@@ -141,23 +141,23 @@ error?.name === 'AbortError'
 
 仍保留的深色硬编码主要属于深色默认主题或独立采集窗口，不应仅凭静态颜色扫描判定为缺陷。macOS 实机视觉验收仍需在 macOS runner 上执行。
 
-## 测试结构问题
+## 测试结构边界
 
-以下测试文件也已经过大：
+以下文件仍然较大，但已按生命周期和兼容边界完成取舍：
 
 - `tests/notch-focus.electron.js`
 - `tests/domain.test.js`
 - `tests/startup.electron.js`
 - `tests/finance-service.test.js`
 
-建议按领域拆分 Electron 验收和 domain 测试，降低单个 UI 改动的回归范围。`tests/renderer-structure.test.js` 中的 CSS 资源所有权与加载顺序契约已迁移到 `tests/renderer-styles-structure.test.js`；原文件保留 renderer 行为、控制器、IPC 和页面结构契约。
+已按领域拆分可安全独立的 Electron/domain 契约，降低单个 UI 改动的回归范围。`tests/renderer-structure.test.js` 中的 CSS 资源所有权与加载顺序契约已迁移到 `tests/renderer-styles-structure.test.js`；原文件保留 renderer 行为、控制器、IPC 和页面结构契约。`notch-focus.electron.js` 与 `startup.electron.js` 继续作为连续 Electron 生命周期场景，不做会破坏共享窗口和 profile 状态的机械拆分。
 
 ## 建议重构顺序
 
 1. 保持 `renderer/app.js` 和 `renderer/workspace.js` 作为稳定装配/兼容边界，避免继续机械拆分
 2. finance normalizer/export 兼容边界已通过 `tests/finance-compatibility.test.js` 固化；normalizer/parser 行为已迁移到独立的 `tests/finance-normalizers.test.js`，provider 请求与 service 集成继续保留在 `tests/finance-service.test.js`。
 3. 已按纯领域和契约边界拆分可安全独立的测试；`notch-focus.electron.js` 与 `startup.electron.js` 保留为连续 Electron 生命周期场景，避免拆分后丢失共享窗口、profile、LocalStorage、preload 和 debugger 状态
-4. macOS DMG 与 Windows NSIS 产物实机验收
+4. macOS DMG 实机验收（Windows NSIS 已完成；macOS 需 macOS runner）
 
 ## 当前结论
 
@@ -363,7 +363,7 @@ error?.name === 'AbortError'
 - 新增 `main/ipc/window.js`，迁移 `window:set-mode`、`window:begin-collapse`、`window:set-collapsed-hover`、`window:metrics`、`window:keep-open`、`window:set-tab` 和 `shortcut:hover-space-status`
 - 所有窗口 IPC 统一验证主窗口 sender；实际 BrowserWindow、几何、模式和快捷键状态通过依赖注入保留在主进程装配层
 - 新增 `tests/window-ipc.test.js`
-- `main.js` 当前约 2969 行，直接 `ipcMain` 注册降至窗口/窗口扫描等剩余领域
+- `main.js` 当前约 1821 行，直接 `ipcMain` 注册降至窗口/窗口扫描等剩余领域
 
 ### 已完成：当前窗口 IPC 注册拆分
 
