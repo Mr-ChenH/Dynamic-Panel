@@ -134,6 +134,17 @@ async function main() {
   assert.equal(notify.ok, true);
   assert.equal((await fetch('http://127.0.0.1:43821/notify/unknown', { method: 'POST' })).status, 404);
   await until(() => evaluate('window.notchAPI.listTaskCompletions().then(r => r.some(i => i.title === "Windows smoke complete"))'), 'notification recorded');
+  assert.equal(await evaluate('window.notchAPI.setTheme("light").then(r => r.ok)'), true);
+  await until(() => evaluate('document.documentElement.dataset.theme === "light"'), 'light theme application');
+  const lightTabs = await evaluate(`Array.from(document.querySelectorAll('.tab[data-tab]')).filter((button) => !button.hidden && button.dataset.tab !== 'settings').map((button) => button.dataset.tab)`);
+  for (const tab of lightTabs) {
+    await evaluate(`document.querySelector('.tab[data-tab="${tab}"]').click()`);
+    await delay(120);
+    const layout = await evaluate(`({ tab: '${tab}', theme: document.documentElement.dataset.theme, noHorizontalOverflow: document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1 && document.body.scrollWidth <= document.body.clientWidth + 1 })`);
+    assert.deepEqual(layout, { tab, theme: 'light', noHorizontalOverflow: true });
+    const lightScreenshot = await send('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(path.join(evidence, `light-${tab}.png`), Buffer.from(lightScreenshot.data, 'base64'));
+  }
   await evaluate('document.getElementById("tab-button-settings").click()');
   await delay(300);
   assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("[data-settings-home-module]")).filter(i => !i.closest("label").hidden).map(i => i.dataset.settingsHomeModule)'), ['pomodoro', 'recorder', 'note', 'commands']);

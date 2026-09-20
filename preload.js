@@ -7,7 +7,7 @@ function subscribe(channel, handler) {
   return () => ipcRenderer.removeListener(channel, handler);
 }
 
-contextBridge.exposeInMainWorld('notchAPI', {
+const api = {
   platform: process.platform,
   setMode: (mode) => ipcRenderer.invoke('window:set-mode', mode),
   beginCollapse: () => ipcRenderer.invoke('window:begin-collapse'),
@@ -165,4 +165,118 @@ contextBridge.exposeInMainWorld('notchAPI', {
     ipcRenderer.invoke('task-notification:activate', eventId),
   taskNotificationHover: (paused) =>
     ipcRenderer.send('task-notification:hover', paused === true),
+};
+
+// New grouped namespaces are aliases over the stable flat API. Keeping both
+// shapes lets existing renderer modules migrate independently without changing IPC.
+api.window = Object.freeze({
+  setMode: api.setMode,
+  beginCollapse: api.beginCollapse,
+  setCollapsedHover: api.setCollapsedHover,
+  setTab: api.setTab,
+  keepPanelOpen: api.keepPanelOpen,
+  getMetrics: api.getMetrics,
+  getHoverSpaceStatus: api.getHoverSpaceStatus,
+  onCollapseRequest: api.onCollapseRequest,
+  onMetricsChanged: api.onMetricsChanged,
 });
+api.finance = Object.freeze({
+  getSettings: api.getFinanceSettings,
+  setProvider: api.setFinanceProvider,
+  setRefreshInterval: api.setFinanceRefreshInterval,
+  setActivity: api.setFinanceActivity,
+  onUpdate: api.onFinanceUpdate,
+  testProvider: api.testFinanceProvider,
+  refresh: api.refreshFinanceCache,
+  overview: api.getFinanceOverview,
+  ranking: api.getFinanceRanking,
+  quotes: api.getFinanceQuotes,
+  history: api.getFinanceHistory,
+  fundamentals: api.getFinanceFundamentals,
+  cancel: api.cancelFinanceRequest,
+  search: api.searchFinanceAssets,
+});
+api.home = Object.freeze({
+  searchWeatherCities: api.searchWeatherCities,
+  getWeather: api.getHomeWeather,
+  getMusicLibrary: api.getHomeMusicLibrary,
+  setMusicMode: api.setHomeMusicMode,
+  selectMusicPlaylist: api.selectHomeMusicPlaylist,
+  refreshMusicSource: api.refreshHomeMusicSource,
+  addMusicSource: api.addHomeMusicSource,
+  removeMusicSource: api.removeHomeMusicSource,
+  browseMusicCategories: api.browseHomeMusicCategories,
+  searchMusicPlaylists: api.searchHomeMusicPlaylists,
+  browseMusicCategory: api.browseHomeMusicCategory,
+  browseMusicRecommend: api.browseHomeMusicRecommend,
+  browseMusicUserPlaylists: api.browseHomeMusicUserPlaylists,
+  selectOnlinePlaylist: api.selectHomeMusicOnlinePlaylist,
+  chooseMusicFiles: api.chooseHomeMusicFiles,
+  chooseMusicFolder: api.chooseHomeMusicFolder,
+  addMusicUrl: api.addHomeMusicUrl,
+  removeMusicTrack: api.removeHomeMusicTrack,
+  loadMusicTrack: api.loadHomeMusicTrack,
+  loadMusicCover: api.loadHomeMusicCover,
+  organizeMaterial: api.organizeMaterial,
+});
+api.capture = Object.freeze({
+  beginAudio: api.beginAudioCapture,
+  endAudio: api.endAudioCapture,
+  open: api.openCapture,
+  edit: api.editCapture,
+  stop: api.stopCapture,
+  discard: api.discardCapture,
+  state: api.captureState,
+  list: api.listCaptures,
+  settings: api.captureSettings,
+  saveSettings: api.saveCaptureSettings,
+  clearRegion: api.clearCaptureRegion,
+  preview: api.previewCapture,
+  rename: api.renameCapture,
+  delete: api.deleteCapture,
+  reveal: api.revealCapture,
+  copy: api.copyCapture,
+  export: api.exportCapture,
+  onChanged: api.onCapturesChanged,
+});
+api.recordings = Object.freeze({
+  save: api.saveRecording,
+  read: api.readRecording,
+  delete: api.deleteRecording,
+  reveal: api.revealRecording,
+});
+api.notes = Object.freeze({
+  saveImage: api.saveNoteImage,
+  chooseImages: api.chooseNoteImages,
+  readImage: api.readNoteImage,
+  deleteImages: api.deleteNoteImages,
+});
+api.launcher = Object.freeze({
+  settings: api.launcherSettings,
+  saveSettings: api.saveLauncherSettings,
+  finishFocus: api.finishLauncherFocus,
+  transferData: api.transferLauncherData,
+  completeNavigation: api.completeLauncherNavigation,
+  icon: api.launcherIcon,
+  query: api.queryLauncher,
+  onPartial: api.onLauncherPartial,
+  cancel: api.cancelLauncher,
+  run: api.runLauncher,
+  openUrl: api.openLauncherUrl,
+  listExtensions: api.listLauncherExtensions,
+  installExtension: api.installLauncherExtension,
+  toggleExtension: api.toggleLauncherExtension,
+  removeExtension: api.removeLauncherExtension,
+});
+api.settings = Object.freeze({
+  get: api.getAppSettings,
+  setFeature: api.setFeature,
+  setDefaultTab: api.setDefaultTab,
+  setTheme: api.setTheme,
+  setAutoLaunch: api.setAutoLaunch,
+  setPanelShortcut: api.setPanelShortcut,
+  setShortcut: api.setShortcut,
+  onChanged: api.onAppSettingsChanged,
+});
+
+contextBridge.exposeInMainWorld('notchAPI', api);

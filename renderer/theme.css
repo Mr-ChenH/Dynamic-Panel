@@ -1,0 +1,235 @@
+/* ============ 亮色主题 ============ */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-base: #f8fafc;
+  --surface-1: #eef2f7;
+  --surface-2: #e5eaf1;
+  --surface-3: #d9e1eb;
+  --hairline: rgba(30, 43, 61, 0.13);
+  --hairline-soft: rgba(30, 43, 61, 0.08);
+  --highlight-top: rgba(255, 255, 255, 0.85);
+  --tile-highlight: rgba(255, 255, 255, 0.7);
+  --squircle-highlight: rgba(255, 255, 255, 0.95);
+  --text-1: #172033;
+  --text-2: #2f3e53;
+  --text-3: #526174;
+  --text-4: #627084;
+  --focus-ring: #3f72d8;
+  --scrollbar-thumb: rgba(30, 43, 61, 0.18);
+  --scrollbar-thumb-hover: rgba(30, 43, 61, 0.32);
+  --tooltip-bg: rgba(22, 31, 45, 0.94);
+  --item-hover: rgba(63, 114, 216, 0.08);
+  --panel-shadow: rgba(42, 58, 80, 0.18);
+  --clip-text: rgba(30, 43, 61, 0.42);
+  --clip-border-text: rgba(30, 43, 61, 0.13);
+  --clip-border-url: rgba(63, 114, 216, 0.28);
+  --clip-border-image: rgba(210, 112, 47, 0.26);
+}
+
+:root[data-theme='light'] .panel::before,
+:root[data-theme='light'] .launcher,
+:root[data-theme='light'] .settings-card,
+:root[data-theme='light'] .home-card,
+:root[data-theme='light'] .tile,
+:root[data-theme='light'] .links-sidebar,
+:root[data-theme='light'] .links-main .link-group,
+:root[data-theme='light'] .home-chat,
+:root[data-theme='light'] .home-chat-reader,
+:root[data-theme='light'] .home-chat-session-panel,
+:root[data-theme='light'] .home-chat-context-picker,
+:root[data-theme='light'] .home-chat-composer,
+:root[data-theme='light'] .home-media-discovery {
+  background: var(--surface-1);
+}
+
+:root[data-theme='light'] .links-main .link-group-head,
+:root[data-theme='light'] .home-chat-starters button,
+:root[data-theme='light'] .home-chat-message[data-role='user'],
+:root[data-theme='light'] .home-chat-message-body code,
+:root[data-theme='light'] .markdown-code,
+:root[data-theme='light'] .home-chat-session-search,
+:root[data-theme='light'] .home-chat-context-search {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+:root[data-theme='light'] .links-main .link-favicon,
+:root[data-theme='light'] .home-media-record,
+:root[data-theme='light'] .home-media-progress-track,
+:root[data-theme='light'] .launcher-manager input:not([type='checkbox']) {
+  background: var(--surface-3);
+}
+
+:root[data-theme='light'] .home-chat-message-body a,
+:root[data-theme='light'] .links-sidebar-nav button.active,
+:root[data-theme='light'] .links-sidebar-list button.active {
+  color: #275ab7;
+}
+
+:root[data-theme='light'] .links-sidebar-nav button.active,
+:root[data-theme='light'] .links-sidebar-list button.active,
+:root[data-theme='light'] .launcher-result.selected,
+:root[data-theme='light'] .launcher-result:hover {
+  background: rgba(63, 114, 216, 0.12);
+}
+
+:root[data-theme='light'] .markdown-code pre code { color: #26364d; }
+
+:root[data-theme='light'] input,
+:root[data-theme='light'] textarea,
+:root[data-theme='light'] select { color-scheme: light; }
+
+/* High-contrast text overrides for component styles authored for dark surfaces. */
+:root[data-theme='light'] .links-page-title .tile-label,
+:root[data-theme='light'] .links-sidebar-head .tile-label,
+:root[data-theme='light'] .links-main .links-capture-hint,
+:root[data-theme='light'] .links-sidebar-nav button.active,
+:root[data-theme='light'] .links-sidebar-list button.active { color: #254f9c; }
+:root[data-theme='light'] .links-sidebar-nav button.active b,
+:root[data-theme='light'] .links-sidebar-list button.active b,
+:root[data-theme='light'] .link-open span,
+:root[data-theme='light'] .links-sidebar-section-head small { color: #53647c; }
+:root[data-theme='light'] .links-main .link-state-flags .unread { color: #2458ad; }
+:root[data-theme='light'] .links-main .link-tag-list > span { color: #14704f; }
+
+:root[data-theme='light'] .home-note-mark,
+:root[data-theme='light'] .home-note-category,
+:root[data-theme='light'] .home-chat-message-head i,
+:root[data-theme='light'] .home-chat-message-sources span,
+:root[data-theme='light'] .home-chat-message-body a,
+:root[data-theme='light'] .home-chat-context-tabs button[aria-selected='true'],
+:root[data-theme='light'] .home-chat-context-row[aria-selected='true'],
+:root[data-theme='light'] #home-chat-session-confirm-save,
+:root[data-theme='light'] .home-chat-context-chips button { color: #285da9; }
+:root[data-theme='light'] .home-chat-message-body code { color: #7a3f28; }
+:root[data-theme='light'] .markdown-code,
+:root[data-theme='light'] .markdown-code pre code,
+:root[data-theme='light'] .markdown-table-wrap th { color: #26364d; }
+:root[data-theme='light'] .home-chat-message-state,
+:root[data-theme='light'] .home-chat-message[data-state='error'] .home-chat-message-state { color: #7a3d2d; }
+
+:root[data-theme='light'] .finance-ai-button,
+:root[data-theme='light'] .finance-asset-mark,
+:root[data-theme='light'] .finance-settings-market-icon,
+:root[data-theme='light'] .finance-settings-nav-icon { color: #523b9a; }
+:root[data-theme='light'] .finance-ai-button:hover { color: #35256d; }
+:root[data-theme='light'] .finance-search-notice,
+:root[data-theme='light'] .finance-settings-source > footer small[data-state='error'],
+:root[data-theme='light'] .finance-market-status-card[data-state='missing_credentials'] header span { color: #875719; }
+:root[data-theme='light'] .finance-ranking-negative,
+:root[data-theme='light'] #finance-ranking-negative,
+:root[data-theme='light'] .down { color: #b53632 !important; }
+
+:root[data-theme='light'] .todo-battery b,
+:root[data-theme='light'] .home-pomodoro .pomodoro-label,
+:root[data-theme='light'] .pomodoro-settings,
+:root[data-theme='light'] .pomodoro-dial span { color: var(--text-2); }
+:root[data-theme='light'] .settings-device-row button,
+:root[data-theme='light'] .settings-feature-grid label,
+:root[data-theme='light'] .settings-home-module-grid label,
+:root[data-theme='light'] .credential-item,
+:root[data-theme='light'] .credentials-form-card input,
+:root[data-theme='light'] .credentials-library-actions input {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+:root[data-theme='light'] .settings-device-row button:hover,
+:root[data-theme='light'] .settings-feature-grid label:hover,
+:root[data-theme='light'] .settings-home-module-grid label:hover,
+:root[data-theme='light'] .credential-item:hover { background: var(--surface-3); }
+
+/* The Windows hover-expanded notch used a dark-only surface before themes. */
+:root[data-theme='light'] #app[data-platform='win32'].collapsed .notch:hover {
+  background: var(--surface-1);
+  box-shadow: 0 7px 18px rgba(42, 58, 80, 0.22);
+}
+
+:root[data-theme='light'] .api-field-heading small[data-state='warning'],
+:root[data-theme='light'] .settings-status-list small[data-state='warning'],
+:root[data-theme='light'] #settings-launcher-status[data-state='warning'],
+:root[data-theme='light'] #settings-home-module-status[data-state='warning'],
+:root[data-theme='light'] .ai-todo-warning,
+:root[data-theme='light'] .ai-service-heading > small[data-state='warning'],
+:root[data-theme='light'] .finance-market-status-card[data-state='error'] header span,
+:root[data-theme='light'] .home-weather[data-weather-state='error'] #home-weather-updated { color: #9a5b00 !important; }
+:root[data-theme='light'] .settings-inline-note.error,
+:root[data-theme='light'] .credentials-note.error,
+:root[data-theme='light'] .ai-section-head span.error,
+:root[data-theme='light'] .ai-workspace-actions p.error,
+:root[data-theme='light'] .ai-service-heading > small[data-state='error'],
+:root[data-theme='light'] .ai-model-limit.error,
+:root[data-theme='light'] .ai-diagnostics-actions .danger,
+:root[data-theme='light'] .home-chat-reader > footer span[data-error='true'],
+:root[data-theme='light'] #home-chat-form[data-over-limit='true'] #home-chat-count { color: #b42318 !important; }
+:root[data-theme='light'] .todo-overdue-jump,
+:root[data-theme='light'] .todo-item.overdue .todo-ddl,
+:root[data-theme='light'] #todo-editor-error,
+:root[data-theme='light'] .recording-item-delete:hover,
+:root[data-theme='light'] .bulk-delete:hover,
+:root[data-theme='light'] .notes-taxonomy-action.danger:hover,
+:root[data-theme='light'] .notes-category-confirm button.danger,
+:root[data-theme='light'] .notes-icon-button.danger:hover,
+:root[data-theme='light'] .music-library-remove:hover { color: #b42318; }
+:root[data-theme='light'] .home-note-category,
+:root[data-theme='light'] .notes-taxonomy-children .notes-taxonomy-select.active,
+:root[data-theme='light'] .notes-detail-tag { color: #7a5716; }
+:root[data-theme='light'] .link-actions .icon-button.is-active,
+:root[data-theme='light'] .links-main .link-state-flags .favorite,
+:root[data-theme='light'] .finance-ai-conclusion.mixed strong,
+:root[data-theme='light'] .finance-ranking-spotlight-rank strong,
+:root[data-theme='light'] .finance-provider-capabilities [data-state='permission_required'] b { color: #8a5a00; }
+:root[data-theme='light'] .music-settings-modebar button[aria-selected='true'],
+:root[data-theme='light'] .music-view-tabs button[aria-selected='true'],
+:root[data-theme='light'] .music-online-badge { color: #147066 !important; }
+
+:root[data-theme='light'] .home-chat-message-state { background: #fff7df; color: #7a5716; }
+:root[data-theme='light'] .home-chat-message[data-state='error'] .home-chat-message-state { background: #fff0ee; color: #9f2018; }
+:root[data-theme='light'] .settings-ai-migration { border-color: #b58a38; background: #fff7df; color: #6e4c0b; }
+:root[data-theme='light'] .settings-ai-migration button { color: #6e4c0b; }
+
+/* Recording surfaces retain their existing layout while using light workbench surfaces. */
+:root[data-theme='light'] .recording-library,
+:root[data-theme='light'] .recording-detail,
+:root[data-theme='light'] .recording-item,
+:root[data-theme='light'] .recording-transcript-editor,
+:root[data-theme='light'] .recording-audio,
+:root[data-theme='light'] .record-control,
+:root[data-theme='light'] .api-settings-divider {
+  border-color: var(--hairline);
+  background: var(--surface-1);
+  color: var(--text-1);
+  box-shadow: none;
+}
+:root[data-theme='light'] .recording-library,
+:root[data-theme='light'] .recording-detail { background: var(--surface-1); box-shadow: inset 0 1px 0 var(--highlight-top), 0 10px 26px var(--panel-shadow); }
+:root[data-theme='light'] .recording-item:hover,
+:root[data-theme='light'] .recording-item.active { background: var(--surface-2); }
+:root[data-theme='light'] .recording-item.active { box-shadow: inset 0 0 0 1px var(--focus-ring); }
+:root[data-theme='light'] .recording-transcript-editor,
+:root[data-theme='light'] .recording-audio { background: var(--surface-2); color: var(--text-1); }
+:root[data-theme='light'] .record-control { background: var(--surface-2); color: var(--text-1); }
+:root[data-theme='light'] .recording-item-delete,
+:root[data-theme='light'] .bulk-delete { color: var(--text-3); }
+:root[data-theme='light'] .tile-label,
+:root[data-theme='light'] .recording-library-head,
+:root[data-theme='light'] .recording-detail-head { color: var(--text-2); }
+:root[data-theme='light'] .collapse-btn,
+:root[data-theme='light'] .workspace-button,
+:root[data-theme='light'] .record-control,
+:root[data-theme='light'] .tab-strip {
+  border-color: var(--hairline);
+  background: var(--surface-2);
+  color: var(--text-2);
+  box-shadow: inset 0 1px 0 var(--highlight-top), 0 4px 12px var(--panel-shadow);
+}
+:root[data-theme='light'] .collapse-btn:hover,
+:root[data-theme='light'] .workspace-button:hover,
+:root[data-theme='light'] .record-control:hover { background: var(--surface-3); color: var(--text-1); }
+:root[data-theme='light'] .add-row input,
+:root[data-theme='light'] .transcription-fields-row input,
+:root[data-theme='light'] .transcription-fields-row select,
+:root[data-theme='light'] .recording-transcript-editor {
+  border-color: var(--hairline);
+  background: var(--surface-2);
+  color: var(--text-1);
+}

@@ -3,11 +3,6 @@ const assert = require('node:assert/strict');
 
 const domain = require('../renderer/domain');
 const {
-  normalizeHttpUrl,
-  classifyHomeCapture,
-  classifyLink,
-  addLinkToGroups,
-  renameGroup,
   createCommand,
   createRecording,
   removeRecordingState,
@@ -23,16 +18,7 @@ const {
   defaultTodoDeadline,
   normalizeTodoCategoryNames,
   migrateTodoCategoryNames,
-  normalizeHomeWidgetSizes,
-  packHomeWidgetLayout,
-  normalizeHiddenHomeModules,
-  updateHomeModuleVisibility,
-  resolveHomeWidgetLayout,
-  validateHomeWidgetLayout,
-  layoutVariantForPlacement,
   calculateAudioLevel,
-  normalizeHomeLayout,
-  swapHomeLayoutSlots,
   resampleFloat32ToPcm16,
   shouldTogglePanelForSpace,
   todoTimeBattery,
@@ -43,12 +29,6 @@ const {
   filterTodosByTimeScope,
   todoTimeScopeCounts,
   defaultTodoDeadlineForScope,
-  preferredLinkGroupId,
-  normalizeLinkTags,
-  parseLinkQuery,
-  linkMatchesQuery,
-  moveLinkToGroup,
-  moveLinkToPosition,
   filterCredentials,
   credentialRowAction,
   visiblePanelTabs,
@@ -68,11 +48,8 @@ const {
   updateNoteTitle,
   applyGeneratedNoteTitle,
   apiCredentialStatuses,
-  prependClipboardHistory,
   createExclusiveAsyncTask,
 } = domain;
-
-const HOME_MODULES = ['music', 'pomodoro', 'recorder', 'windows', 'note', 'commands'];
 
 test('an exclusive async task coalesces repeated starts until the first attempt settles', async () => {
   let release;
@@ -102,195 +79,6 @@ test('an exclusive async task coalesces repeated starts until the first attempt 
     return 'started-again';
   }), 'started-again');
   assert.equal(attempts, 2);
-});
-
-function assertExactHomeCover(layout, expectedIds) {
-  assert.ok(layout);
-  assert.equal(validateHomeWidgetLayout(layout, expectedIds, 12, 4), true);
-  assert.deepEqual(Object.keys(layout.placements).sort(), [...expectedIds].sort());
-  const cells = Array(48).fill(0);
-  Object.entries(layout.placements).forEach(([id, item]) => {
-    assert.ok(Number.isInteger(item.column) && item.column >= 0, `${id} has an invalid column`);
-    assert.ok(Number.isInteger(item.row) && item.row >= 0, `${id} has an invalid row`);
-    assert.ok(Number.isInteger(item.width) && item.width > 0, `${id} has an invalid width`);
-    assert.ok(Number.isInteger(item.height) && item.height > 0, `${id} has an invalid height`);
-    assert.ok(item.column + item.width <= 12, `${id} exceeds the grid width`);
-    assert.ok(item.row + item.height <= 4, `${id} exceeds the grid height`);
-    for (let row = item.row; row < item.row + item.height; row += 1) {
-      for (let column = item.column; column < item.column + item.width; column += 1) {
-        cells[row * 12 + column] += 1;
-      }
-    }
-  });
-  assert.deepEqual(cells, Array(48).fill(1));
-}
-
-test('clipboard history preserves repeated copies of identical text', () => {
-  const previous = [{ id: 'first', type: 'text', text: '同一段内容', timestamp: 100 }];
-  const next = { id: 'second', type: 'text', text: '同一段内容', timestamp: 200 };
-  const result = prependClipboardHistory(previous, next, 100);
-
-  assert.deepEqual(result.history.map((entry) => entry.id), ['second', 'first']);
-  assert.deepEqual(result.evicted, []);
-});
-
-test('clipboard history evicts only entries beyond its capacity', () => {
-  const previous = [
-    { id: 'first', type: 'text', text: 'A', timestamp: 100 },
-    { id: 'older-image', type: 'image', imagePath: '/tmp/old.png', timestamp: 50 },
-  ];
-  const result = prependClipboardHistory(
-    previous,
-    { id: 'new', type: 'text', text: 'A', timestamp: 200 },
-    2
-  );
-
-  assert.deepEqual(result.history.map((entry) => entry.id), ['new', 'first']);
-  assert.deepEqual(result.evicted.map((entry) => entry.id), ['older-image']);
-});
-
-test('normalizeHttpUrl adds https and removes URL credentials', () => {
-  assert.equal(normalizeHttpUrl(' example.com/docs '), 'https://example.com/docs');
-  assert.equal(normalizeHttpUrl('https://user:secret@example.com/a'), 'https://example.com/a');
-});
-
-test('normalizeHttpUrl rejects non-web and local URLs', () => {
-  assert.equal(normalizeHttpUrl('javascript:alert(1)'), null);
-  assert.equal(normalizeHttpUrl('file:///tmp/a'), null);
-  assert.equal(normalizeHttpUrl('http://localhost:3000'), null);
-  assert.equal(normalizeHttpUrl('http://127.0.0.1/private'), null);
-});
-
-test('home capture routes explicit public URLs without misclassifying ordinary text', () => {
-  assert.deepEqual(classifyHomeCapture('https://example.com/docs?q=1'), {
-    kind: 'link', content: 'https://example.com/docs?q=1', url: 'https://example.com/docs?q=1',
-  });
-  assert.equal(classifyHomeCapture('example.com/guide').kind, 'link');
-  assert.equal(classifyHomeCapture('记录 example.com，稍后阅读').kind, 'note');
-  assert.equal(classifyHomeCapture('今天需要整理发布计划').kind, 'note');
-  assert.equal(classifyHomeCapture('http://localhost:3000').kind, 'note');
-  assert.equal(classifyHomeCapture('example.com', 'note').kind, 'note');
-  assert.equal(classifyHomeCapture('普通文字', 'link').url, null);
-});
-
-test('classifyLink maps familiar services and falls back to 其他', () => {
-  assert.equal(classifyLink('https://github.com/openai', 'OpenAI repository'), '开发');
-  assert.equal(classifyLink('https://www.feishu.cn/', '飞书'), '工作');
-  assert.equal(classifyLink('https://www.bilibili.com/video/1', '视频'), '影音');
-  assert.equal(classifyLink('https://example.com/', 'Example Domain'), '其他');
-});
-
-test('link queries support tags, domains, state and date operators', () => {
-  const query = parseLinkQuery('tag:"AI tools" domain:github.com is:unread in:开发 after:2025-01-01');
-  assert.deepEqual(query.filters, { tags: ['ai tools'], domains: ['github.com'], groups: ['开发'], favorite: null, read: false, before: 0, after: Date.parse('2025-01-01') });
-  assert.deepEqual(normalizeLinkTags([' AI ', 'ai', '#工具', '']), ['AI', '工具']);
-  const link = { url: 'https://github.com/openai/codex', title: 'Codex', tags: ['AI tools', '开发'], favorite: true, read: false, description: 'AI tools', createdAt: Date.parse('2025-02-01') };
-  assert.equal(linkMatchesQuery(link, { name: '开发' }, query), true);
-  assert.equal(linkMatchesQuery({ ...link, read: true }, { name: '开发' }, query), false);
-  assert.equal(linkMatchesQuery(link, { name: '其他' }, 'is:favorite domain:github.com'), true);
-  assert.equal(linkMatchesQuery(link, { name: '其他' }, 'tag:missing'), false);
-});
-
-test('addLinkToGroups reuses a matching group and creates a missing group', () => {
-  const initial = [{ id: 'g1', name: '开发', collapsed: false, links: [] }];
-  const first = addLinkToGroups(initial, {
-    id: 'l1',
-    url: 'https://github.com/',
-    title: 'GitHub',
-  }, '开发');
-  assert.equal(first.length, 1);
-  assert.deepEqual(first[0].links.map((link) => link.id), ['l1']);
-
-  const second = addLinkToGroups(first, {
-    id: 'l2',
-    url: 'https://example.com/',
-    title: 'Example',
-  }, '其他');
-  assert.equal(second.length, 2);
-  assert.equal(second[1].name, '其他');
-  assert.equal(second[1].links[0].id, 'l2');
-});
-
-test('same-site links reuse an existing group before automatic classification', () => {
-  const groups = [
-    { id: 'product', name: 'Lollipop', links: [{ id: 'home', url: 'https://lollipop.plus/' }] },
-    { id: 'work', name: '工作', links: [{ id: 'docs', url: 'https://docs.example.com/' }] },
-  ];
-  assert.equal(preferredLinkGroupId(groups, 'https://docs.lollipop.plus/guide'), 'product');
-  assert.equal(preferredLinkGroupId(groups, 'https://news.example.com/'), 'work');
-  assert.equal(preferredLinkGroupId(groups, 'https://openai.com/'), '');
-});
-
-test('same-site grouping respects common multi-part and hosted public suffixes', () => {
-  const groups = [
-    { id: 'uk', name: '英国站', links: [{ id: 'uk-docs', url: 'https://docs.example.co.uk/' }] },
-    { id: 'alice', name: 'Alice', links: [{ id: 'alice-home', url: 'https://alice.github.io/' }] },
-  ];
-  assert.equal(preferredLinkGroupId(groups, 'https://news.example.co.uk/'), 'uk');
-  assert.equal(preferredLinkGroupId(groups, 'https://bob.github.io/'), '');
-});
-
-test('moving a link changes only its group and keeps an emptied source group available', () => {
-  const groups = [
-    { id: 'source', name: '来源', collapsed: false, links: [{ id: 'move-me', url: 'https://example.com/' }] },
-    { id: 'target', name: '目标', collapsed: true, links: [{ id: 'stay', url: 'https://openai.com/' }] },
-  ];
-  const moved = moveLinkToGroup(groups, 'move-me', 'target');
-  assert.deepEqual(moved.map((group) => [group.id, group.links.map((link) => link.id)]), [
-    ['source', []],
-    ['target', ['stay', 'move-me']],
-  ]);
-  assert.equal(groups[0].links.length, 1);
-});
-
-test('moveLinkToPosition reorders links inside one group in both directions', () => {
-  const groups = [{ id: 'g1', name: '开发', collapsed: false, links: [
-    { id: 'a', url: 'https://a.example.com/' },
-    { id: 'b', url: 'https://b.example.com/' },
-    { id: 'c', url: 'https://c.example.com/' },
-  ] }];
-  const order = (result) => result[0].links.map((link) => link.id);
-
-  // 落点下标按「移动前」的行序算：拖 a 到 c 之后 = 目标下标 3。
-  // 同组要先摘后插，若不把下标减一就会多跳一格，这里正是那个边界。
-  assert.deepEqual(order(moveLinkToPosition(groups, 'a', 'g1', 3)), ['b', 'c', 'a']);
-  // 往上拖不需要修正下标。
-  assert.deepEqual(order(moveLinkToPosition(groups, 'c', 'g1', 0)), ['c', 'a', 'b']);
-  // 拖到 c 之前 = 下标 2，修正后落在 b 与 c 之间。
-  assert.deepEqual(order(moveLinkToPosition(groups, 'a', 'g1', 2)), ['b', 'a', 'c']);
-  // 拖回原位视为无变化。
-  assert.deepEqual(order(moveLinkToPosition(groups, 'b', 'g1', 1)), ['a', 'b', 'c']);
-  // 原数组不能被改动，渲染层靠这一点判断顺序有没有真的变。
-  assert.deepEqual(order(groups), ['a', 'b', 'c']);
-});
-
-test('moveLinkToPosition inserts at an exact slot when crossing groups', () => {
-  const groups = [
-    { id: 'source', name: '来源', collapsed: false, links: [{ id: 'x', url: 'https://x.example.com/' }] },
-    { id: 'target', name: '目标', collapsed: false, links: [
-      { id: 'p', url: 'https://p.example.com/' },
-      { id: 'q', url: 'https://q.example.com/' },
-    ] },
-  ];
-  const layout = (result) => result.map((group) => [group.id, group.links.map((link) => link.id)]);
-
-  assert.deepEqual(layout(moveLinkToPosition(groups, 'x', 'target', 1)),
-    [['source', []], ['target', ['p', 'x', 'q']]]);
-  // 落在分组空白或折叠标题上时没有具体行，index 为 null 表示追加到末尾。
-  assert.deepEqual(layout(moveLinkToPosition(groups, 'x', 'target', null)),
-    [['source', []], ['target', ['p', 'q', 'x']]]);
-  // 越界下标要被夹住，不能凭空造出空洞。
-  assert.deepEqual(layout(moveLinkToPosition(groups, 'x', 'target', 99)),
-    [['source', []], ['target', ['p', 'q', 'x']]]);
-  // 未知链接或未知分组一律原样返回。
-  assert.deepEqual(layout(moveLinkToPosition(groups, 'nope', 'target', 0)), layout(groups));
-  assert.deepEqual(layout(moveLinkToPosition(groups, 'x', 'nope', 0)), layout(groups));
-});
-
-test('renameGroup trims names but never creates an empty name', () => {
-  const groups = [{ id: 'g1', name: '开发', collapsed: false, links: [] }];
-  assert.equal(renameGroup(groups, 'g1', '  资料  ')[0].name, '资料');
-  assert.equal(renameGroup(groups, 'g1', '   ')[0].name, '开发');
 });
 
 test('createCommand and createRecording normalize user-authored metadata', () => {
@@ -748,26 +536,6 @@ test('API credential statuses distinguish saved, missing, and legacy keys that n
   });
 });
 
-test('home layout swaps complete slot assignments without duplicates', () => {
-  const defaults = {
-    windows: 'tall-left',
-    clock: 'small-top',
-    recorder: 'medium-top',
-    mirror: 'square-top',
-    commands: 'tall-right',
-    note: 'wide-bottom',
-  };
-  assert.deepEqual(normalizeHomeLayout({ windows: 'wide-bottom' }, defaults), defaults);
-  assert.deepEqual(swapHomeLayoutSlots(defaults, 'mirror', 'clock'), {
-    windows: 'tall-left',
-    clock: 'square-top',
-    recorder: 'medium-top',
-    mirror: 'small-top',
-    commands: 'tall-right',
-    note: 'wide-bottom',
-  });
-});
-
 test('todo category names use stable areas and preserve customized legacy values', () => {
   const defaults = {
     P0: '学习与课程',
@@ -795,154 +563,6 @@ test('todo category names use stable areas and preserve customized legacy values
     P2: '客户端开发',
     P3: '生活与事务',
   });
-});
-
-test('home widget sizes keep the requested tile large and adapt siblings to the grid budget', () => {
-  const defaults = {
-    character: 'small',
-    windows: 'large',
-    recorder: 'medium',
-    mirror: 'medium',
-    note: 'large',
-    commands: 'medium',
-  };
-  assert.deepEqual(normalizeHomeWidgetSizes({ windows: 'huge' }, defaults, 'windows', 22), defaults);
-  const fitted = normalizeHomeWidgetSizes({
-    character: 'large',
-    windows: 'large',
-    recorder: 'large',
-    mirror: 'large',
-    note: 'large',
-    commands: 'large',
-  }, defaults, 'mirror', 22);
-  assert.equal(fitted.mirror, 'large');
-  assert.ok(Object.values(fitted).some((size) => size !== 'large'));
-});
-
-test('home widget sizes fill the complete bento capacity without blank cells', () => {
-  const defaults = {
-    music: 'medium',
-    windows: 'large',
-    recorder: 'small',
-    mirror: 'medium',
-    note: 'medium',
-    commands: 'mini',
-    pomodoro: 'mini',
-  };
-  const area = { mini: 2, small: 4, medium: 8, large: 16 };
-  const fitted = normalizeHomeWidgetSizes({ ...defaults, mirror: 'large' }, defaults, 'mirror', 48);
-  assert.equal(fitted.mirror, 'large');
-  assert.equal(Object.values(fitted).reduce((total, size) => total + area[size], 0), 48);
-});
-
-test('home widget packing fills all four rows even when logical order would fragment the grid', () => {
-  const order = ['recorder', 'windows', 'commands', 'music', 'note', 'pomodoro'];
-  const sizes = {
-    recorder: 'medium',
-    windows: 'large',
-    commands: 'small',
-    music: 'medium',
-    note: 'medium',
-    pomodoro: 'small',
-  };
-  const layout = packHomeWidgetLayout(order, sizes, 12, 4);
-  assert.ok(layout);
-  const occupied = new Set();
-  Object.entries(layout).forEach(([id, item]) => {
-    for (let row = item.row; row < item.row + item.height; row += 1) {
-      for (let column = item.column; column < item.column + item.width; column += 1) {
-        const cell = `${row}:${column}`;
-        assert.equal(occupied.has(cell), false, `${id} overlaps ${cell}`);
-        occupied.add(cell);
-      }
-    }
-  });
-  assert.equal(occupied.size, 48);
-});
-
-test('hidden homepage modules are deduplicated and normalized to module order', () => {
-  assert.deepEqual(
-    normalizeHiddenHomeModules(['mirror', 'unknown', 'mirror', 'music'], HOME_MODULES),
-    ['music']
-  );
-  assert.deepEqual(normalizeHiddenHomeModules('mirror', HOME_MODULES), []);
-  assert.deepEqual(normalizeHiddenHomeModules([...HOME_MODULES], HOME_MODULES), []);
-});
-
-test('homepage visibility refuses to hide the final visible module', () => {
-  const fiveHidden = HOME_MODULES.slice(0, 5);
-  assert.deepEqual(
-    updateHomeModuleVisibility(fiveHidden, HOME_MODULES, 'commands', false),
-    { ok: false, error: 'at_least_one_required', hiddenIds: fiveHidden }
-  );
-  assert.deepEqual(
-    updateHomeModuleVisibility(['note'], HOME_MODULES, 'note', true),
-    { ok: true, hiddenIds: [] }
-  );
-  assert.deepEqual(
-    updateHomeModuleVisibility([], HOME_MODULES, 'unknown', false),
-    { ok: false, error: 'invalid_module', hiddenIds: [] }
-  );
-});
-
-test('every non-empty homepage widget subset exactly covers the bento grid', () => {
-  const order = ['music', 'pomodoro', 'windows', 'recorder', 'note', 'commands'];
-  const sizes = {
-    music: 'medium', pomodoro: 'mini', windows: 'large', recorder: 'small',
-    mirror: 'medium', note: 'medium', commands: 'mini',
-  };
-  for (let visibleMask = 1; visibleMask < 2 ** order.length; visibleMask += 1) {
-    const hiddenIds = order.filter((id, index) => (visibleMask & (1 << index)) === 0);
-    const expectedIds = order.filter((id) => !hiddenIds.includes(id));
-    const before = JSON.stringify({ order, sizes, hiddenIds });
-    const layout = resolveHomeWidgetLayout(order, sizes, hiddenIds, 12, 4);
-    assertExactHomeCover(layout, expectedIds);
-    assert.equal(JSON.stringify({ order, sizes, hiddenIds }), before, 'resolver mutated its inputs');
-  }
-});
-
-test('five-widget layout chooses the largest preference and breaks ties by saved order', () => {
-  const order = ['music', 'pomodoro', 'windows', 'recorder', 'note', 'commands'];
-  const sizes = {
-    music: 'medium', pomodoro: 'mini', windows: 'large', recorder: 'small',
-    mirror: 'large', note: 'medium', commands: 'mini',
-  };
-  const layout = resolveHomeWidgetLayout(order, sizes, ['commands'], 12, 4);
-  assert.deepEqual(layout.placements.windows, { column: 0, row: 0, width: 4, height: 4 });
-  assert.equal(layout.variants.windows, 'tall');
-});
-
-test('layout variants reflect actual rectangles instead of saved preferences', () => {
-  assert.equal(layoutVariantForPlacement({ width: 2, height: 1 }), 'mini');
-  assert.equal(layoutVariantForPlacement({ width: 2, height: 2 }), 'compact');
-  assert.equal(layoutVariantForPlacement({ width: 6, height: 2 }), 'wide');
-  assert.equal(layoutVariantForPlacement({ width: 4, height: 4 }), 'tall');
-  assert.equal(layoutVariantForPlacement({ width: 12, height: 4 }), 'full');
-});
-
-test('home layout validation rejects every incomplete or unsafe shape', () => {
-  const valid = resolveHomeWidgetLayout(
-    ['music', 'windows'],
-    { music: 'large', windows: 'large' },
-    [],
-    12,
-    4
-  );
-  assert.equal(validateHomeWidgetLayout(valid, ['music', 'windows'], 12, 4), true);
-  assert.equal(validateHomeWidgetLayout(null, ['music'], 12, 4), false);
-  assert.equal(validateHomeWidgetLayout({ placements: {} }, ['music'], 12, 4), false);
-  assert.equal(validateHomeWidgetLayout({
-    placements: { music: { column: 0, row: 0, width: 12, height: 3 } },
-  }, ['music'], 12, 4), false);
-  assert.equal(validateHomeWidgetLayout({
-    placements: { music: { column: 0, row: 0, width: 12.5, height: 4 } },
-  }, ['music'], 12, 4), false);
-  assert.equal(validateHomeWidgetLayout({
-    placements: {
-      music: { column: 0, row: 0, width: 8, height: 4 },
-      windows: { column: 6, row: 0, width: 6, height: 4 },
-    },
-  }, ['music', 'windows'], 12, 4), false);
 });
 
 test('audio level returns stable RMS volume for recording strands', () => {

@@ -1,0 +1,91 @@
+/* Core todo row, checkbox and add-row styles. Loaded before shell overrides. */
+.todo-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 2px;
+  font-size: var(--fs-body);
+  font-weight: 400;
+  color: var(--text-1);
+  border-radius: 4px;
+  line-height: 1.4;
+  transition: background var(--d-fast) var(--ease);
+}
+.todo-item:hover { background: var(--item-hover); }
+.todo-item:hover .delete,
+.todo-item:focus-within .delete { opacity: 1; }
+.todo-item.done .todo-text { color: var(--text-3); text-decoration: line-through; text-decoration-color: var(--text-4); }
+.todo-item.enter { animation: itemIn var(--d-base) var(--ease-out); }
+@keyframes itemIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+.checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-4);
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background var(--d-fast) var(--ease);
+}
+.checkbox.pop { animation: checkPop 380ms var(--ease-spring); }
+@keyframes checkPop {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.24); }
+  100% { transform: scale(1); }
+}
+.checkbox svg {
+  width: 8px;
+  height: 8px;
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity var(--d-fast) var(--ease-out), transform var(--d-fast) var(--ease-spring);
+}
+.todo-item.done .checkbox svg { transform: scale(1); opacity: 1; }
+.todo-item[data-priority='P0'].done .checkbox { background: var(--p0); border-color: var(--p0); }
+.todo-item[data-priority='P1'].done .checkbox { background: var(--p1); border-color: var(--p1); }
+.todo-item[data-priority='P2'].done .checkbox { background: var(--p2); border-color: var(--p2); }
+.todo-item[data-priority='P3'].done .checkbox { background: var(--p3); border-color: var(--p3); }
+.todo-text { flex: 1; word-break: break-word; cursor: default; }
+.delete {
+  background: transparent;
+  border: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-4);
+  font-size: var(--fs-small);
+  border-radius: 3px;
+  opacity: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--d-fast) var(--ease), color var(--d-fast) var(--ease);
+}
+.delete:hover { color: var(--p0); }
+.add-row { margin-top: 6px; flex-shrink: 0; position: relative; }
+.add-row input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-input);
+  padding: var(--s-2) 10px;
+  color: var(--text-1);
+  font-size: var(--fs-body);
+  font-weight: 400;
+  font-family: var(--font);
+  outline: none;
+  transition: background var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease);
+}
+.add-row input:focus { background: var(--surface-3); border-color: var(--hairline); }
+.add-row input::placeholder { color: var(--text-3); font-size: var(--fs-small); }
+.add-row input:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--hairline); }

@@ -2,737 +2,81 @@
   function createController(host) {
     const { generateId, showStatusToast, syncWorkspaceSnapshot, getActiveTab } = host;
 
-// ============ 首页 · Markdown 速记 ============
-// textarea 中的原始 Markdown 始终是唯一数据源；预览只用 DOM API + textContent 构建，
-// 不执行用户输入的 HTML，也不自动加载远程图片。
-const NOTE_KEY = 'notch-home-note';
-const NOTE_ARCHIVE_KEY = 'notch-note-archive-v1';
-const NOTE_ACTIVE_ARCHIVE_KEY = 'notch-note-active-archive-v1';
-const NOTE_CATEGORIES_KEY = 'notch-note-categories-v1';
-const noteInput = document.getElementById('home-note');
-const notePreview = document.getElementById('home-note-preview');
-const noteSaveButton = document.getElementById('note-save-btn');
-const notesList = document.getElementById('notes-list');
-const notesSearch = document.getElementById('notes-search');
-const notesDetail = document.getElementById('notes-detail');
-const notesCount = document.getElementById('notes-count');
-const notesNewButton = document.getElementById('notes-new');
-const notesTaxonomyTree = document.getElementById('notes-taxonomy-tree');
-const notesTaxonomyCount = document.getElementById('notes-taxonomy-count');
-const notesCategoryFilter = document.getElementById('notes-category-filter');
-const notesCategoryAdd = document.getElementById('notes-category-add');
-const notesCategoryRename = document.getElementById('notes-category-rename');
-const notesCategoryDelete = document.getElementById('notes-category-delete');
-const notesCategoryEditor = document.getElementById('notes-category-editor');
-const notesCategoryName = document.getElementById('notes-category-name');
-const notesCategorySave = document.getElementById('notes-category-save');
-const notesCategoryCancel = document.getElementById('notes-category-cancel');
-const notesCategoryConfirm = document.getElementById('notes-category-confirm');
-const notesCategoryConfirmText = document.getElementById('notes-category-confirm-text');
-const notesCategoryDeleteCancel = document.getElementById('notes-category-delete-cancel');
-const notesCategoryDeleteConfirm = document.getElementById('notes-category-delete-confirm');
-const notesTagToolbar = document.getElementById('notes-tag-toolbar');
-const notesTagFilter = document.getElementById('notes-tag-filter');
-const notesTagAdd = document.getElementById('notes-tag-add');
-const notesTagRename = document.getElementById('notes-tag-rename');
-const notesTagDelete = document.getElementById('notes-tag-delete');
-const notesTagEditor = document.getElementById('notes-tag-editor');
-const notesTagName = document.getElementById('notes-tag-name');
-const notesTagSave = document.getElementById('notes-tag-save');
-const notesTagCancel = document.getElementById('notes-tag-cancel');
-const notesTagConfirm = document.getElementById('notes-tag-confirm');
-const notesTagConfirmText = document.getElementById('notes-tag-confirm-text');
-const notesTagDeleteCancel = document.getElementById('notes-tag-delete-cancel');
-const notesTagDeleteConfirm = document.getElementById('notes-tag-delete-confirm');
-const noteFormatActions = document.getElementById('note-format-actions');
-const noteModeButtons = Array.from(document.querySelectorAll('[data-note-mode]'));
-const noteEditButton = document.getElementById('note-edit-btn');
-const homeNote = document.querySelector('.home-note');
+    // Notes editor lifecycle is injected after archive/detail functions are declared.
+    let notesEditor;
+    const NOTE_KEY = 'notch-home-note';
+    const NOTE_ACTIVE_ARCHIVE_KEY = 'notch-note-active-archive-v1';
+    const noteInput = document.getElementById('home-note');
+    const noteSaveButton = document.getElementById('note-save-btn');
+    const notesList = document.getElementById('notes-list');
+    const notesSearch = document.getElementById('notes-search');
+    const notesDetail = document.getElementById('notes-detail');
+    const notesCount = document.getElementById('notes-count');
+    const notesNewButton = document.getElementById('notes-new');
 
-const NOTE_INLINE_PATTERNS = [
-  { type: 'image', regex: /!\[([^\]\n]*)\]\((note-images\/[a-z0-9-]{6,80}\/image-[a-f0-9-]{36}\.png)\)/gi },
-  { type: 'code', regex: /`([^`\n]+)`/g },
-  { type: 'link', regex: /\[([^\]\n]+)\]\(([^)\s]+)\)/g },
-  { type: 'strong', regex: /\*\*([^*\n]+)\*\*/g },
-  { type: 'strong', regex: /__([^_\n]+)__/g },
-  { type: 'delete', regex: /~~([^~\n]+)~~/g },
-  { type: 'emphasis', regex: /\*([^*\n]+)\*/g },
-  { type: 'emphasis', regex: /_([^_\n]+)_/g },
-];
+    const notesMarkdown = window.NotchNotesMarkdown.createRenderer({
+      document,
+      getReadNoteImage: () => {
+        const readNoteImage = window.notchAPI?.readNoteImage;
+        return typeof readNoteImage === 'function'
+          ? (imagePath) => readNoteImage(imagePath)
+          : null;
+      },
+    });
+    const {
+      buildMarkdownPreview,
+      safeMarkdownUrl,
+      safeNoteImageReference,
+    } = notesMarkdown;
+    const notesStore = window.NotchNotesStore.createStore({
+      storage: localStorage,
+      domain: window.NotchDomain,
+    });
 
-const NOTE_TASK_RE = /^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/;
-const NOTE_BULLET_RE = /^\s*[-*+]\s+(.*)$/;
-const NOTE_ORDERED_RE = /^\s*(\d+)[.)]\s+(.*)$/;
-const NOTE_QUOTE_RE = /^\s*>\s?(.*)$/;
-const NOTE_HEADING_RE = /^\s{0,3}(#{1,6})\s+(.+)$/;
-const NOTE_FENCE_RE = /^\s*(`{3,}|~{3,})\s*([\w-]+)?\s*$/;
-const NOTE_RULE_RE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+    const notesTaxonomy = window.NotchNotesTaxonomy.createController({
+      document,
+      domain: window.NotchDomain,
+      store: notesStore,
+      getArchive: () => loadNoteArchive(),
+      getCategories: () => loadNoteCategories(),
+      saveArchive: (notes) => saveNoteArchive(notes),
+      saveCategories: (categories) => saveNoteCategories(categories),
+      generateId,
+      showStatusToast,
+      syncWorkspaceSnapshot,
+      flushEditorSave: () => notesEditor?.flushDetailSave(),
+      renderLibrary: () => renderNotesLibrary(),
+    });
 
-function findNextInlineToken(text, fromIndex) {
-  let next = null;
-  NOTE_INLINE_PATTERNS.forEach((pattern, priority) => {
-    pattern.regex.lastIndex = fromIndex;
-    const match = pattern.regex.exec(text);
-    if (
-      match &&
-      (!next || match.index < next.match.index ||
-        (match.index === next.match.index && priority < next.priority))
-    ) {
-      next = { type: pattern.type, match, priority };
-    }
-  });
-  return next;
-}
 
-function safeNoteImageReference(rawPath) {
-  const normalized = String(rawPath || '').replace(/\\/g, '/');
-  return /^note-images\/[a-z0-9-]{6,80}\/image-[a-f0-9-]{36}\.png$/i.test(normalized)
-    ? normalized
-    : null;
-}
 
-function safeMarkdownUrl(rawUrl) {
-  try {
-    const url = new URL(rawUrl);
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
-  } catch (e) {
-    return null;
-  }
-}
 
-function appendInlineMarkdown(parent, source, depth = 0) {
-  const text = String(source || '');
-  if (!text || depth > 6) {
-    if (text) parent.append(document.createTextNode(text));
-    return;
-  }
-
-  let cursor = 0;
-  while (cursor < text.length) {
-    const token = findNextInlineToken(text, cursor);
-    if (!token) {
-      parent.append(document.createTextNode(text.slice(cursor)));
-      break;
-    }
-
-    const { type, match } = token;
-    if (match.index > cursor) {
-      parent.append(document.createTextNode(text.slice(cursor, match.index)));
-    }
-
-    if (type === 'image') {
-      const imagePath = safeNoteImageReference(match[2]);
-      if (!imagePath || !window.notchAPI?.readNoteImage) {
-        parent.append(document.createTextNode(match[0]));
-      } else {
-        const image = document.createElement('img');
-        image.className = 'note-preview-image';
-        image.alt = match[1] || '笔记图片';
-        image.dataset.noteImage = imagePath;
-        image.decoding = 'async';
-        window.notchAPI.readNoteImage(imagePath).then((source) => {
-          if (source && image.isConnected) image.src = source;
-          else if (image.isConnected) image.replaceWith(document.createTextNode('[图片不可用]'));
-        }).catch(() => {
-          if (image.isConnected) image.replaceWith(document.createTextNode('[图片不可用]'));
-        });
-        parent.append(image);
-      }
-    } else if (type === 'code') {
-      const code = document.createElement('code');
-      code.textContent = match[1];
-      parent.append(code);
-    } else if (type === 'link') {
-      const href = safeMarkdownUrl(match[2]);
-      if (!href) {
-        parent.append(document.createTextNode(match[0]));
-      } else {
-        const link = document.createElement('a');
-        link.dataset.noteHref = href;
-        link.setAttribute('role', 'link');
-        link.tabIndex = 0;
-        link.rel = 'noreferrer';
-        appendInlineMarkdown(link, match[1], depth + 1);
-        parent.append(link);
-      }
-    } else {
-      const tagName = type === 'strong' ? 'strong' : type === 'delete' ? 'del' : 'em';
-      const formatted = document.createElement(tagName);
-      appendInlineMarkdown(formatted, match[1], depth + 1);
-      parent.append(formatted);
-    }
-
-    cursor = match.index + match[0].length;
-  }
-}
-
-function appendMarkdownLines(parent, lines) {
-  lines.forEach((line, index) => {
-    if (index > 0) parent.append(document.createElement('br'));
-    appendInlineMarkdown(parent, line);
-  });
-}
-
-function isMarkdownBlockStart(line) {
-  if (!line.trim()) return true;
-  return (
-    NOTE_FENCE_RE.test(line) ||
-    NOTE_HEADING_RE.test(line) ||
-    NOTE_QUOTE_RE.test(line) ||
-    NOTE_TASK_RE.test(line) ||
-    NOTE_ORDERED_RE.test(line) ||
-    NOTE_BULLET_RE.test(line) ||
-    NOTE_RULE_RE.test(line)
-  );
-}
-
-function buildMarkdownPreview(source) {
-  const fragment = document.createDocumentFragment();
-  const normalized = String(source || '').replace(/\r\n?/g, '\n');
-
-  if (!normalized.trim()) {
-    const empty = document.createElement('p');
-    empty.className = 'note-preview-empty';
-    empty.textContent = '写点内容后，在这里查看排版';
-    fragment.append(empty);
-    return fragment;
-  }
-
-  const lines = normalized.split('\n');
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index];
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-
-    const fenceMatch = line.match(NOTE_FENCE_RE);
-    if (fenceMatch) {
-      const fenceChar = fenceMatch[1][0];
-      const fenceLength = fenceMatch[1].length;
-      const closeFence = new RegExp('^\\s*' + fenceChar + '{' + fenceLength + ',}\\s*$');
-      const codeLines = [];
-      index += 1;
-      while (index < lines.length && !closeFence.test(lines[index])) {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-      if (index < lines.length) index += 1;
-      const pre = document.createElement('pre');
-      const code = document.createElement('code');
-      if (fenceMatch[2]) code.dataset.language = fenceMatch[2];
-      code.textContent = codeLines.join('\n');
-      pre.append(code);
-      fragment.append(pre);
-      continue;
-    }
-
-    const headingMatch = line.match(NOTE_HEADING_RE);
-    if (headingMatch) {
-      const heading = document.createElement('h' + headingMatch[1].length);
-      appendInlineMarkdown(heading, headingMatch[2]);
-      fragment.append(heading);
-      index += 1;
-      continue;
-    }
-
-    if (NOTE_RULE_RE.test(line)) {
-      fragment.append(document.createElement('hr'));
-      index += 1;
-      continue;
-    }
-
-    const quoteMatch = line.match(NOTE_QUOTE_RE);
-    if (quoteMatch) {
-      const quoteLines = [];
-      while (index < lines.length) {
-        const match = lines[index].match(NOTE_QUOTE_RE);
-        if (!match) break;
-        quoteLines.push(match[1]);
-        index += 1;
-      }
-      const quote = document.createElement('blockquote');
-      appendMarkdownLines(quote, quoteLines);
-      fragment.append(quote);
-      continue;
-    }
-
-    const taskMatch = line.match(NOTE_TASK_RE);
-    if (taskMatch) {
-      const list = document.createElement('ul');
-      list.className = 'note-task-list';
-      while (index < lines.length) {
-        const match = lines[index].match(NOTE_TASK_RE);
-        if (!match) break;
-        const done = match[1].toLowerCase() === 'x';
-        const item = document.createElement('li');
-        item.className = 'note-task-item' + (done ? ' done' : '');
-        item.setAttribute('role', 'checkbox');
-        item.setAttribute('aria-checked', String(done));
-        const box = document.createElement('span');
-        box.className = 'note-task-box';
-        box.setAttribute('aria-hidden', 'true');
-        box.textContent = done ? '✓' : '';
-        const content = document.createElement('span');
-        appendInlineMarkdown(content, match[2]);
-        item.append(box, content);
-        list.append(item);
-        index += 1;
-      }
-      fragment.append(list);
-      continue;
-    }
-
-    const orderedMatch = line.match(NOTE_ORDERED_RE);
-    if (orderedMatch) {
-      const list = document.createElement('ol');
-      const start = Number.parseInt(orderedMatch[1], 10);
-      if (Number.isFinite(start) && start !== 1) list.start = start;
-      while (index < lines.length) {
-        const match = lines[index].match(NOTE_ORDERED_RE);
-        if (!match) break;
-        const item = document.createElement('li');
-        appendInlineMarkdown(item, match[2]);
-        list.append(item);
-        index += 1;
-      }
-      fragment.append(list);
-      continue;
-    }
-
-    const bulletMatch = line.match(NOTE_BULLET_RE);
-    if (bulletMatch) {
-      const list = document.createElement('ul');
-      while (index < lines.length) {
-        if (NOTE_TASK_RE.test(lines[index])) break;
-        const match = lines[index].match(NOTE_BULLET_RE);
-        if (!match) break;
-        const item = document.createElement('li');
-        appendInlineMarkdown(item, match[1]);
-        list.append(item);
-        index += 1;
-      }
-      fragment.append(list);
-      continue;
-    }
-
-    const paragraphLines = [line];
-    index += 1;
-    while (index < lines.length && !isMarkdownBlockStart(lines[index])) {
-      paragraphLines.push(lines[index]);
-      index += 1;
-    }
-    const paragraph = document.createElement('p');
-    appendMarkdownLines(paragraph, paragraphLines);
-    fragment.append(paragraph);
-  }
-
-  return fragment;
-}
-
-function renderNotePreview() {
-  if (!noteInput || !notePreview) return;
-  notePreview.replaceChildren(buildMarkdownPreview(noteInput.value));
-}
-
-function replaceNoteText(
-  start,
-  end,
-  replacement,
-  selectionStart,
-  selectionEnd,
-  selectionDirection = 'none'
-) {
-  if (!noteInput) return;
-  noteInput.setRangeText(replacement, start, end, 'end');
-  noteInput.focus({ preventScroll: true });
-  noteInput.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
-  noteInput.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-function wrapNoteSelection(open, close, placeholder) {
-  if (!noteInput) return;
-  const start = noteInput.selectionStart;
-  const end = noteInput.selectionEnd;
-  const direction = noteInput.selectionDirection;
-  const selected = noteInput.value.slice(start, end);
-
-  const hasOuterMarkers =
-    selected &&
-    start >= open.length &&
-    noteInput.value.slice(start - open.length, start) === open &&
-    noteInput.value.slice(end, end + close.length) === close;
-  if (hasOuterMarkers) {
-    replaceNoteText(
-      start - open.length,
-      end + close.length,
-      selected,
-      start - open.length,
-      end - open.length,
-      direction
-    );
-    return;
-  }
-
-  if (selected && selected.startsWith(open) && selected.endsWith(close)) {
-    const unwrapped = selected.slice(open.length, selected.length - close.length);
-    replaceNoteText(start, end, unwrapped, start, start + unwrapped.length, direction);
-    return;
-  }
-
-  const content = selected || placeholder;
-  const replacement = open + content + close;
-  replaceNoteText(
-    start,
-    end,
-    replacement,
-    start + open.length,
-    start + open.length + content.length,
-    direction
-  );
-}
-
-function stripNoteBlockPrefix(line) {
-  return line.replace(
-    /^(?:#{1,6}\s+|>\s+|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)/,
-    ''
-  );
-}
-
-function applyNoteLineFormat(type) {
-  if (!noteInput) return;
-  const value = noteInput.value;
-  const start = noteInput.selectionStart;
-  const end = noteInput.selectionEnd;
-  const direction = noteInput.selectionDirection;
-  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-  let lineEnd;
-  if (end > start && value[end - 1] === '\n') {
-    lineEnd = end - 1;
-  } else {
-    const nextBreak = value.indexOf('\n', end);
-    lineEnd = nextBreak === -1 ? value.length : nextBreak;
-  }
-
-  const original = value.slice(lineStart, lineEnd);
-  const lines = original.split('\n');
-  const matchers = {
-    heading: /^#{1,6}\s+/,
-    bullet: /^[-*+]\s+(?!\[[ xX]\]\s+)/,
-    ordered: /^\d+[.)]\s+/,
-    task: /^[-*+]\s+\[[ xX]\]\s+/,
-    quote: /^>\s+/,
-  };
-  const matcher = matchers[type];
-  if (!matcher) return;
-  const nonEmptyLines = lines.filter((line) => line.trim());
-  const shouldRemove =
-    nonEmptyLines.length > 0 &&
-    nonEmptyLines.every((line) => matcher.test(line.trimStart()));
-  let orderedIndex = 1;
-
-  const transformed = lines.map((line) => {
-    if (!line.trim() && lines.length > 1) return line;
-    const indentation = line.match(/^\s*/)[0];
-    const body = line.slice(indentation.length);
-    if (shouldRemove) return indentation + body.replace(matcher, '');
-    const content = stripNoteBlockPrefix(body) || (
-      type === 'heading' ? '标题' :
-      type === 'task' ? '待办' :
-      type === 'quote' ? '引用' : '项目'
-    );
-    if (type === 'ordered') return indentation + String(orderedIndex++) + '. ' + content;
-    if (type === 'heading') return indentation + '# ' + content;
-    if (type === 'task') return indentation + '- [ ] ' + content;
-    if (type === 'quote') return indentation + '> ' + content;
-    return indentation + '- ' + content;
-  }).join('\n');
-
-  const emptySingleLine = lines.length === 1 && !original.trim() && !shouldRemove;
-  let nextStart = lineStart;
-  let nextEnd = lineStart + transformed.length;
-  if (emptySingleLine) {
-    const indentationLength = original.match(/^\s*/)[0].length;
-    const prefixLength =
-      type === 'heading' ? 2 :
-      type === 'task' ? 6 :
-      type === 'ordered' ? 3 : 2;
-    nextStart += indentationLength + prefixLength;
-  }
-  replaceNoteText(lineStart, lineEnd, transformed, nextStart, nextEnd, direction);
-}
-
-function applyNoteLink() {
-  if (!noteInput) return;
-  const start = noteInput.selectionStart;
-  const end = noteInput.selectionEnd;
-  const direction = noteInput.selectionDirection;
-  const selected = noteInput.value.slice(start, end);
-  const label = selected || '链接文字';
-  const url = 'https://';
-  const replacement = '[' + label + '](' + url + ')';
-  if (selected) {
-    const urlStart = start + label.length + 3;
-    replaceNoteText(start, end, replacement, urlStart, urlStart + url.length, direction);
-  } else {
-    replaceNoteText(start, end, replacement, start + 1, start + 1 + label.length, direction);
-  }
-}
-
-let noteComposing = false;
-
-function applyNoteFormat(type) {
-  if (!noteInput || noteComposing) return;
-  if (type === 'bold') return wrapNoteSelection('**', '**', '加粗文字');
-  if (type === 'italic') return wrapNoteSelection('*', '*', '斜体文字');
-  if (type === 'code') return wrapNoteSelection('`', '`', '代码');
-  if (type === 'link') return applyNoteLink();
-  applyNoteLineFormat(type);
-}
-
-let noteMode = 'edit';
-let noteSelection = { start: 0, end: 0, direction: 'none', scrollTop: 0 };
-
-function setNoteMode(mode, focusTarget = true) {
-  if (!noteInput || !notePreview) return;
-  const previousMode = noteMode;
-  noteMode = mode === 'preview' ? 'preview' : 'edit';
-  const isPreview = noteMode === 'preview';
-
-  if (isPreview) {
-    noteSelection = {
-      start: noteInput.selectionStart,
-      end: noteInput.selectionEnd,
-      direction: noteInput.selectionDirection,
-      scrollTop: noteInput.scrollTop,
-    };
-    renderNotePreview();
-  } else if (previousMode === 'edit') {
-    // 重复点击已选中的“编辑”时保留用户当下光标，而不是恢复旧选区。
-    noteSelection = {
-      start: noteInput.selectionStart,
-      end: noteInput.selectionEnd,
-      direction: noteInput.selectionDirection,
-      scrollTop: noteInput.scrollTop,
-    };
-  }
-
-  noteInput.hidden = isPreview;
-  notePreview.hidden = !isPreview;
-  if (noteFormatActions) noteFormatActions.hidden = isPreview;
-  if (homeNote) homeNote.classList.toggle('is-preview', isPreview);
-  noteModeButtons.forEach((button) => {
-    const active = button.dataset.noteMode === noteMode;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-pressed', String(active));
-  });
-  if (noteEditButton) {
-    noteEditButton.classList.toggle('active', !isPreview);
-    noteEditButton.textContent = isPreview ? '编辑' : '完成';
-    noteEditButton.setAttribute('aria-pressed', String(!isPreview));
-  }
-
-  if (!focusTarget) return;
-  requestAnimationFrame(() => {
-    if (isPreview) {
-      notePreview.focus({ preventScroll: true });
-    } else {
-      noteInput.focus({ preventScroll: true });
-      noteInput.setSelectionRange(
-        noteSelection.start,
-        noteSelection.end,
-        noteSelection.direction
-      );
-      noteInput.scrollTop = noteSelection.scrollTop;
-    }
-  });
-}
-
-function applyNoteTabIndentation(editor, event) {
-  if (
-    !editor ||
-    event.key !== 'Tab' ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.altKey ||
-    event.isComposing ||
-    noteComposing
-  ) {
-    return false;
-  }
-  event.preventDefault();
-  const change = window.NotchDomain.adjustNoteIndentation(
-    editor.value,
-    editor.selectionStart,
-    editor.selectionEnd,
-    event.shiftKey
-  );
-  if (change.value === editor.value) return true;
-  const direction = editor.selectionDirection;
-  editor.setRangeText(change.replacement, change.replaceStart, change.replaceEnd, 'end');
-  editor.focus({ preventScroll: true });
-  editor.setSelectionRange(change.selectionStart, change.selectionEnd, direction);
-  editor.dispatchEvent(new Event('input', { bubbles: true }));
-  return true;
-}
-
-function continueNoteList(event) {
-  if (
-    !noteInput ||
-    event.key !== 'Enter' ||
-    event.shiftKey ||
-    event.metaKey ||
-    event.ctrlKey ||
-    event.altKey ||
-    event.isComposing ||
-    noteComposing ||
-    noteInput.selectionStart !== noteInput.selectionEnd
-  ) {
-    return false;
-  }
-
-  const value = noteInput.value;
-  const cursor = noteInput.selectionStart;
-  const lineStart = value.lastIndexOf('\n', cursor - 1) + 1;
-  const nextBreak = value.indexOf('\n', cursor);
-  const lineEnd = nextBreak === -1 ? value.length : nextBreak;
-  const line = value.slice(lineStart, lineEnd);
-  const patterns = [
-    {
-      regex: /^(\s*)[-*+]\s+\[[ xX]\]\s*(.*)$/,
-      prefix: () => '- [ ] ',
-    },
-    {
-      regex: /^(\s*)(\d+)[.)]\s+(.*)$/,
-      prefix: (match) => String(Number.parseInt(match[2], 10) + 1) + '. ',
-    },
-    {
-      regex: /^(\s*)[-*+]\s+(.*)$/,
-      prefix: () => '- ',
-    },
-    {
-      regex: /^(\s*)>\s?(.*)$/,
-      prefix: () => '> ',
-    },
-  ];
-
-  const definition = patterns.find((candidate) => candidate.regex.test(line));
-  if (!definition) return false;
-  const match = line.match(definition.regex);
-  const content = match[match.length - 1];
-  const indentation = match[1];
-  event.preventDefault();
-
-  if (!content.trim()) {
-    replaceNoteText(
-      lineStart,
-      lineEnd,
-      indentation,
-      lineStart + indentation.length,
-      lineStart + indentation.length
-    );
-    return true;
-  }
-
-  const prefix = indentation + definition.prefix(match);
-  const insertion = '\n' + prefix;
-  replaceNoteText(cursor, cursor, insertion, cursor + insertion.length, cursor + insertion.length);
-  return true;
-}
-
-if (noteInput) {
-  try {
-    noteInput.value = localStorage.getItem(NOTE_KEY) || '';
-  } catch (e) {
-    // ignore
-  }
-
-  let noteTimer = null;
-  const saveNote = () => {
-    if (noteTimer) clearTimeout(noteTimer);
-    noteTimer = null;
-    if (workspaceReloadPending) return;
-    try {
-      localStorage.setItem(NOTE_KEY, noteInput.value);
-    } catch (e) {
-      // ignore quota errors
-    }
-  };
-
-  noteInput.addEventListener('input', () => {
-    if (!noteInput.value.trim()) localStorage.removeItem(NOTE_ACTIVE_ARCHIVE_KEY);
-    renderNotePreview();
-    clearTimeout(noteTimer);
-    noteTimer = setTimeout(saveNote, 300);
-  });
-  noteInput.addEventListener('blur', saveNote);
-  noteInput.addEventListener('compositionstart', () => {
-    noteComposing = true;
-  });
-  noteInput.addEventListener('compositionend', () => {
-    noteComposing = false;
-  });
-  noteInput.addEventListener('keydown', (event) => {
-    if (applyNoteTabIndentation(noteInput, event)) return;
-    if (continueNoteList(event)) return;
-    if (!(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
-    const key = event.key.toLowerCase();
-    if (key !== 'b' && key !== 'i') return;
-    event.preventDefault();
-    applyNoteFormat(key === 'b' ? 'bold' : 'italic');
-  });
-
-  window.addEventListener('beforeunload', saveNote);
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) saveNote();
-  });
-
-  noteInput.hidden = false;
-}
 
 function loadNoteCategories() {
-  try {
-    return window.NotchDomain.normalizeNoteCategories(JSON.parse(localStorage.getItem(NOTE_CATEGORIES_KEY) || '[]'));
-  } catch (error) {
-    return [];
-  }
+  return notesStore.loadCategories();
 }
 
 function loadNoteArchive() {
-  try {
-    const parsed = window.NotchDomain.normalizeNoteArchive(JSON.parse(localStorage.getItem(NOTE_ARCHIVE_KEY) || '[]'));
-    const categories = new Map(loadNoteCategories().map((category) => [category.id, new Set(category.tags.map((tag) => tag.id))]));
-    return parsed.map((note) => {
-      const tags = categories.get(note.categoryId);
-      if (!tags) return { ...note, categoryId: '', tagId: '' };
-      return tags.has(note.tagId) ? note : { ...note, tagId: '' };
-    });
-  } catch (error) {
-    return [];
-  }
+  return notesStore.loadArchive();
+}
+
+function saveNoteArchive(notes) {
+  return notesStore.saveArchive(notes);
 }
 
 function noteCategoryName(note, categories = loadNoteCategories()) {
-  return categories.find((category) => category.id === String(note && note.categoryId || ''))?.name || '未分类';
+  return notesStore.categoryName(note, categories);
 }
 
 function noteTagName(note, categories = loadNoteCategories()) {
-  const category = categories.find((item) => item.id === String(note && note.categoryId || ''));
-  return category?.tags.find((tag) => tag.id === String(note && note.tagId || ''))?.name || '';
+  return notesStore.tagName(note, categories);
 }
 
 function saveNoteCategories(categories) {
-  const normalized = window.NotchDomain.normalizeNoteCategories(categories);
-  localStorage.setItem(NOTE_CATEGORIES_KEY, JSON.stringify(normalized));
-  return normalized;
+  return notesStore.saveCategories(categories);
 }
 
 let selectedNoteId = '';
-let noteCategoryEditorMode = '';
-let noteTagEditorMode = '';
-const expandedNoteCategories = new Set();
 
 function noteArchiveTitle(note) {
   return String(note && note.title || '').trim() || '未命名笔记';
@@ -766,7 +110,6 @@ const NOTES_TOOL_ICONS = {
   code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 9-3 3 3 3M16 9l3 3-3 3M14 5l-4 14"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2"/></svg>',
 };
-let notesEditorMode = 'edit';
 
 function noteActionButton(action, label, icon, className = 'notes-icon-button') {
   const button = document.createElement('button');
@@ -779,6 +122,7 @@ function noteActionButton(action, label, icon, className = 'notes-icon-button') 
   return button;
 }
 
+/* Legacy taxonomy functions moved to renderer/notes-taxonomy-controller.js.
 function selectedNoteCategory(categories = loadNoteCategories()) {
   const id = String(notesCategoryFilter?.value || '');
   return categories.find((category) => category.id === id) || null;
@@ -1008,6 +352,8 @@ function openNoteCategoryEditor(mode) {
   }
 }
 
+*/
+
 function renderNotesDetail(notes = loadNoteArchive()) {
   if (!notesDetail) return;
   notesDetail.replaceChildren();
@@ -1088,8 +434,8 @@ function renderNotesDetail(notes = loadNoteArchive()) {
     button.type = 'button';
     button.dataset.action = `note-mode-${mode}`;
     button.textContent = label;
-    button.classList.toggle('active', notesEditorMode === mode);
-    button.setAttribute('aria-pressed', String(notesEditorMode === mode));
+    button.classList.toggle('active', notesEditor?.detailMode() === mode);
+    button.setAttribute('aria-pressed', String(notesEditor?.detailMode() === mode));
     modes.append(button);
   }
   const nameWithAI = noteActionButton(
@@ -1122,7 +468,7 @@ function renderNotesDetail(notes = loadNoteArchive()) {
 
   const toolbar = document.createElement('div');
   toolbar.className = 'notes-format-toolbar';
-  toolbar.hidden = notesEditorMode !== 'edit';
+  toolbar.hidden = notesEditor?.detailMode() !== 'edit';
   toolbar.setAttribute('role', 'toolbar');
   toolbar.setAttribute('aria-label', '笔记格式');
   const labels = {
@@ -1149,20 +495,17 @@ function renderNotesDetail(notes = loadNoteArchive()) {
   editor.placeholder = '开始写作…';
   editor.setAttribute('aria-label', `编辑笔记：${noteArchiveTitle(note)}`);
   editor.spellcheck = true;
-  editor.hidden = notesEditorMode !== 'edit';
+  editor.hidden = notesEditor?.detailMode() !== 'edit';
   const preview = document.createElement('article');
   preview.id = 'notes-preview';
   preview.className = 'note-preview notes-preview';
   preview.tabIndex = 0;
-  preview.hidden = notesEditorMode !== 'preview';
-  if (notesEditorMode === 'preview') preview.replaceChildren(buildMarkdownPreview(note.content));
+  preview.hidden = notesEditor?.detailMode() !== 'preview';
+  if (notesEditor?.detailMode() === 'preview') preview.replaceChildren(buildMarkdownPreview(note.content));
   content.append(editor, preview);
   notesDetail.append(header, toolbar, content);
   requestNoteTitle(note);
 }
-
-let notesSaveTimer = null;
-let pendingNotesEditor = null;
 const noteTitleAttempts = new Set();
 
 async function requestNoteTitle(note) {
@@ -1193,7 +536,7 @@ async function requestNoteTitle(note) {
     noteTitleAttempts.delete(note.id);
     return;
   }
-  localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next.slice(0, 200)));
+  saveNoteArchive(next);
   updateSavedNotePresentation(updated);
   await syncWorkspaceSnapshot();
 }
@@ -1215,58 +558,35 @@ function updateSavedNotePresentation(note) {
   if (rowTime) rowTime.textContent = noteArchiveTime(note.updatedAt);
 }
 
-function persistNotesEditor(editor) {
-  if (!editor || !editor.dataset.noteId) return;
-  const notes = window.NotchDomain.updateNoteInArchive(
-    loadNoteArchive(),
-    editor.dataset.noteId,
-    editor.value,
-    Date.now()
-  );
-  localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
-  const updated = notes.find((note) => note.id === editor.dataset.noteId);
-  if (localStorage.getItem(NOTE_ACTIVE_ARCHIVE_KEY) === editor.dataset.noteId && noteInput) {
-    noteInput.value = editor.value;
-    localStorage.setItem(NOTE_KEY, editor.value);
-    renderNotePreview();
-  }
-  updateSavedNotePresentation(updated);
-  void requestNoteTitle(updated);
-  if (pendingNotesEditor === editor) pendingNotesEditor = null;
-}
+
+  notesEditor = window.NotchNotesEditor.createController({
+    document,
+    storage: localStorage,
+    domain: window.NotchDomain,
+    buildMarkdownPreview,
+    safeMarkdownUrl,
+    getApi: () => window.notchAPI,
+    getDetailElement: () => notesDetail,
+    getArchive: () => loadNoteArchive(),
+    saveArchive: (notes) => saveNoteArchive(notes),
+    updateSavedNotePresentation,
+    requestNoteTitle,
+    renderDetail: (notes) => renderNotesDetail(notes),
+    getWorkspaceReloadPending: () => workspaceReloadPending,
+  });
 
 function flushNotesEditorSave() {
-  if (workspaceReloadPending) return;
-  if (notesSaveTimer) clearTimeout(notesSaveTimer);
-  notesSaveTimer = null;
-  const editor = pendingNotesEditor;
-  pendingNotesEditor = null;
-  if (editor) persistNotesEditor(editor);
-}
-
-function scheduleNotesEditorSave(editor) {
-  pendingNotesEditor = editor;
-  if (notesSaveTimer) clearTimeout(notesSaveTimer);
-  const time = notesDetail?.querySelector('.notes-detail-time');
-  if (time) time.textContent = '正在保存…';
-  notesSaveTimer = setTimeout(() => {
-    notesSaveTimer = null;
-    const pending = pendingNotesEditor;
-    pendingNotesEditor = null;
-    if (pending) persistNotesEditor(pending);
-  }, 220);
+  notesEditor?.flushDetailSave();
 }
 
 function renderNotesLibrary() {
   if (!notesList) return;
   const categories = loadNoteCategories();
   const archive = loadNoteArchive();
-  renderNoteCategoryControls(categories, archive);
-  const selectedCategory = selectedNoteCategory(categories);
-  renderNoteTagControls(selectedCategory, archive);
-  renderNotesTaxonomy(categories, archive);
-  const categoryId = notesCategoryFilter?.value || '';
-  const tagId = selectedCategory ? notesTagFilter?.value || '' : '';
+  notesTaxonomy.render(categories, archive);
+  const selectedCategory = notesTaxonomy.selectedCategory(categories);
+  const categoryId = notesTaxonomy.selectedCategoryId();
+  const tagId = selectedCategory ? notesTaxonomy.selectedTagId() : '';
   const searchQuery = notesSearch?.value || '';
   const scopedNotes = window.NotchDomain.filterNotes(archive, '', categoryId, tagId);
   const notes = window.NotchDomain.filterNotes(scopedNotes, searchQuery);
@@ -1313,10 +633,10 @@ function renderNotesLibrary() {
 }
 
 function createNote() {
-  flushNotesEditorSave();
+  notesEditor.flushDetailSave();
   const now = Date.now();
-  const selectedCategoryId = selectedNoteCategory()?.id || '';
-  const selectedTagId = selectedCategoryId ? selectedNoteTag()?.id || '' : '';
+  const selectedCategoryId = notesTaxonomy.selectedCategory()?.id || '';
+  const selectedTagId = selectedCategoryId ? notesTaxonomy.selectedTag()?.id || '' : '';
   const note = {
     id: generateId(),
     title: '',
@@ -1329,148 +649,33 @@ function createNote() {
   };
   const notes = [note, ...loadNoteArchive()].slice(0, 200);
   try {
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes));
+    saveNoteArchive(notes);
   } catch (error) {
     showStatusToast('无法创建笔记，请检查存储空间');
     return null;
   }
   selectedNoteId = note.id;
-  notesEditorMode = 'edit';
+  notesEditor.setDetailMode('edit', { force: true, render: false, focus: false });
   if (notesSearch) notesSearch.value = '';
-  if (notesCategoryFilter && selectedCategoryId) notesCategoryFilter.value = selectedCategoryId;
+  if (selectedCategoryId) notesTaxonomy.select(selectedCategoryId, selectedTagId);
   renderNotesLibrary();
   requestAnimationFrame(() => notesDetail?.querySelector('.notes-detail-title')?.focus({ preventScroll: true }));
   return note;
 }
 
-function replaceNotesEditorText(editor, start, end, replacement, selectionStart, selectionEnd) {
-  editor.setRangeText(replacement, start, end, 'end');
-  editor.focus({ preventScroll: true });
-  editor.setSelectionRange(selectionStart, selectionEnd);
-  editor.dispatchEvent(new Event('input', { bubbles: true }));
-}
+const notesAttachments = window.NotchNotesAttachments.createController({
+  getApi: () => window.notchAPI,
+  isSafeImageReference: safeNoteImageReference,
+  replaceEditorText: (editor, ...args) => notesEditor.replaceEditorText(editor, ...args),
+  flushEditorSave: () => notesEditor.flushDetailSave(),
+  getDetailTime: () => notesDetail?.querySelector('.notes-detail-time'),
+  showStatusToast,
+});
 
-function applyNotesEditorFormat(editor, type) {
-  if (!editor) return;
-  const start = editor.selectionStart;
-  const end = editor.selectionEnd;
-  const selected = editor.value.slice(start, end);
-  const inline = {
-    bold: ['**', '**', '加粗文字'],
-    italic: ['*', '*', '斜体文字'],
-    code: ['`', '`', '代码'],
-  }[type];
-  if (inline) {
-    const content = selected || inline[2];
-    const replacement = inline[0] + content + inline[1];
-    replaceNotesEditorText(
-      editor, start, end, replacement,
-      start + inline[0].length,
-      start + inline[0].length + content.length
-    );
-    return;
-  }
-  if (type === 'link') {
-    const label = selected || '链接文字';
-    const replacement = `[${label}](https://)`;
-    const urlStart = start + label.length + 3;
-    replaceNotesEditorText(editor, start, end, replacement, urlStart, urlStart + 8);
-    return;
-  }
-  const value = editor.value;
-  const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-  const nextBreak = value.indexOf('\n', end);
-  const lineEnd = nextBreak === -1 ? value.length : nextBreak;
-  const lines = value.slice(lineStart, lineEnd).split('\n');
-  const prefixes = { heading: '# ', bullet: '- ', task: '- [ ] ', quote: '> ' };
-  const prefix = prefixes[type];
-  if (!prefix) return;
-  const matcher = type === 'heading' ? /^#{1,6}\s+/ :
-    type === 'task' ? /^[-*+]\s+\[[ xX]\]\s+/ :
-      type === 'quote' ? /^>\s?/ : /^[-*+]\s+/;
-  const remove = lines.filter((line) => line.trim()).every((line) => matcher.test(line.trimStart()));
-  const replacement = lines.map((line) => {
-    if (!line.trim()) return remove ? '' : prefix;
-    const indentation = line.match(/^\s*/)[0];
-    const body = line.slice(indentation.length);
-    return indentation + (remove ? body.replace(matcher, '') : prefix + stripNoteBlockPrefix(body));
-  }).join('\n');
-  replaceNotesEditorText(editor, lineStart, lineEnd, replacement, lineStart, lineStart + replacement.length);
-}
-
-function continueNotesEditorList(editor, event) {
-  if (event.key !== 'Enter' || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey
-    || event.isComposing || editor.selectionStart !== editor.selectionEnd) return false;
-  const cursor = editor.selectionStart;
-  const lineStart = editor.value.lastIndexOf('\n', cursor - 1) + 1;
-  const line = editor.value.slice(lineStart, cursor);
-  const match = line.match(/^(\s*)([-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|>\s?)(.*)$/);
-  if (!match) return false;
-  event.preventDefault();
-  if (!match[3].trim()) {
-    replaceNotesEditorText(editor, lineStart, cursor, match[1], lineStart + match[1].length, lineStart + match[1].length);
-    return true;
-  }
-  let prefix = match[2];
-  const ordered = prefix.match(/^(\d+)[.)]\s+$/);
-  if (ordered) prefix = `${Number(ordered[1]) + 1}. `;
-  if (/^[-*+]\s+\[[ xX]\]\s+$/i.test(prefix)) prefix = '- [ ] ';
-  const insertion = `\n${match[1]}${prefix}`;
-  replaceNotesEditorText(editor, cursor, cursor, insertion, cursor + insertion.length, cursor + insertion.length);
-  return true;
-}
-
-function markdownImageAlt(name) {
-  return String(name || '图片').replace(/[\[\]\\]/g, '').trim().slice(0, 80) || '图片';
-}
-
-function insertNoteImageReferences(editor, images) {
-  const rows = (Array.isArray(images) ? images : []).filter((image) => safeNoteImageReference(image && image.imagePath));
-  if (!editor || !rows.length) return false;
-  const markdown = rows.map((image) => `![${markdownImageAlt(image.name)}](${image.imagePath})`).join('\n\n');
-  const before = editor.value.slice(0, editor.selectionStart);
-  const after = editor.value.slice(editor.selectionEnd);
-  const prefix = before && !before.endsWith('\n') ? '\n\n' : '';
-  const suffix = after && !after.startsWith('\n') ? '\n\n' : '';
-  const replacement = prefix + markdown + suffix;
-  const start = editor.selectionStart;
-  replaceNotesEditorText(editor, start, editor.selectionEnd, replacement, start + replacement.length, start + replacement.length);
-  flushNotesEditorSave();
-  return true;
-}
-
-async function saveNoteImageFiles(editor, files) {
-  const noteId = editor?.dataset.noteId;
-  const imageFiles = Array.from(files || []).filter((file) => String(file.type || '').startsWith('image/')).slice(0, 12);
-  if (!noteId || !imageFiles.length || !window.notchAPI?.saveNoteImage) return false;
-  const time = notesDetail?.querySelector('.notes-detail-time');
-  if (time) time.textContent = '正在添加图片…';
-  const saved = [];
-  for (const file of imageFiles) {
-    try {
-      const result = await window.notchAPI.saveNoteImage({
-        noteId,
-        bytes: new Uint8Array(await file.arrayBuffer()),
-      });
-      if (result?.ok) saved.push({ ...result, name: file.name || '粘贴的图片' });
-    } catch (error) {}
-  }
-  if (!insertNoteImageReferences(editor, saved)) {
-    if (time) time.textContent = '图片添加失败';
-    return false;
-  }
-  showStatusToast(saved.length === 1 ? '图片已添加' : `已添加 ${saved.length} 张图片`);
-  return true;
-}
-
-function setNotesEditorMode(mode) {
-  const next = mode === 'preview' ? 'preview' : 'edit';
-  if (next === notesEditorMode) return;
-  flushNotesEditorSave();
-  notesEditorMode = next;
-  renderNotesDetail(loadNoteArchive());
-  requestAnimationFrame(() => notesDetail?.querySelector(next === 'preview' ? '#notes-preview' : '#notes-editor')?.focus({ preventScroll: true }));
-}
+notesEditor.bindDetailEditor({
+  attachments: notesAttachments,
+  onAction: (action, event) => handleNotesDetailAction(action, event),
+});
 
 notesNewButton?.addEventListener('click', createNote);
 document.addEventListener('keydown', (event) => {
@@ -1487,7 +692,7 @@ const api = {
     const selection = includeSelection && editor && editor.dataset.noteId === noteId && editor.selectionEnd > editor.selectionStart
       ? { start: editor.selectionStart, end: editor.selectionEnd, text: editor.value.slice(editor.selectionStart, editor.selectionEnd) }
       : null;
-    flushNotesEditorSave();
+    notesEditor.flushDetailSave();
     const note = loadNoteArchive().find((item) => item.id === noteId);
     return note ? { sourceType: 'note', sourceId: note.id, sourceTitle: noteArchiveTitle(note), text: selection?.text || note.content, selection, createdAt: note.createdAt } : null;
   },
@@ -1499,7 +704,7 @@ const api = {
     if (!note || note.content.trim() !== String(expectedText || '').trim() || noteArchiveTitle(note) !== expectedTitle) return { ok: false, error: 'source_changed' };
     if (!title) return { ok: false, error: 'missing_title' };
     const updated = window.NotchDomain.updateNoteTitle(notes, noteId, title, Date.now());
-    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(updated)); } catch (error) { return { ok: false, error: 'save_failed' }; }
+    try { saveNoteArchive(updated); } catch (error) { return { ok: false, error: 'save_failed' }; }
     renderNotesLibrary();
     return { ok: true, workspaceSynced: await syncWorkspaceSnapshot(), undo: { noteId, before: note.title, after: title, expectedText: note.content.trim() } };
   },
@@ -1509,7 +714,7 @@ const api = {
     const note = notes.find((item) => item.id === token?.noteId);
     if (!note || noteArchiveTitle(note) !== token.after || note.content.trim() !== token.expectedText) return { ok: false, error: 'conflict' };
     const updated = window.NotchDomain.updateNoteTitle(notes, note.id, token.before, Date.now());
-    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(updated)); } catch (error) { return { ok: false, error: 'save_failed' }; }
+    try { saveNoteArchive(updated); } catch (error) { return { ok: false, error: 'save_failed' }; }
     renderNotesLibrary();
     return { ok: true, workspaceSynced: await syncWorkspaceSnapshot() };
   },
@@ -1522,7 +727,7 @@ const api = {
       || note.content.slice(start, end) !== String(expected || '')) return { ok: false, error: 'source_changed' };
     const nextContent = note.content.slice(0, start) + String(replacement || '') + note.content.slice(end);
     const next = window.NotchDomain.updateNoteInArchive(notes, noteId, nextContent, Date.now());
-    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next)); }
+    try { saveNoteArchive(next); }
     catch (error) { return { ok: false, error: 'save_failed' }; }
     renderNotesLibrary();
     const workspaceSynced = await syncWorkspaceSnapshot();
@@ -1534,7 +739,7 @@ const api = {
     if (!note || note.content !== token.contentAfter || note.content.slice(token.start, token.start + token.after.length) !== token.after) return { ok: false, error: 'conflict' };
     const content = note.content.slice(0, token.start) + token.before + note.content.slice(token.start + token.after.length);
     const next = window.NotchDomain.updateNoteInArchive(notes, token.noteId, content, Date.now());
-    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next)); }
+    try { saveNoteArchive(next); }
     catch (error) { return { ok: false, error: 'save_failed' }; }
     renderNotesLibrary();
     return { ok: true, workspaceSynced: await syncWorkspaceSnapshot() };
@@ -1543,7 +748,7 @@ const api = {
     const notes = loadNoteArchive();
     const note = notes.find((item) => item.id === snapshot?.id);
     if (!note || note.title !== snapshot.title || note.content !== snapshot.content || note.categoryId !== snapshot.categoryId || note.tagId !== snapshot.tagId || note.createdAt !== snapshot.createdAt) return { ok: false, error: 'conflict' };
-    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.filter((item) => item.id !== note.id))); }
+    try { saveNoteArchive(notes.filter((item) => item.id !== note.id)); }
     catch (error) { return { ok: false, error: 'save_failed' }; }
     if (selectedNoteId === note.id) selectedNoteId = null;
     renderNotesLibrary();
@@ -1560,7 +765,7 @@ const api = {
     if (notes.length >= 200) return { ok: false, error: 'capacity' };
     const now = Date.now();
     const note = { id: generateId(), title: String(title || '').slice(0, 80), titleSource, categoryId: '', tagId: '', content: String(content || ''), createdAt: now, updatedAt: now };
-    try { localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify([note, ...notes])); }
+    try { saveNoteArchive([note, ...notes]); }
     catch (error) { return { ok: false, error: 'save_failed' }; }
     renderNotesLibrary();
     const workspaceSynced = await syncWorkspaceSnapshot();
@@ -1570,8 +775,7 @@ const api = {
     if (!loadNoteArchive().some((note) => note.id === noteId)) return false;
     selectedNoteId = noteId;
     if (notesSearch) notesSearch.value = '';
-    if (notesCategoryFilter) notesCategoryFilter.value = '';
-    if (notesTagFilter) notesTagFilter.value = '';
+    notesTaxonomy.clearSelection();
     renderNotesLibrary();
     return true;
   },
@@ -1613,7 +817,7 @@ noteSaveButton?.addEventListener('click', () => {
     notes.unshift({ id: activeId, categoryId: '', tagId: '', content, createdAt: Date.now(), updatedAt: Date.now() });
   }
   localStorage.setItem(NOTE_ACTIVE_ARCHIVE_KEY, activeId);
-  localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
+  saveNoteArchive(notes);
   localStorage.setItem(NOTE_KEY, noteInput.value);
   selectedNoteId = activeId;
   renderNotesLibrary();
@@ -1633,6 +837,7 @@ notesSearch?.addEventListener('input', () => {
   renderNotesLibrary();
 });
 
+/* Legacy taxonomy listeners moved to renderer/notes-taxonomy-controller.js.
 function selectNotesTaxonomy(categoryId, tagId = '') {
   flushNotesEditorSave();
   closeNoteCategoryControls();
@@ -1752,7 +957,7 @@ notesCategoryDeleteConfirm?.addEventListener('click', () => {
   flushNotesEditorSave();
   const result = window.NotchDomain.removeNoteCategory(loadNoteCategories(), loadNoteArchive(), category.id, Date.now());
   try {
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(result.notes.slice(0, 200)));
+    saveNoteArchive(result.notes);
     saveNoteCategories(result.categories);
   } catch (error) {
     showStatusToast('分类删除失败，请检查存储空间');
@@ -1830,7 +1035,7 @@ notesTagDeleteConfirm?.addEventListener('click', () => {
   flushNotesEditorSave();
   const result = window.NotchDomain.removeNoteTag(loadNoteCategories(), loadNoteArchive(), category.id, tag.id, Date.now());
   try {
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(result.notes.slice(0, 200)));
+    saveNoteArchive(result.notes);
     saveNoteCategories(result.categories);
   } catch (error) {
     showStatusToast('标签删除失败，请检查存储空间');
@@ -1842,6 +1047,8 @@ notesTagDeleteConfirm?.addEventListener('click', () => {
   showStatusToast('标签已删除，笔记已移至无标签');
   void syncWorkspaceSnapshot();
 });
+
+*/
 
 notesDetail?.addEventListener('change', (event) => {
   const category = event.target.closest('.notes-detail-category');
@@ -1861,7 +1068,7 @@ notesDetail?.addEventListener('change', (event) => {
     updated = window.NotchDomain.updateNoteTag(notes, tag.dataset.noteId, tagId, Date.now());
   }
   try {
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(updated.slice(0, 200)));
+    saveNoteArchive(updated);
   } catch (error) {
     showStatusToast(category ? '笔记分类保存失败' : '笔记标签保存失败');
     renderNotesLibrary();
@@ -1872,56 +1079,16 @@ notesDetail?.addEventListener('change', (event) => {
   void syncWorkspaceSnapshot();
 });
 
-notesDetail?.addEventListener('input', (event) => {
-  const title = event.target.closest('.notes-detail-title');
-  if (title?.dataset.noteId) {
-    const notes = window.NotchDomain.updateNoteTitle(
-      loadNoteArchive(),
-      title.dataset.noteId,
-      title.value,
-      Date.now()
-    );
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
-    updateSavedNotePresentation(notes.find((note) => note.id === title.dataset.noteId));
-    return;
-  }
-  const editor = event.target.closest('#notes-editor');
-  if (editor) {
-    notesDetail.querySelectorAll('[data-action="organize-note"], [data-action="name-note-ai"]').forEach((button) => button.toggleAttribute('disabled', !editor.value.trim()));
-    scheduleNotesEditorSave(editor);
-  }
-});
-
-notesDetail?.addEventListener('focusout', (event) => {
-  const title = event.target.closest('.notes-detail-title');
-  if (title?.dataset.noteId) {
-    const note = loadNoteArchive().find((item) => item.id === title.dataset.noteId);
-    if (note) title.value = note.title;
-  }
-  if (event.target.closest('#notes-editor')) flushNotesEditorSave();
-});
-
-notesDetail?.addEventListener('mousedown', (event) => {
-  if (event.target.closest('[data-notes-format]')) event.preventDefault();
-});
-
-notesDetail?.addEventListener('click', async (event) => {
-  const format = event.target.closest('[data-notes-format]')?.dataset.notesFormat;
-  if (format) {
-    applyNotesEditorFormat(notesDetail.querySelector('#notes-editor'), format);
-    return;
-  }
-  const action = event.target.closest('[data-action]')?.dataset.action;
-  if (!action) return;
+async function handleNotesDetailAction(action, event) {
   if (action === 'create-note') {
     createNote();
     return;
   }
   if (action === 'note-mode-edit' || action === 'note-mode-preview') {
-    setNotesEditorMode(action.endsWith('preview') ? 'preview' : 'edit');
+    notesEditor.setDetailMode(action.endsWith('preview') ? 'preview' : 'edit');
     return;
   }
-  flushNotesEditorSave();
+  notesEditor.flushDetailSave();
   const notes = loadNoteArchive();
   const note = notes.find((item) => item.id === selectedNoteId);
   if (!note) return;
@@ -1935,76 +1102,30 @@ notesDetail?.addEventListener('click', async (event) => {
   }
   if (action === 'attach-note-image') {
     const editor = notesDetail.querySelector('#notes-editor');
-    if (notesEditorMode !== 'edit') {
-      notesEditorMode = 'edit';
-      renderNotesDetail(notes);
+    if (notesEditor.detailMode() !== 'edit') {
+      notesEditor.setDetailMode('edit', { force: true });
     }
     const activeEditor = notesDetail.querySelector('#notes-editor') || editor;
     const time = notesDetail.querySelector('.notes-detail-time');
     if (time) time.textContent = '正在选择图片…';
-    const result = await window.notchAPI?.chooseNoteImages?.(note.id).catch(() => null);
-    if (result?.images?.length) insertNoteImageReferences(activeEditor, result.images);
+    const result = await notesAttachments.choose(note.id).catch(() => null);
+    if (result?.images?.length) notesAttachments.insertReferences(activeEditor, result.images);
     else if (time) time.textContent = result?.canceled ? `已保存 · ${noteArchiveTime(note.updatedAt)}` : '图片添加失败';
     return;
   }
   if (action === 'delete-note') {
     const next = notes.filter((item) => item.id !== note.id);
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next));
+    saveNoteArchive(next);
     if (localStorage.getItem(NOTE_ACTIVE_ARCHIVE_KEY) === note.id) {
       localStorage.removeItem(NOTE_ACTIVE_ARCHIVE_KEY);
     }
-    void window.notchAPI?.deleteNoteImages?.(note.id).catch(() => false);
+    void notesAttachments.remove(note.id).catch(() => false);
     selectedNoteId = next[0]?.id || '';
-    notesEditorMode = 'edit';
+    notesEditor.setDetailMode('edit', { force: true, render: false, focus: false });
     renderNotesLibrary();
     showStatusToast('笔记已删除');
   }
-});
-
-notesDetail?.addEventListener('keydown', (event) => {
-  const editor = event.target.closest('#notes-editor');
-  if (!editor) return;
-  if (applyNoteTabIndentation(editor, event)) return;
-  if (continueNotesEditorList(editor, event)) return;
-  if (!(event.metaKey || event.ctrlKey) || event.altKey || event.isComposing) return;
-  const key = event.key.toLowerCase();
-  if (key !== 'b' && key !== 'i') return;
-  event.preventDefault();
-  applyNotesEditorFormat(editor, key === 'b' ? 'bold' : 'italic');
-});
-
-notesDetail?.addEventListener('paste', (event) => {
-  const editor = event.target.closest('#notes-editor');
-  if (!editor) return;
-  const images = Array.from(event.clipboardData?.files || []).filter((file) => String(file.type || '').startsWith('image/'));
-  if (!images.length) return;
-  event.preventDefault();
-  void saveNoteImageFiles(editor, images);
-});
-
-notesDetail?.addEventListener('dragover', (event) => {
-  const editor = event.target.closest('#notes-editor')
-    || (event.target.closest('.notes-content') && notesDetail.querySelector('#notes-editor'));
-  if (!editor || !Array.from(event.dataTransfer?.items || []).some((item) => item.kind === 'file' && item.type.startsWith('image/'))) return;
-  event.preventDefault();
-  event.dataTransfer.dropEffect = 'copy';
-  notesDetail.classList.add('is-image-dragging');
-});
-
-notesDetail?.addEventListener('dragleave', (event) => {
-  if (!notesDetail.contains(event.relatedTarget)) notesDetail.classList.remove('is-image-dragging');
-});
-
-notesDetail?.addEventListener('drop', (event) => {
-  notesDetail.classList.remove('is-image-dragging');
-  const editor = event.target.closest('#notes-editor')
-    || (event.target.closest('.notes-content') && notesDetail.querySelector('#notes-editor'));
-  if (!editor) return;
-  const images = Array.from(event.dataTransfer?.files || []).filter((file) => String(file.type || '').startsWith('image/'));
-  if (!images.length) return;
-  event.preventDefault();
-  void saveNoteImageFiles(editor, images);
-});
+}
 
 notesDetail?.addEventListener('click', (event) => {
   const link = event.target.closest('#notes-preview [data-note-href]');
@@ -2015,48 +1136,9 @@ notesDetail?.addEventListener('click', (event) => {
 });
 
 document.addEventListener('notch:tabchange', (event) => {
-  if (event.detail?.tab !== 'notes') flushNotesEditorSave();
+  if (event.detail?.tab !== 'notes') notesEditor.flushDetailSave();
 });
-window.addEventListener('beforeunload', flushNotesEditorSave);
-
-if (noteFormatActions) {
-  noteFormatActions.addEventListener('mousedown', (event) => {
-    if (event.target.closest('[data-note-format]')) event.preventDefault();
-  });
-  noteFormatActions.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-note-format]');
-    if (!button) return;
-    applyNoteFormat(button.dataset.noteFormat);
-  });
-}
-
-noteModeButtons.forEach((button) => {
-  button.addEventListener('click', () => setNoteMode(button.dataset.noteMode));
-});
-noteEditButton?.addEventListener('click', () => setNoteMode(noteMode === 'preview' ? 'edit' : 'preview'));
-
-if (notePreview) {
-  notePreview.addEventListener('click', (event) => {
-    const link = event.target.closest('[data-note-href]');
-    if (!link) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const href = safeMarkdownUrl(link.dataset.noteHref);
-    if (href && window.notchAPI && typeof window.notchAPI.openExternal === 'function') {
-      window.notchAPI.openExternal(href).catch(() => {});
-    }
-  });
-  notePreview.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    const link = event.target.closest('[data-note-href]');
-    if (!link) return;
-    event.preventDefault();
-    const href = safeMarkdownUrl(link.dataset.noteHref);
-    if (href && window.notchAPI && typeof window.notchAPI.openExternal === 'function') {
-      window.notchAPI.openExternal(href).catch(() => {});
-    }
-  });
-}
+window.addEventListener('beforeunload', () => notesEditor.flushDetailSave());
 
 
     return Object.freeze(api);

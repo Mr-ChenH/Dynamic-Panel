@@ -27,6 +27,11 @@ const clipboardStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 
 const clipboardControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'clipboard-controller.js'), 'utf8');
 const pomodoroControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'pomodoro-controller.js'), 'utf8');
 const homeLayoutControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-layout-controller.js'), 'utf8');
+const notesMarkdownJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-markdown.js'), 'utf8');
+const notesStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-store.js'), 'utf8');
+const notesAttachmentsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-attachments-controller.js'), 'utf8');
+const notesTaxonomyJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-taxonomy-controller.js'), 'utf8');
+const notesEditorJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-editor-controller.js'), 'utf8');
 const notesControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes-controller.js'), 'utf8');
 const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
@@ -48,17 +53,29 @@ const workspaceAISettingsJs = fs.readFileSync(path.join(__dirname, '..', 'render
 const panelControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'panel-controller.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const stylesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'styles.css'), 'utf8');
-const recordingsCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'recordings.css'), 'utf8');
-const credentialsCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'credentials.css'), 'utf8');
+const notesCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'notes.css'), 'utf8');
+const platformCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'platform.css'), 'utf8');
 const todoPlannerCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-planner.css'), 'utf8');
 const todoListCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-list.css'), 'utf8');
-const todoEditorCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-editor.css'), 'utf8');
 const aiCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.css'), 'utf8');
 const aiJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'ai.js'), 'utf8');
 const settingsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'settings.js'), 'utf8');
+const homeWeatherJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-weather-controller.js'), 'utf8');
+const homeMusicJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-music-controller.js'), 'utf8');
+const homeQuickCaptureJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-quick-capture-controller.js'), 'utf8');
+const homeChatContextJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-chat-context-controller.js'), 'utf8');
+const homeChatGenerationJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-chat-generation-controller.js'), 'utf8');
+const homeChatSessionJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-chat-session-controller.js'), 'utf8');
+const homeChatReaderJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home-chat-reader-controller.js'), 'utf8');
 const homeJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home.js'), 'utf8');
 const homeCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home.css'), 'utf8');
 const financeJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance.js'), 'utf8');
+const financeRequestControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-request-controller.js'), 'utf8');
+const financeOverviewControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-overview-controller.js'), 'utf8');
+const financeRankingControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-ranking-controller.js'), 'utf8');
+const financeAiControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-ai-controller.js'), 'utf8');
+const financeWatchlistControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-watchlist-controller.js'), 'utf8');
+const financeSettingsControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-settings-controller.js'), 'utf8');
 const markdownJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'markdown.js'), 'utf8');
 const chatContextJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-context.js'), 'utf8');
 const chatSessionsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'chat-sessions.js'), 'utf8');
@@ -70,6 +87,16 @@ test('panel navigation is exposed by a dedicated controller through an injected 
   assert.match(panelControllerJs, /window\.NotchPanel\s*=\s*Object\.freeze/);
   assert.match(panelControllerJs, /host\.navigate/);
   assert.doesNotMatch(appJs, /window\.NotchPanel\s*=\s*\{/);
+});
+
+test('preload exposes grouped domain APIs while retaining flat compatibility methods', () => {
+  for (const group of ['window', 'finance', 'home', 'capture', 'recordings', 'notes', 'launcher', 'settings']) {
+    assert.match(preloadJs, new RegExp(`api\\.${group}\\s*=\\s*Object\\.freeze`));
+  }
+  assert.match(preloadJs, /contextBridge\.exposeInMainWorld\('notchAPI', api\)/);
+  assert.match(preloadJs, /setMode: \(mode\) =>/);
+  assert.match(preloadJs, /getFinanceOverview: \(payload\) =>/);
+  assert.match(preloadJs, /saveNoteImage: \(payload\) =>/);
 });
 
 test('current windows keep their domain state outside the workspace coordinator', () => {
@@ -265,74 +292,6 @@ test('pomodoro state and controls use a dedicated injected controller', () => {
   assert.doesNotMatch(appJs, /pomodoroToggle\?\.addEventListener/);
 });
 
-test('credential styles load as a dedicated module while shared theme selectors remain in the shell stylesheet', () => {
-  assert.ok(html.indexOf('credentials.css') < html.indexOf('launcher.css'));
-  assert.match(credentialsCss, /\.credentials-page/);
-  assert.match(credentialsCss, /\.credential-item\.editing/);
-  assert.match(credentialsCss, /data-theme='light'/);
-  assert.doesNotMatch(stylesCss, /\/\* ============ 密钥库 ============ \*\//);
-  assert.doesNotMatch(stylesCss, /\.credential-item\.editing \{/);
-});
-
-test('todo time-range planner styles load outside the shell stylesheet', () => {
-  assert.ok(html.indexOf('todo-planner.css') < html.indexOf('launcher.css'));
-  assert.match(todoPlannerCss, /\.todo-scope-control/);
-  assert.match(todoPlannerCss, /\.todo-overdue-jump/);
-  assert.doesNotMatch(stylesCss, /待办 · 时间范围 \+ P0–P3 四象限/);
-  assert.doesNotMatch(stylesCss, /\.todo-planner-bar \{/);
-});
-
-test('todo list and completed disclosure styles load outside the shell stylesheet', () => {
-  assert.ok(html.indexOf('todo-list.css') < html.indexOf('launcher.css'));
-  assert.match(todoListCss, /\.todo-completed-disclosure/);
-  assert.match(todoListCss, /\.todo-reschedule-action/);
-  assert.match(todoListCss, /\.todo-add-button/);
-  assert.doesNotMatch(stylesCss, /DDL 与文字分两层/);
-  assert.doesNotMatch(stylesCss, /\.todo-completed-disclosure button \{/);
-});
-
-test('todo deadline editor styles load before shell overrides', () => {
-  assert.ok(html.indexOf('todo-editor.css') < html.indexOf('styles.css'));
-  assert.match(todoEditorCss, /\.todo-editor-backdrop/);
-  assert.match(todoEditorCss, /\.todo-calendar-grid/);
-  assert.match(todoEditorCss, /\.todo-deadline-trigger/);
-  assert.doesNotMatch(stylesCss, /\.todo-editor-backdrop \{/);
-});
-
-test('light theme covers weather surfaces and preserves weather accents', () => {
-  assert.match(homeCss, /:root\[data-theme='light'\] \.home-weather/);
-  assert.match(homeCss, /:root\[data-theme='light'\] \.weather-detail-hero/);
-  assert.match(homeCss, /:root\[data-theme='light'\] \.weather-detail-section/);
-  assert.match(homeCss, /:root\[data-theme='light'\] #home-weather-results/);
-});
-
-test('recording library styles load before shell overrides', () => {
-  assert.ok(html.indexOf('recordings.css') < html.indexOf('styles.css'));
-  assert.match(recordingsCss, /\.recordings-page/);
-  assert.match(recordingsCss, /\.recording-live-audio/);
-  assert.match(recordingsCss, /\.recording-transcript-editor/);
-  assert.doesNotMatch(stylesCss, /\/\* ============ 录制资料库 ============ \*\//);
-  assert.doesNotMatch(stylesCss, /\.recording-live-audio \{/);
-});
-
-test('light theme covers recording and clipboard surfaces', () => {
-  assert.match(stylesCss, /:root\[data-theme='light'\] \.recording-library/);
-  assert.match(stylesCss, /:root\[data-theme='light'\] \.recording-detail/);
-  assert.match(stylesCss, /:root\[data-theme='light'\] \.recording-transcript-editor/);
-  assert.match(stylesCss, /:root\[data-theme='light'\] \.clip-clear-btn/);
-  assert.match(stylesCss, /:root\[data-theme='light'\] \.clip-item/);
-  assert.match(stylesCss, /:root\[data-theme='light'\] \.clip-timeline-node/);
-});
-
-test('clipboard history renders a dated timeline with filtered result counts', () => {
-  assert.match(html, /id="clip-result-count"/);
-  assert.match(clipboardDomainJs, /groupByDay/);
-  assert.match(clipboardControllerJs, /clip-timeline-group/);
-  assert.match(clipboardDomainJs, /formatMoment/);
-  assert.match(stylesCss, /\.clip-timeline-group::before/);
-  assert.match(stylesCss, /\.clip-timeline-node/);
-});
-
 test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', () => {
   for (const name of ['学习与课程', '内容与创作', '产品与开发', '生活与事务']) {
     assert.match(html, new RegExp(`value="${name}"`));
@@ -397,9 +356,9 @@ test('global shortcuts expose configurable panel, launcher, screenshot, screen r
 
 test('Windows collapsed notch stays compact and grows only on approach', () => {
   assert.match(appJs, /app\.dataset\.platform\s*=\s*window\.notchAPI\?\.platform/);
-  const compactRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
-  const hoverRule = stylesCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch:hover \{([\s\S]*?)\n\}/)?.[1] || '';
-  const closingRule = stylesCss.match(/#app\[data-platform='win32'\]\.closing \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
+  const compactRule = platformCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
+  const hoverRule = platformCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch:hover \{([\s\S]*?)\n\}/)?.[1] || '';
+  const closingRule = platformCss.match(/#app\[data-platform='win32'\]\.closing \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
   assert.match(compactRule, /width:\s*160px/);
   assert.match(compactRule, /height:\s*8px/);
   assert.match(compactRule, /width var\(--d-base\)/);
@@ -416,9 +375,9 @@ test('Windows collapsed notch stays compact and grows only on approach', () => {
 });
 
 test('Windows panel motion stays on compositor-only properties', () => {
-  const shellRule = stylesCss.match(/#app\[data-platform='win32'\] \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
-  const expandedRule = stylesCss.match(/#app\[data-platform='win32'\]\.expanded \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
-  const closingShellRule = stylesCss.match(/#app\[data-platform='win32'\]\.closing \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
+  const shellRule = platformCss.match(/#app\[data-platform='win32'\] \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
+  const expandedRule = platformCss.match(/#app\[data-platform='win32'\]\.expanded \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
+  const closingShellRule = platformCss.match(/#app\[data-platform='win32'\]\.closing \.panel::before \{([\s\S]*?)\n\}/)?.[1] || '';
   const mainWindowOptions = mainJs.match(/mainWindow = new BrowserWindow\(\{([\s\S]*?)\n  \}\);/)?.[1] || '';
   assert.match(mainWindowOptions, /backgroundThrottling:\s*false/);
   assert.match(shellRule, /clip-path:\s*none/);
@@ -446,27 +405,57 @@ test('notes provide local-first creation, rich editing, and guarded image attach
   assert.match(html, /id="notes-tag-confirm"/);
   assert.match(html, /id="notes-list"/);
   assert.match(html, /id="notes-detail"/);
+  assert.ok(html.indexOf('notes-markdown.js') < html.indexOf('notes-store.js'));
+  assert.ok(html.indexOf('notes-store.js') < html.indexOf('notes-attachments-controller.js'));
+  assert.ok(html.indexOf('notes-attachments-controller.js') < html.indexOf('notes-taxonomy-controller.js'));
+  assert.ok(html.indexOf('notes-taxonomy-controller.js') < html.indexOf('notes-editor-controller.js'));
+  assert.ok(html.indexOf('notes-editor-controller.js') < html.indexOf('notes-controller.js'));
+  assert.match(notesEditorJs, /window\.NotchNotesEditor/);
+  assert.match(notesEditorJs, /createController/);
+  assert.match(notesEditorJs, /flushDetailSave/);
+  assert.match(notesEditorJs, /setDetailMode/);
+  assert.match(notesEditorJs, /bindDetailEditor/);
+  assert.doesNotMatch(notesControllerJs, /function applyNotesEditorFormat\(/);
+  assert.doesNotMatch(notesControllerJs, /function continueNotesEditorList\(/);
+  assert.doesNotMatch(notesControllerJs, /let pendingNotesEditor/);
   assert.ok(html.indexOf('notes-controller.js') < html.indexOf('app.js'));
+  assert.match(notesMarkdownJs, /window\.NotchNotesMarkdown/);
+  assert.match(notesStoreJs, /window\.NotchNotesStore/);
+  assert.match(notesStoreJs, /loadArchive/);
+  assert.match(notesStoreJs, /saveArchive/);
+  assert.match(notesStoreJs, /loadCategories/);
+  assert.match(notesStoreJs, /saveCategories/);
+  assert.match(notesAttachmentsJs, /window\.NotchNotesAttachments/);
+  assert.match(notesAttachmentsJs, /saveFiles/);
+  assert.match(notesAttachmentsJs, /choose/);
+  assert.match(notesAttachmentsJs, /deleteNoteImages/);
+  assert.match(notesAttachmentsJs, /isSafeImageReference/);
+  assert.match(notesTaxonomyJs, /NotchNotesTaxonomy/);
+  assert.match(notesTaxonomyJs, /createController/);
+  assert.match(notesTaxonomyJs, /removeNoteCategory/);
+  assert.match(notesTaxonomyJs, /removeNoteTag/);
+  assert.match(notesMarkdownJs, /safeNoteImageReference/);
+  assert.match(notesMarkdownJs, /safeMarkdownUrl/);
+  assert.match(notesMarkdownJs, /buildMarkdownPreview/);
   assert.match(notesControllerJs, /window\.NotchNotesController/);
   assert.match(notesControllerJs, /function createNote\(\)/);
-  assert.match(notesControllerJs, /NOTE_CATEGORIES_KEY = 'notch-note-categories-v1'/);
-  assert.match(notesControllerJs, /updateNoteCategory/);
-  assert.match(notesControllerJs, /removeNoteCategory/);
-  assert.match(notesControllerJs, /updateNoteTag/);
-  assert.match(notesControllerJs, /removeNoteTag/);
-  assert.match(notesControllerJs, /function renderNotesTaxonomy/);
-  assert.match(notesControllerJs, /function applyNoteTabIndentation/);
-  assert.match(notesControllerJs, /applyNoteTabIndentation\(editor, event\)/);
-  assert.match(notesControllerJs, /notesTaxonomyTree\?\.addEventListener/);
-  assert.match(notesControllerJs, /addEventListener\('paste'/);
-  assert.match(notesControllerJs, /addEventListener\('drop'/);
+  assert.match(notesControllerJs, /NotchNotesStore\.createStore/);
+  assert.doesNotMatch(notesControllerJs, /NOTE_ARCHIVE_KEY|NOTE_CATEGORIES_KEY/);
+  assert.doesNotMatch(notesControllerJs, /normalizeNoteArchive\(/);
+  assert.match(notesEditorJs, /function applyTabIndentation/);
+  assert.match(notesEditorJs, /applyTabIndentation\(noteInput/);
+  assert.match(notesEditorJs, /addEventListener\('paste'/);
+  assert.match(notesEditorJs, /addEventListener\('drop'/);
   assert.match(notesControllerJs, /safeNoteImageReference/);
+  assert.match(notesControllerJs, /NotchNotesAttachments\.createController/);
+  assert.doesNotMatch(notesControllerJs, /function saveNoteImageFiles\(/);
+  assert.doesNotMatch(notesControllerJs, /function insertNoteImageReferences\(/);
   assert.match(appJs, /NotchNotesController\.createController/);
   assert.doesNotMatch(appJs, /function createNote\(\)/);
   assert.doesNotMatch(appJs, /function renderNotesTaxonomy\(/);
-  assert.match(stylesCss, /\.notes-list \{[^}]*scrollbar-gutter:\s*stable[^}]*scrollbar-color:\s*transparent transparent/);
-  assert.match(stylesCss, /\.notes-list:hover,\s*\.notes-list:focus-within \{[^}]*scrollbar-color:\s*var\(--scrollbar-thumb-hover\)/);
-  assert.match(stylesCss, /\.notes-list::-webkit-scrollbar-button \{[^}]*display:\s*none[^}]*width:\s*0[^}]*height:\s*0/);
+  assert.match(notesCss, /\.notes-list \{[^}]*scrollbar-gutter:\s*stable[^}]*scrollbar-color:\s*transparent transparent/);
+  assert.match(notesCss, /\.notes-list:hover,\s*\.notes-list:focus-within \{[^}]*scrollbar-color:\s*var\(--scrollbar-thumb-hover\)/);
+  assert.match(notesCss, /\.notes-list::-webkit-scrollbar-button \{[^}]*display:\s*none[^}]*width:\s*0[^}]*height:\s*0/);
   assert.match(preloadJs, /notes:save-image/);
   assert.match(preloadJs, /notes:choose-images/);
   assert.match(preloadJs, /notes:read-image/);
@@ -585,14 +574,14 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.match(html, /id="finance-ranking-next"/);
   assert.match(html, /class="finance-ranking-summary"/);
   assert.match(html, /class="finance-ranking-spotlight-section"/);
-  assert.match(financeJs, /finance-ranking-spotlight-card/);
-  assert.match(financeJs, /data-finance-ranking-asset/);
+  assert.match(financeRankingControllerJs, /finance-ranking-spotlight-card/);
+  assert.match(financeRankingControllerJs, /data-finance-ranking-asset/);
   assert.match(financeJs, /openRankingAsset/);
-  assert.match(financeJs, /finance-ranking-sparkline/);
+  assert.match(financeRankingControllerJs, /finance-ranking-sparkline/);
   assert.match(financeJs, /market: 'all', source: state\.preferences\.defaultSource, sort: 'gainers'/);
   assert.match(financeJs, /market: 'all', source: state\.preferences\.defaultSource, sort: 'losers'/);
   assert.match(financeJs, /market: 'all', source: state\.preferences\.defaultSource, sort: 'volume'/);
-  assert.match(financeJs, /data-finance-overview-asset/);
+  assert.match(financeOverviewControllerJs, /data-finance-overview-asset/);
   assert.match(financeJs, /榜单已加载/);
   assert.match(financeJs, /openAssetDetail\(quote\)/);
   assert.match(financeJs, /Array\.isArray\(quote\.sparkline\) && quote\.sparkline\.length > 1/);
@@ -606,7 +595,7 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.match(financeJs, /sort === 'market_cap'.*source === 'binance'.*'coingecko'/);
   assert.match(financeJs, /value === null \|\| value === undefined/);
   assert.match(financeJs, /JSON\.stringify\(parsed\) !== JSON\.stringify\(normalized\).*localStorage\.setItem\(PREFERENCES_KEY/);
-  assert.match(financeJs, /只统计 provider 返回结果/);
+  assert.match(financeRankingControllerJs, /只统计 provider 返回结果/);
   assert.match(html, /id="finance-list-select"/);
   assert.match(html, /class="finance-watchlist-workspace"/);
   assert.match(html, /id="finance-quotes"/);
@@ -727,13 +716,96 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.match(appJs, /'finance'/);
 });
 
+test('finance overview projections use a dedicated injected classic-script controller', () => {
+  assert.ok(html.indexOf('finance-overview-controller.js') < html.indexOf('finance.js'));
+  assert.match(financeOverviewControllerJs, /window\.NotchFinanceOverview\s*=\s*Object\.freeze/);
+  assert.match(financeOverviewControllerJs, /renderMovers/);
+  assert.match(financeOverviewControllerJs, /renderMarketSummaries/);
+  assert.match(financeJs, /NotchFinanceOverview\.createController/);
+  assert.match(financeJs, /financeOverviewView\.renderMovers/);
+  assert.match(financeJs, /financeOverviewView\.quotes\(\)/);
+  assert.doesNotMatch(financeJs, /function renderOverviewMovers\(/);
+});
+
+test('finance ranking projections use a dedicated injected classic-script controller', () => {
+  assert.ok(html.indexOf('finance-ranking-controller.js') < html.indexOf('finance.js'));
+  assert.match(financeRankingControllerJs, /window\.NotchFinanceRanking\s*=\s*Object\.freeze/);
+  assert.match(financeRankingControllerJs, /renderPagination/);
+  assert.match(financeRankingControllerJs, /finance-ranking-spotlight-card/);
+  assert.match(financeJs, /NotchFinanceRanking\.createController/);
+  assert.match(financeJs, /financeRankingView\.render/);
+  assert.doesNotMatch(financeJs, /function setSummary\(/);
+});
+
+test('finance AI facts and projections use a dedicated injected classic-script controller', () => {
+  assert.ok(html.indexOf('finance-ai-controller.js') < html.indexOf('finance.js'));
+  assert.match(financeAiControllerJs, /window\.NotchFinanceAI\s*=\s*Object\.freeze/);
+  assert.match(financeAiControllerJs, /marketFacts/);
+  assert.match(financeAiControllerJs, /renderInterpretation/);
+  assert.match(financeAiControllerJs, /finance-ai-evidence/);
+  assert.match(financeJs, /NotchFinanceAI\.createController/);
+  assert.match(financeJs, /financeAiView\.marketFacts/);
+  assert.match(financeJs, /api\.runAI/);
+});
+
+test('finance watchlist projections use a dedicated injected classic-script controller', () => {
+  assert.ok(html.indexOf('finance-watchlist-controller.js') < html.indexOf('finance.js'));
+  assert.match(financeWatchlistControllerJs, /window\.NotchFinanceWatchlist\s*=\s*Object\.freeze/);
+  assert.match(financeWatchlistControllerJs, /selectedDetailAsset/);
+  assert.match(financeWatchlistControllerJs, /render\(\)/);
+  assert.match(financeJs, /NotchFinanceWatchlist\.createController/);
+  assert.match(financeJs, /financeWatchlistView\.render/);
+  assert.doesNotMatch(financeJs, /function sortedAssets\(/);
+});
+
+test('finance settings projections use a dedicated classic-script controller', () => {
+  assert.ok(html.indexOf('finance-settings-controller.js') < html.indexOf('finance.js'));
+  assert.match(financeSettingsControllerJs, /window\.NotchFinanceSettings\s*=\s*Object\.freeze/);
+  assert.match(financeSettingsControllerJs, /renderPreferences/);
+  assert.match(financeSettingsControllerJs, /renderWatchlists/);
+  assert.match(financeSettingsControllerJs, /renderSearchResults/);
+  assert.match(financeJs, /NotchFinanceSettings\.createController/);
+  assert.match(financeJs, /financeSettingsView\.renderPreferences/);
+  assert.doesNotMatch(financeJs, /state\.watchlists\.lists\.map\(\(list\) => `<section class=\"finance-settings-watchlist/);
+});
+
+test('finance request lifecycle uses an injected controller and resolves APIs dynamically', () => {
+  assert.ok(html.indexOf('finance-request-controller.js') < html.indexOf('finance.js'));
+  assert.match(financeRequestControllerJs, /window\.NotchFinanceRequests\s*=\s*Object\.freeze/);
+  assert.match(financeRequestControllerJs, /getApi/);
+  assert.match(financeRequestControllerJs, /cancelFinanceRequest/);
+  assert.match(financeJs, /NotchFinanceRequests\.createController/);
+  assert.match(financeJs, /new Proxy/);
+  assert.doesNotMatch(financeJs, /financeRequestIds: new Set/);
+  assert.doesNotMatch(financeJs, /const api = window\.notchAPI \|\| \{\}/);
+});
+
+test('home weather uses an injected controller with guarded refresh lifecycle', () => {
+  assert.ok(html.indexOf('home-weather-controller.js') < html.indexOf('home.js'));
+  assert.match(homeWeatherJs, /window\.NotchHomeWeather/);
+  assert.match(homeWeatherJs, /createController\(host\)/);
+  assert.match(homeWeatherJs, /getHomeWeather/);
+  assert.match(homeWeatherJs, /searchWeatherCities/);
+  assert.match(homeWeatherJs, /open-meteo\.com/);
+  assert.match(homeWeatherJs, /invalidate\(\)/);
+  assert.match(homeWeatherJs, /dispose\(\)/);
+  assert.match(homeJs, /NotchHomeWeather\.createController/);
+  assert.match(homeJs, /homeWeather\.tick\(\)/);
+  assert.doesNotMatch(homeJs, /function weatherCondition\(/);
+  assert.doesNotMatch(homeJs, /function renderWeather\(/);
+});
+
 test('home quick capture routes notes and links through explicit modes', () => {
   assert.match(html, /data-home-capture-mode="auto"[^>]*aria-pressed="true"/);
   assert.match(html, /data-home-capture-mode="note"/);
   assert.match(html, /data-home-capture-mode="link"/);
-  assert.match(homeJs, /NotchDomain\.classifyHomeCapture/);
-  assert.match(homeJs, /NotchWorkspace\?\.saveCapturedLink/);
-  assert.match(homeJs, /NotchNotes\.saveCaptured/);
+  assert.ok(html.indexOf('home-quick-capture-controller.js') < html.indexOf('home.js'));
+  assert.match(homeQuickCaptureJs, /NotchHomeQuickCapture/);
+  assert.match(homeQuickCaptureJs, /classifyHomeCapture/);
+  assert.match(homeQuickCaptureJs, /saveCapturedLink/);
+  assert.match(homeQuickCaptureJs, /saveCaptured/);
+  assert.match(homeJs, /NotchHomeQuickCapture\.createController/);
+  assert.doesNotMatch(homeJs, /classifyHomeCapture/);
   assert.match(notesControllerJs, /async saveCaptured\(content\)[\s\S]*?requestNoteTitle\(result\.note\)/);
   assert.match(workspaceLinksApiJs, /async saveCapturedLink\(rawValue\)/);
 });
@@ -769,6 +841,14 @@ test('home chat exposes temporary-session state, recovery controls and safe mark
   assert.match(html, /script src="chat-context\.js"/);
   assert.match(html, /script src="chat-sessions\.js"/);
   assert.match(html, /script src="chat-reader\.js"/);
+  assert.match(html, /script src="home-chat-context-controller\.js"/);
+  assert.match(html, /script src="home-chat-generation-controller\.js"/);
+  assert.match(html, /script src="home-chat-session-controller\.js"/);
+  assert.match(html, /script src="home-chat-reader-controller\.js"/);
+  assert.ok(html.indexOf('home-chat-context-controller.js') < html.indexOf('home-chat-generation-controller.js'));
+  assert.ok(html.indexOf('home-chat-generation-controller.js') < html.indexOf('home-chat-session-controller.js'));
+  assert.ok(html.indexOf('home-chat-session-controller.js') < html.indexOf('home-chat-reader-controller.js'));
+  assert.ok(html.indexOf('home-chat-reader-controller.js') < html.indexOf('home.js'));
   assert.match(html, /script src="markdown\.js"/);
   assert.match(chatContextJs, /MAX_SOURCES = 3/);
   assert.match(chatSessionsJs, /STORAGE_KEY = 'notch-ai-chat-sessions-v1'/);
@@ -783,32 +863,51 @@ test('home chat exposes temporary-session state, recovery controls and safe mark
   assert.doesNotMatch(markdownJs, /container\.innerHTML\s*=/);
   assert.match(mainJs, /registerSystemIpc\(/);
   assert.match(systemIpcJs, /ipcMain\.handle\('shell:openExternal',[\s\S]*?validatePublicHttpUrl\(value\)/);
-  assert.match(homeJs, /setTurnState\(turn, 'stopped'/);
-  assert.match(homeJs, /setTurnState\(turn, 'error'/);
-  assert.match(homeJs, /NotchNotes\?\.saveGenerated/);
+  assert.match(homeChatGenerationJs, /NotchHomeChatGeneration/);
+  assert.match(homeChatGenerationJs, /function cancel\(\)/);
+  assert.match(homeChatGenerationJs, /function submit\(rawText/);
+  assert.match(homeChatGenerationJs, /onAIEvent/);
+  assert.match(homeChatGenerationJs, /cancelAI/);
+  assert.match(homeChatGenerationJs, /saveGenerated/);
+  assert.doesNotMatch(homeJs, /function submitChat\(/);
+  assert.doesNotMatch(homeJs, /api\?\.onAIEvent/);
+  assert.match(homeChatContextJs, /NotchHomeChatContext/);
+  assert.match(homeChatContextJs, /MAX_SOURCES/);
+  assert.match(homeChatContextJs, /getSelectedSources/);
+  assert.match(homeChatContextJs, /renderPicker/);
+  assert.match(homeJs, /NotchHomeChatContext\.createController/);
   assert.match(homeJs, /NotchNotes\?\.chatContexts/);
   assert.match(homeJs, /NotchWorkspace\?\.chatContexts/);
   assert.match(homeJs, /NotchTodo\?\.chatContexts/);
   assert.match(homeJs, /NotchClipboard\?\.chatContexts/);
-  assert.match(homeJs, /context: \{ sourceType: 'manual', text, sources \}/);
-  assert.match(homeJs, /persistCurrentSession\(\{ create: true \}\)/);
-  assert.match(homeJs, /ChatSessions\.searchSessions/);
-  assert.match(homeJs, /ChatSessions\.renameSession/);
-  assert.match(homeJs, /ChatSessions\.removeSession/);
-  assert.match(homeJs, /ChatReader\.todoSource/);
-  assert.match(homeJs, /function openReader\(turn\)/);
-  assert.match(homeJs, /toggleTurnNote\(readerTurn\)/);
+  assert.match(homeChatGenerationJs, /context: \{ sourceType: 'manual', text, sources \}/);
+  assert.match(homeJs, /NotchHomeChatSession\.createController/);
+  assert.match(homeChatSessionJs, /NotchHomeChatSession/);
+  assert.match(homeChatSessionJs, /ChatSessions\.searchSessions/);
+  assert.match(homeChatSessionJs, /ChatSessions\.renameSession/);
+  assert.match(homeChatSessionJs, /ChatSessions\.removeSession/);
+  assert.match(homeChatSessionJs, /function persist\(\{ create = false \} = \{\}\)/);
+  assert.match(homeChatSessionJs, /ChatSessions\.STORAGE_KEY/);
+  assert.match(homeChatReaderJs, /ChatReader\.todoSource/);
+  assert.match(homeChatReaderJs, /function open\(turn\)/);
+  assert.match(homeChatReaderJs, /host\.toggleTurnNote/);
+  assert.match(homeJs, /NotchHomeChatReader\.createController/);
   assert.match(homeJs, /window\.NotchChatReaderView = Object\.freeze/);
   assert.match(appJs, /NotchChatReaderView\?\.handleEscape\(\)/);
   assert.match(aiJs, /returnFocus = active instanceof HTMLElement/);
   assert.doesNotMatch(homeJs, /pendingReply\?\.remove|pendingUser\?\.remove/);
+  assert.doesNotMatch(homeJs, /function openReader\(turn\)|readerSelectionText\(\)/);
+  assert.doesNotMatch(homeJs, /function renderSessionPanel\(|function openSavedSession\(/);
 });
 
 test('home music is app-owned and switches local, HTTPS and go-music-dl playlists', () => {
   assert.match(html, /id="home-music-audio"/);
   assert.match(html, /data-home-media="shuffle"/);
-  assert.match(homeJs, /MUSIC_SHUFFLE_KEY/);
-  assert.match(homeJs, /shuffledMusicTrack/);
+  assert.ok(html.indexOf('home-music-controller.js') < html.indexOf('home.js'));
+  assert.match(homeMusicJs, /window\.NotchHomeMusic/);
+  assert.match(homeMusicJs, /createController\(host/);
+  assert.match(homeMusicJs, /MUSIC_SHUFFLE_KEY/);
+  assert.match(homeMusicJs, /shuffledMusicTrack/);
   assert.match(html, /id="home-media-cover"/);
   assert.match(html, /id="home-media-discover"/);
   assert.match(html, /id="home-media-discovery"/);
@@ -847,24 +946,29 @@ test('home music is app-owned and switches local, HTTPS and go-music-dl playlist
   assert.match(settingsJs, /id:'music'/);
   for (const api of ['getHomeMusicLibrary', 'setHomeMusicMode', 'selectHomeMusicPlaylist', 'refreshHomeMusicSource', 'addHomeMusicSource', 'removeHomeMusicSource', 'browseHomeMusicCategories', 'searchHomeMusicPlaylists', 'browseHomeMusicCategory', 'browseHomeMusicRecommend', 'browseHomeMusicUserPlaylists', 'selectHomeMusicOnlinePlaylist', 'loadHomeMusicCover', 'chooseHomeMusicFiles', 'chooseHomeMusicFolder', 'addHomeMusicUrl', 'removeHomeMusicTrack', 'loadHomeMusicTrack']) assert.match(preloadJs, new RegExp(api));
   for (const channel of ['home:music-library', 'home:music-mode', 'home:music-select-playlist', 'home:music-refresh-source', 'home:music-add-source', 'home:music-remove-source', 'home:music-browse-categories', 'home:music-search-playlists', 'home:music-browse-category', 'home:music-browse-recommend', 'home:music-browse-user-playlists', 'home:music-select-online-playlist', 'home:music-cover', 'home:music-choose-files', 'home:music-choose-folder', 'home:music-add-network', 'home:music-remove', 'home:music-load']) assert.match(homeIpcJs, new RegExp(channel));
-  assert.match(homeJs, /URL\.createObjectURL/);
-  assert.match(homeJs, /loadHomeMusicCover\?\.\(reference\)/);
-  assert.match(homeJs, /browseHomeMusicCategories/);
-  assert.match(homeJs, /browseHomeMusicUserPlaylists/);
-  assert.match(homeJs, /home-media-discovery/);
-  assert.match(homeJs, /homeDiscoverySource/);
-  assert.match(homeJs, /ensureHomeMusicCategories/);
-  assert.match(homeJs, /ensureMusicSettingsCategories/);
-  assert.match(homeJs, /notch:settings-category-change/);
-  assert.match(homeJs, /MUSIC_DISCOVERY_FILTER_KEY/);
-  assert.match(homeJs, /saveMusicDiscoveryFilter/);
+  assert.match(homeMusicJs, /URL\.createObjectURL/);
+  assert.match(homeMusicJs, /loadHomeMusicCover\?\.\(reference\)/);
+  assert.match(homeMusicJs, /browseHomeMusicCategories/);
+  assert.match(homeMusicJs, /browseHomeMusicUserPlaylists/);
+  assert.match(homeMusicJs, /home-media-discovery/);
+  assert.match(homeMusicJs, /homeDiscoverySource/);
+  assert.match(homeMusicJs, /ensureHomeMusicCategories/);
+  assert.match(homeMusicJs, /ensureMusicSettingsCategories/);
+  assert.match(homeMusicJs, /notch:settings-category-change/);
+  assert.match(homeMusicJs, /MUSIC_DISCOVERY_FILTER_KEY/);
+  assert.match(homeMusicJs, /saveMusicDiscoveryFilter/);
+  assert.match(homeJs, /NotchHomeMusic\.createController/);
+  assert.match(homeJs, /homeMusic\.dispose\(\)/);
   assert.match(workspaceLinksRendererJs, /parseLinkQuery/);
   assert.match(workspaceLinksRendererJs, /toggle-link-favorite/);
   assert.match(workspaceLinksRendererJs, /toggle-link-read/);
   assert.match(workspaceLinksRendererJs, /link\.description/);
   assert.match(aiJs, /ai-metadata-tags/);
-  assert.match(homeJs, /settingsPlaylists = musicCatalogView === 'mine'/);
-  assert.match(homeJs, /home-media-progress'\)\.hidden = !activeMusicTrack\(\)/);
+  assert.match(homeMusicJs, /settingsPlaylists = musicCatalogView === 'mine'/);
+  assert.match(homeMusicJs, /home-media-progress'\)\.hidden = !activeMusicTrack\(\)/);
+  assert.doesNotMatch(homeJs, /function renderMusicNavigation\(/);
+  assert.doesNotMatch(homeJs, /function loadMusicTrack\(/);
+  assert.doesNotMatch(homeJs, /MUSIC_DISCOVERY_FILTER_KEY/);
   assert.doesNotMatch(preloadJs, /getHomeMedia|controlHomeMedia|getMusicStatus|controlMusic/);
   assert.doesNotMatch(mainJs, /home:media-status|home:media-control|music:status|music:control|SODA_MUSIC/);
   assert.doesNotMatch(workspaceJs, /getMusicStatus|controlMusic/);

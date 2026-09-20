@@ -1,0 +1,97 @@
+/* ============ 待办日期浮层 ============ */
+/* 日期选择锚定输入区，不遮罩，也不改变工作台上下文。 */
+.todo-date-popover {
+  position: absolute;
+  z-index: 80;
+  width: 264px;
+  filter: drop-shadow(0 22px 44px rgba(0,0,0,.48));
+}
+.todo-date-popover[hidden] { display: none; }
+.todo-date-popover .todo-editor-card {
+  width: 264px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.11);
+  border-radius: 20px;
+  background: linear-gradient(155deg, rgba(42,42,48,.98), rgba(19,19,23,.985));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(28px) saturate(1.2);
+}
+.todo-date-popover .todo-editor-card::after {
+  content: '';
+  position: absolute;
+  right: 22px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  border-right: 1px solid rgba(255,255,255,.11);
+  border-bottom: 1px solid rgba(255,255,255,.11);
+  background: #151519;
+}
+.todo-date-popover .todo-editor-card header { margin-bottom: 10px; }
+.todo-date-popover .todo-calendar-head { display: grid; grid-template-columns: 24px 1fr 24px; align-items: center; gap: 4px; }
+.todo-date-popover .todo-calendar-head span { text-align: center; }
+.todo-date-popover .todo-calendar-head button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255,255,255,.055);
+  color: var(--text-2);
+  font: 16px/1 var(--font);
+  cursor: pointer;
+}
+.todo-date-popover .todo-calendar-head button:hover { background: rgba(255,255,255,.1); color: var(--text-1); }
+.todo-date-popover .todo-calendar-week,
+.todo-date-popover .todo-calendar-grid { gap: 2px; }
+.todo-date-popover .todo-calendar-grid { min-height: 148px; }
+.todo-date-popover .todo-calendar-grid button { height: 23px; border-radius: 8px; font-size: var(--fs-micro); }
+.todo-date-popover .todo-time-row { margin-top: 9px; }
+
+/* 工作台窄布局下的紧凑日期浮层。 */
+.todo-date-popover { width: 224px; }
+.todo-date-popover .todo-editor-card {
+  width: 224px;
+  padding: 10px;
+  border-radius: 17px;
+}
+.todo-date-popover .todo-editor-card header {
+  min-height: 18px;
+  margin: 0 0 5px;
+  justify-content: center;
+}
+.todo-date-popover .todo-editor-card header span { font-size: var(--fs-micro); }
+.todo-date-popover .todo-calendar-grid { min-height: 122px; }
+.todo-date-popover .todo-calendar-grid button { height: 19px; border-radius: 7px; font-size: var(--fs-micro); }
+.todo-date-popover .todo-calendar-week { margin-bottom: 2px; font-size: var(--fs-micro); }
+.todo-date-popover .todo-time-row { margin-top: 6px; }
+.todo-date-popover .todo-time-row > span { display: none; }
+.todo-date-popover .todo-time-row select { width: 58px; height: 29px; border-radius: 9px; font-size: var(--fs-micro); }
+.todo-date-popover #todo-editor-error { min-height: 0; margin: 5px 0 0; font-size: var(--fs-micro); }
+
+/* 日期浮层永远属于当前象限，而不是按整块面板定位。 */
+.quadrant { position: relative; }
+.quadrant:has(> .todo-date-popover:not([hidden])) { z-index: 60; }
+.quadrant > .todo-date-popover {
+  top: auto !important;
+  right: 12px !important;
+  bottom: 58px !important;
+  left: auto !important;
+  width: 208px;
+  filter: drop-shadow(0 14px 28px rgba(0,0,0,.46));
+}
+.quadrant > .todo-date-popover .todo-editor-card {
+  width: 208px;
+  padding: 9px;
+  border-radius: var(--r-popover);
+}
+.quadrant > .todo-date-popover .todo-editor-card::after { display: none; }
+.quadrant > .todo-date-popover .todo-editor-card header { min-height: 15px; margin-bottom: 3px; }
+.quadrant > .todo-date-popover .todo-calendar-head { grid-template-columns: 20px 1fr 20px; gap: 2px; }
+.quadrant > .todo-date-popover .todo-calendar-head button { width: 20px; height: 20px; border-radius: 6px; font-size: var(--fs-body); }
+.quadrant > .todo-date-popover .todo-calendar-week { margin-bottom: 1px; font-size: var(--fs-micro); }
+.quadrant > .todo-date-popover .todo-calendar-grid { min-height: 104px; gap: 1px; }
+.quadrant > .todo-date-popover .todo-calendar-grid button { height: 17px; border-radius: 6px; font-size: var(--fs-micro); }
+.quadrant > .todo-date-popover .todo-time-row { margin-top: 4px; }
+.quadrant > .todo-date-popover .todo-time-row select { width: 55px; height: 27px; }

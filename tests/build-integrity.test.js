@@ -36,6 +36,17 @@ test('main process imports resolve from the working tree', () => {
   }
 });
 
+test('renderer entrypoint references only existing local assets', () => {
+  const html = fs.readFileSync(path.join(root, 'renderer', 'index.html'), 'utf8');
+  const assets = [
+    ...html.matchAll(/<(?:link[^>]+href|script[^>]+src)=["']([^"']+)["']/g),
+  ].map((match) => match[1]).filter((asset) => !/^(?:https?:|data:|blob:|#)/i.test(asset));
+  assert.ok(assets.length > 0);
+  for (const asset of assets) {
+    assert.equal(fs.existsSync(path.join(root, 'renderer', asset)), true, `${asset} must resolve from renderer/index.html`);
+  }
+});
+
 test('main process initializes injected services before registering their IPC', () => {
   const source = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
   const networkSecurity = source.indexOf('const networkSecurity = createNetworkSecurity({');

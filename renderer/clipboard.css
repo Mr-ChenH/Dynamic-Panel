@@ -1,0 +1,133 @@
+/* ============ 剪贴板 Tab ============ */
+#tab-clip {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.clip-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: var(--s-2);
+}
+
+/* - 工具栏 - */
+.clip-toolbar { display: flex; flex-direction: row; align-items: center; gap: var(--s-3); min-height: 32px; flex-shrink: 0; }
+.clip-toolbar-summary { display: flex; align-items: baseline; gap: var(--s-2); min-width: 150px; }
+.clip-toolbar-summary strong { color: var(--text-1); font-size: var(--fs-body); font-weight: 620; }
+.clip-toolbar-summary span { color: var(--text-4); font: var(--fs-micro) var(--font-mono); font-variant-numeric: tabular-nums; }
+.clip-filter-group { display: flex; align-items: center; gap: var(--s-1); }
+.clip-filter {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-soft);
+  color: var(--text-3);
+  font-size: var(--fs-small);
+  font-family: var(--font);
+  font-weight: 400;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease);
+  -webkit-app-region: no-drag;
+}
+.clip-filter:hover { color: var(--text-2); }
+.clip-filter.active { background: var(--surface-2); border-color: var(--hairline); color: var(--text-1); }
+.clip-clear-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-squircle);
+  color: var(--text-3);
+  cursor: pointer;
+  margin-left: auto;
+  transition: background var(--d-fast) var(--ease), color var(--d-fast) var(--ease), transform var(--d-1) var(--ease-out);
+  -webkit-app-region: no-drag;
+}
+.clip-clear-btn:hover { background: var(--surface-2); color: var(--p0); }
+.clip-clear-btn.confirming { background: var(--surface-3); color: var(--p0); }
+.clip-clear-btn:active { transform: scale(0.86); }
+.clip-clear-btn svg { width: 13px; height: 13px; }
+
+/* - 按日期分组的剪贴时间线 - */
+.clip-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: var(--s-1); }
+.clip-timeline-group { position: relative; padding-left: 26px; padding-bottom: var(--s-4); }
+.clip-timeline-group::before { content: ''; position: absolute; top: 15px; bottom: -1px; left: 5px; width: 1px; background: var(--hairline-soft); }
+.clip-timeline-group:last-child { padding-bottom: 0; }
+.clip-timeline-group:last-child::before { bottom: calc(100% - 16px); }
+.clip-timeline-heading { position: relative; display: flex; align-items: baseline; gap: var(--s-2); min-height: 26px; color: var(--text-2); }
+.clip-timeline-heading time { font-size: var(--fs-small); font-weight: 600; }
+.clip-timeline-heading > span:last-child { color: var(--text-4); font: var(--fs-micro) var(--font-mono); }
+.clip-timeline-node { position: absolute; top: 7px; left: -25px; width: 9px; height: 9px; border: 2px solid var(--bg-base); border-radius: 50%; background: var(--text-2); box-shadow: 0 0 0 1px var(--hairline); }
+.clip-timeline-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); grid-auto-rows: var(--clip-card-h); gap: var(--s-3); align-content: start; }
+.clip-list::-webkit-scrollbar { width: 3px; }
+.clip-list::-webkit-scrollbar-track { background: transparent; }
+.clip-list::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
+.clip-list::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+/* - 空态 - */
+.clip-empty { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 80px; font-size: var(--fs-body); font-weight: 400; color: var(--text-3); }
+
+/* - 条目 - */
+.clip-item { position: relative; display: flex; align-self: stretch; gap: var(--s-2); padding: var(--s-2) var(--s-3); border-radius: var(--r-tile); background: var(--surface-1); border: 1px solid var(--clip-border-text); height: 100%; min-height: 0; overflow: hidden; box-sizing: border-box; cursor: default; transition: background var(--d-fast) var(--ease), border-color var(--d-fast) var(--ease), transform var(--d-1) var(--ease-out); -webkit-app-region: no-drag; }
+.clip-copy-target { width: 100%; height: 100%; min-width: 0; min-height: 0; display: flex; padding: 0; border: none; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.clip-item-text .clip-copy-target,
+.clip-item-image .clip-copy-target { flex-direction: column; }
+.clip-item-text .clip-copy-target { gap: 0; }
+.clip-item.clip-type-url { border-color: var(--clip-border-url); }
+.clip-item.clip-type-image { border-color: var(--clip-border-image); }
+.clip-item:hover { background: var(--surface-2); }
+.clip-item:active { transform: scale(0.99); }
+.clip-item.copied { background: var(--surface-3); box-shadow: none; transition: background var(--d-base) var(--ease), transform var(--d-1) var(--ease-out); }
+.clip-item-text { flex-direction: column; padding: 0; }
+.clip-item-text .clip-copy-target { flex: none; padding: 0; border-radius: inherit; }
+.clip-text { flex: 1; width: 100%; min-height: 0; margin: 0; padding: var(--s-3) var(--s-4); font-size: var(--fs-body); font-weight: 400; color: var(--text-1); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; word-break: normal; user-select: text; -webkit-user-select: text; pointer-events: auto; }
+.clip-item-image { flex-direction: column; align-items: stretch; padding: 0; gap: 0; overflow: hidden; }
+.clip-item-image .clip-thumb-wrap { flex-shrink: 0; width: 100%; height: var(--clip-thumb-h); border-radius: 0; overflow: hidden; background: var(--surface-2); display: flex; align-items: center; justify-content: center; }
+.clip-thumb { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.clip-thumb-placeholder { font-size: var(--fs-small); color: var(--text-4); text-align: center; pointer-events: none; }
+.clip-meta { width: 100%; height: var(--clip-meta-h); display: flex; flex-direction: row; align-items: center; flex: 0 0 var(--clip-meta-h); margin-top: 0; padding: 0 var(--s-4); }
+.clip-time { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); width: 100%; font-size: var(--fs-small); font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.clip-time-relative { color: var(--text-4); font-size: var(--fs-micro); font-weight: 400; }
+.clip-fav-btn,
+.clip-del-btn { position: absolute; top: var(--s-2); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; padding: 0; background: var(--tooltip-bg); border: 1px solid var(--hairline); border-radius: 50%; color: var(--text-2); cursor: pointer; opacity: 0; transition: opacity var(--d-fast) var(--ease), color var(--d-fast) var(--ease), transform var(--d-1) var(--ease-out); -webkit-app-region: no-drag; }
+.clip-del-btn { right: var(--s-2); }
+.clip-fav-btn { right: 36px; }
+.clip-item:hover .clip-fav-btn,
+.clip-item:hover .clip-del-btn,
+.clip-item:focus-within .clip-fav-btn,
+.clip-item:focus-within .clip-del-btn { opacity: 1; }
+.clip-fav-btn.faved { opacity: 1; color: var(--text-1); }
+.clip-fav-btn:hover { color: var(--text-1); }
+.clip-del-btn:hover { color: var(--p0); }
+.clip-fav-btn:active,
+.clip-del-btn:active { transform: scale(0.8); }
+.clip-fav-btn svg,
+.clip-del-btn svg { width: 11px; height: 11px; pointer-events: none; }
+
+/* Shared theme-specific clipboard projection remains in this domain file. */
+:root[data-theme='light'] .clip-filter,
+:root[data-theme='light'] .clip-clear-btn,
+:root[data-theme='light'] .clip-item { border-color: var(--hairline); background: var(--surface-1); color: var(--text-1); box-shadow: none; }
+:root[data-theme='light'] .clip-item:hover,
+:root[data-theme='light'] .clip-filter:hover,
+:root[data-theme='light'] .clip-clear-btn:hover { background: var(--surface-2); }
+:root[data-theme='light'] .clip-filter.active,
+:root[data-theme='light'] .clip-clear-btn.confirming { background: var(--surface-3); color: var(--text-1); }
+:root[data-theme='light'] .clip-timeline-group::before { background: var(--hairline); }
+:root[data-theme='light'] .clip-timeline-node { border-color: var(--surface-1); background: var(--focus-ring); box-shadow: 0 0 0 1px var(--hairline); }
+:root[data-theme='light'] .clip-copy-target,
+:root[data-theme='light'] .clip-time,
+:root[data-theme='light'] .clip-time-relative { color: var(--text-3); }
+:root[data-theme='light'] .clip-del-btn,
+:root[data-theme='light'] .clip-fav-btn { color: var(--text-3); }
+:root[data-theme='light'] .clip-timeline-heading { color: var(--text-2); }
