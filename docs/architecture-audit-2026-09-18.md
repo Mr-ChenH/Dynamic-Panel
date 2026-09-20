@@ -20,14 +20,14 @@
 
 | 文件 | 行数 | 主要问题 |
 | --- | ---: | --- |
-| `main.js` | 1821 | 主进程装配器仍混合 provider service、IPC 装配和部分平台实现 |
+| `main.js` | 1760 | 主进程装配器仍混合 provider service、IPC 装配和部分平台实现；JSON 文件读写、密钥解密、响应体读取、窗口匹配与布局指标已下沉 |
 | `renderer/styles.css` | 3734 | 共享 shell 和跨模块覆盖仍集中，主题、平台与多个领域基础样式已迁移 |
 | `renderer/app.js` | 860 | 主 shell 装配和少量待办兼容入口仍在此处；待办数据、业务变更、交互、时间范围、AI facade 和快捷键录制已迁移 |
 | `renderer/notes-controller.js` | 1148 | 笔记实体、列表、AI 和兼容 facade；editor 生命周期、分类/标签 taxonomy 已迁移 |
 | `renderer/home.js` | 236 | 首页 dashboard、列表刷新和 Chat/快速收集 controller 装配；天气、音乐、资料选择、生成、快速收集、长回答工作台和会话持久化已迁移 |
 | `renderer/workspace.js` | 605 | 已退化为链接/录音/设置控制器装配器，录音 UI 投影已迁移 |
-| `finance-service.js` | 1707 | 领域编排、normalizer 导出和兼容 facade；provider-specific adapter 已继续下沉 |
-| `renderer/finance.js` | 1657 | overview / ranking / watchlist / settings projection 已下沉，AI / coordinator 仍集中 |
+| `finance-service.js` | 1031 | 领域编排与兼容 facade；provider-specific adapter、parser 和各 provider normalizer 已继续下沉 |
+| `renderer/finance.js` | 1505 | overview / ranking / watchlist / settings projection 已下沉，AI / coordinator 仍集中 |
 | `main/finance-provider-adapters.js` | 815 | provider 请求、测试探针、缓存和 provider 适配边界 |
 | `tests/notch-focus.electron.js` | 1524 | 面板交互和大量场景验收混在一个 Electron 测试文件 |
 | `tests/domain.test.js` | 652 | 录音、窗口、待办、credentials 和 notes 等多领域 renderer domain 测试仍集中 |
@@ -45,13 +45,13 @@
 
 ### 2. Electron 面板收起回归
 
-当前 `notch-focus`、`retained-workspace`、`startup`、`task-notification` 和 `capture` Electron 验收均通过。最近一次完整回归为 422 项测试，421 项通过，1 项按平台跳过，0 项失败。
+当前 `notch-focus`、`retained-workspace`、`startup`、`task-notification` 和 `capture` Electron 验收均通过。最近一次完整回归为 454 项测试，453 项通过，1 项按平台跳过，0 项失败。
 
 ## 中优先级架构问题
 
 ### 4. `main.js` 仍然过大且低内聚
 
-已完成的主进程拆分包括转录 session、财务后台刷新和各领域 IPC 注册。当前剩余高耦合区域是 provider 配置装配和金融 provider 适配：
+已完成的主进程拆分包括转录 session、财务后台刷新、各领域 IPC 注册和 finance provider 的配置/请求/adapter/normalizer 边界。当前剩余高耦合区域主要是 `main.js` 的 Electron 装配与平台生命周期；这些边界需要保留初始化顺序和窗口共享状态，不适合机械拆分：
 
 #### AI / 转录 provider 配置
 
@@ -77,7 +77,7 @@ provider 请求与市场 fallback 已开始迁移到：
 main/finance-provider-adapters.js
 ```
 
-当前 adapter 已承接 CoinGecko、Binance、Alpha Vantage、Alpaca/Twelve Data quote fallback、QuantDash、腾讯/东方财富/新浪公开行情、A 股 ranking、历史请求和 SEC fundamentals；后续只保留剩余兼容 helper 的边界收敛，同时保持 `createFinanceService` facade、provider identity、legacy asset ID 和返回结构不变。
+当前 adapter 已承接 CoinGecko、Binance、Alpha Vantage、Alpaca/Twelve Data quote fallback、QuantDash、腾讯/东方财富/新浪公开行情、A 股 ranking、历史请求和 SEC fundamentals；finance provider 的纯 parser/normalizer 已继续迁移到独立模块。当前没有必须继续拆分的 provider helper，后续只需保持 `createFinanceService` facade、provider identity、legacy asset ID 和返回结构不变。
 
 #### IPC 兼容层
 
@@ -165,6 +165,92 @@ error?.name === 'AbortError'
 
 后续继续保持一次一个领域、独立提交和完整回归；运行时拆分、finance/renderer/domain 测试拆分、通知真实 Electron 生命周期、Windows unpacked/NSIS 安装器验收和 Windows 浅色主题实机验收已完成。`notch-focus.electron.js` 与 `startup.electron.js` 的连续生命周期边界已保留并记录，不再进行会降低验收保真度的机械拆分。剩余发布验收仅为在 macOS runner 上执行 DMG 构建、安装启动和浅色主题截图。`tests/launcher.test.js` 和 `launcher/extension-host.js` 的现有用户修改继续保持不动。
 
+## P2 拆分进度
+
+### 已完成：finance renderer 持久化边界
+
+- 新增 `renderer/finance-store.js`，承接金融观察列表、资产身份归一化、偏好迁移/归一化和 LocalStorage 写入事件
+- 保留 `notch-finance-watchlists-v1`、`notch-finance-view-preferences-v1`、旧市场/排序别名、fixture 行清理、`notch-workspace-mutated` 事件和原有返回结构
+- `renderer/finance.js` 只通过兼容委托调用 store；动态 `window.notchAPI` 和行情请求生命周期不变
+- 新增 `tests/finance-store.test.js`，覆盖资产身份、观察列表迁移、偏好归一化和持久化事件
+- 定向结构/完整性测试与完整 `npm test` 已通过
+
+### 已完成：finance renderer 纯展示域
+
+- 新增 `renderer/finance-view-domain.js`，承接价格/报价/紧凑数字/百分比/时间格式化、状态文案、市场状态 fallback、错误文案、图表 canvas 标记和序列变化计算
+- `renderer/finance.js` 保留兼容别名，行情请求生命周期、DOM 事件、AI 请求和 controller 装配不变
+- 新增 `tests/finance-view-domain.test.js`，覆盖格式化边界、市场 provider fallback、图表标记和序列变化
+- `renderer/finance.js` 从约 1657 行降至约 1505 行
+
+### 已完成：finance service 公开行情 parser 边界
+
+- 新增 `main/finance-public-parsers.js`，承接腾讯、新浪、东方财富报价与 K 线 parser
+- `finance-service.js` 保留原 parser 导出和 `createFinanceService` facade；`main/finance-provider-adapters.js` 的依赖注入、错误结构和数据字段保持不变
+- 新增 `tests/finance-public-parsers.test.js`，并继续通过既有 finance normalizer、compatibility、adapter 和 service 测试
+- `finance-service.js` 从约 1707 行降至约 1625 行
+
+### 已完成：finance service 市场 normalizer 边界
+
+- 新增 `main/finance-market-normalizers.js`，承接通用数值/时间序列采样、freshness 计算，以及 CoinGecko、Binance、Alpha Vantage 和 Alpaca 的纯 normalizer
+- `finance-service.js` 继续保留原 normalizer、采样函数和 `freshnessFor` 导出；provider adapter 注入、provider identity、返回字段和错误语义保持不变
+- 新增 `tests/finance-market-normalizers.test.js`，并通过既有 normalizer、compatibility、adapter 和 service 回归
+- `finance-service.js` 从约 1625 行降至约 1377 行
+
+### 已完成：finance service provider normalizer 边界
+
+- 新增 `main/finance-provider-normalizers.js`，承接 Twelve Data、SEC、QuantDash 和公开 A 股的 normalizer、响应校验、资产 ID 解析与 provider 错误映射
+- `finance-service.js` 继续保留原 facade 导出；`finance-service` 到 `finance-provider-adapters` 的依赖注入、provider identity、legacy asset ID、错误码和取消行为保持不变
+- 新增 `tests/finance-provider-normalizers.test.js`，并通过既有 normalizer、compatibility、adapter 和 service 回归
+- `finance-service.js` 从约 1377 行降至约 1031 行
+
+### 已完成：main JSON 文件存储边界
+
+- 新增 `main/json-file-store.js`，承接 JSON 配置读取、目录创建、临时文件写入、原子 rename 和失败清理
+- `main.js` 保留 Electron `app.getPath('userData')` 路径解析及原有依赖注入，只通过 `createJsonFileStore` 获取读写函数
+- 新增 `tests/json-file-store.test.js`，覆盖嵌套目录、fallback、原子临时文件和失败清理
+- `main.js` 从约 1821 行降至约 1802 行
+
+### 已完成：main 存储密钥解密边界
+
+- 新增 `main/secret-decryptor.js`，承接 safeStorage 可用性判断、Base64 解码、解密异常隔离和空值处理
+- `main.js` 继续注入 Electron `safeStorage` 和 Node `Buffer`，所有 provider/service 仍接收原 `decryptStoredSecret` 函数
+- 新增 `tests/secret-decryptor.test.js`，覆盖可用、不可用和解密失败路径
+- `main.js` 从约 1802 行降至约 1796 行
+
+### 已完成：main 有界响应体读取边界
+
+- 新增 `main/response-text-reader.js`，承接 response body reader、UTF-8 分块拼接、最大字节限制和超限取消
+- `main.js` 保留链接 inspector 的注入接口及 `LINK_FETCH_MAX_BYTES` 策略，只将读取实现通过工厂注入
+- 新增 `tests/response-text-reader.test.js`，覆盖分块读取、缺失 body、超限取消和参数校验
+- `main.js` 从约 1796 行降至约 1781 行
+
+### 已完成：main 任务通知窗口匹配边界
+
+- 新增 `main/task-window-matcher.js`，承接任务项目与当前窗口标题的纯评分规则
+- `main.js` 保留窗口扫描、候选排序、聚焦和通知 dismiss 生命周期；匹配权重和原有标题兼容规则不变
+- 新增 `tests/task-window-matcher.test.js`，覆盖精确、前缀、包含、app name fallback 和空值路径
+- `main.js` 从约 1781 行降至约 1770 行
+
+### 已完成：window geometry layout metrics 边界
+
+- 扩展 `main/window-geometry.js`，承接 `stripHeight`、`menuBarHeight`、`chromeY` 和 `tabSizes` 的布局指标投影
+- `main.js` 保留窗口 IPC sender 校验、模式切换和窗口状态，仅注入 `windowGeometry.getLayoutMetrics`
+- 新增 `tests/window-geometry.test.js`，覆盖 macOS 菜单栏高度和 Windows 固定折叠高度
+- `main.js` 从约 1770 行降至约 1760 行
+
+### 已完成：task notification layout 边界
+
+- 新增 `main/task-notification-layout.js`，承接通知窗口宽度约束、屏幕边距和居中 bounds 投影
+- `main.js` 保留通知窗口 factory、controller、display 变化和 dismiss 生命周期，只注入布局工厂的 `getBounds`
+- 新增 `tests/task-notification-layout.test.js`，覆盖常规 display 和窄屏最小宽度
+- 任务通知窗口创建、controller 和 display 变化共用同一个布局实现
+
+### 下一批候选边界
+
+1. 评估 `main.js` 中仍可独立测试的装配辅助逻辑，保留单一 Electron 生命周期和跨服务初始化顺序，不做机械拆分
+2. 检查 finance 相关模块的跨模块重复常量和注入契约，只有能降低耦合且不改变 facade 时才继续抽象
+3. 继续检查 P2 运行时性能和跨平台发布证据，不把结构拆分替代目标平台验收
+
 ## 实施进度
 
 ### 已完成：发布完整性
@@ -242,7 +328,7 @@ error?.name === 'AbortError'
 - 新增 `renderer/finance-watchlist-controller.js`，迁移自选列表选择、排序、选中资产/报价解析和报价列表投影
 - 通过显式 host 注入保留原格式化函数、canvas renderer、详情 callback 和 state 访问边界
 - 保留 finance DOM IDs、点击事件、watchlist LocalStorage、详情请求和取消语义
-- `renderer/finance.js` 当前主要保留 provider mutation、请求 coordinator、详情请求、LocalStorage 和模块装配；AI facts/result projection 已迁移到 `finance-ai-controller.js`
+- `renderer/finance.js` 当前主要保留 provider mutation、请求 coordinator、详情请求和模块装配；LocalStorage、资产身份、格式化和 AI facts/result projection 已迁移到独立模块
 
 ### 已完成：财务 IPC 注册拆分
 
@@ -356,14 +442,14 @@ error?.name === 'AbortError'
 - 新增 `main/credentials-vault.js`、`main/ipc/credentials.js`，迁移安全存储、原子写盘、公开字段映射和五个 `credentials:*` handler
 - 新增 `main/ipc/links.js`，迁移 `links:inspect` 和 `smart:organize-material`
 - 新增 `tests/credentials-vault.test.js` 和 `tests/links-ipc.test.js`
-- `main.js` 当前约 2980 行
+- `main.js` 当前约 1760 行
 
 ### 已完成：窗口 IPC 注册拆分
 
 - 新增 `main/ipc/window.js`，迁移 `window:set-mode`、`window:begin-collapse`、`window:set-collapsed-hover`、`window:metrics`、`window:keep-open`、`window:set-tab` 和 `shortcut:hover-space-status`
 - 所有窗口 IPC 统一验证主窗口 sender；实际 BrowserWindow、几何、模式和快捷键状态通过依赖注入保留在主进程装配层
 - 新增 `tests/window-ipc.test.js`
-- `main.js` 当前约 1821 行，直接 `ipcMain` 注册降至窗口/窗口扫描等剩余领域
+- `main.js` 当前约 1760 行，直接 `ipcMain` 注册降至窗口/窗口扫描等剩余领域
 
 ### 已完成：当前窗口 IPC 注册拆分
 
@@ -448,7 +534,7 @@ error?.name === 'AbortError'
 - `renderer/app.js` 当前约 860 行，保留主 shell 装配和兼容入口；`renderer/todo-list-controller.js` 约 236 行，`renderer/todo-editor-controller.js` 约 238 行，`renderer/todo-mutation-controller.js` 约 287 行，`renderer/todo-scope-controller.js` 约 74 行，`renderer/todo-api-controller.js` 约 88 行，`renderer/shortcut-recorder-controller.js` 约 120 行，`renderer/home-layout-controller.js` 约 475 行，`renderer/home-weather-controller.js` 约 239 行，`renderer/home-music-controller.js` 约 359 行，`renderer/home-quick-capture-controller.js` 约 95 行，`renderer/home-chat-generation-controller.js` 约 287 行，`renderer/home-chat-context-controller.js` 约 188 行，`renderer/home-chat-session-controller.js` 约 344 行，`renderer/home-chat-reader-controller.js` 约 204 行，`renderer/clipboard-controller.js` 约 473 行，`renderer/pomodoro-controller.js` 约 163 行，`renderer/home.js` 约 236 行，`renderer/notes-taxonomy-controller.js` 约 507 行，`renderer/notes-controller.js` 当前约 1148 行，`renderer/notes-markdown.js` 约 293 行，`renderer/notes-store.js` 约 71 行，`renderer/notes-attachments-controller.js` 约 67 行，`renderer/recordings.css` 约 75 行，`renderer/notes.css` 约 349 行`
 - `renderer/workspace.js` 当前约 605 行，保留链接/录音生命周期/设置控制器装配
 - `renderer/finance-ai-controller.js` 当前约 211 行，承接金融 AI 快照 facts、证据/信号分组、结果投影、错误文案和旧结果保留；`finance.js` 保留请求、revision、取消和 API 协调
-- `main.js` 当前约 1821 行；当前窗口、待办提醒、转写存储、应用设置、launcher 设置、财务存储、provider 更新、金融 HTTP 请求、系统应用图标读取、自动粘贴目标、托盘图标和权限自检已通过独立 service 装配
+- `main.js` 当前约 1760 行；当前窗口、待办提醒、转写存储、应用设置、launcher 设置、财务存储、provider 更新、金融 HTTP 请求、系统应用图标读取、自动粘贴目标、托盘图标和权限自检已通过独立 service 装配
 - 新增 `tests/renderer-styles-structure.test.js`，承接 credentials、todo、recordings、clipboard、notes、theme 和 platform stylesheet 的资源所有权、加载顺序与迁移断言；`tests/renderer-structure.test.js` 保留行为与页面结构契约
 - 新增 `tests/domain-links-clipboard.test.js`，承接剪贴板历史、公开 URL 安全归一化、首页快速收集分类和链接分组/查询/拖拽纯函数契约
 - 新增 `tests/home-layout-domain.test.js`，承接首页布局、widget 尺寸、隐藏模块和网格覆盖纯函数契约；`tests/domain.test.js` 保留录音、窗口、待办、credentials 和 notes 测试，文件由约 1000 行降至约 652 行
@@ -461,4 +547,4 @@ error?.name === 'AbortError'
 - 新增 `renderer/home-layout-domain.js`，将首页布局槽位、widget 尺寸、显隐归一化、网格求解/校验和 Todo 分类名称迁移从 `renderer/domain.js` 下沉；保留 `NotchDomain` 经典脚本 facade 与 Node `require` 兼容，`renderer/domain.js` 由 1314 行降至约 1049 行
 - 新增 `main/finance-domain.js`，将 provider 状态投影、金融错误归一化和取消错误构造从 `finance-service.js` 下沉；保留 `createFinanceService`、provider identity、normalizer/export 和返回结构兼容
 - 新增 `tests/finance-domain.test.js`，覆盖主进程金融领域模块与原 facade 的委托契约
-- 完整 `npm test` 当前为 422 项：421 通过，1 项按平台跳过；面板、保留工作区、startup、task-notification 和 capture 五个 Electron 验收全部通过
+- 完整 `npm test` 当前为 454 项：453 通过，1 项按平台跳过；面板、保留工作区、startup、task-notification 和 capture 五个 Electron 验收全部通过

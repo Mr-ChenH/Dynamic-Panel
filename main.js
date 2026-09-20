@@ -56,6 +56,11 @@ const { createNotchTrayIcon } = require('./main/tray-icon');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
 const { createTranscriptionService } = require('./main/transcription-service');
 const { createAIProviderConfig } = require('./main/ai-provider-config');
+const { createJsonFileStore } = require('./main/json-file-store');
+const { createStoredSecretDecryptor } = require('./main/secret-decryptor');
+const { createBoundedResponseTextReader } = require('./main/response-text-reader');
+const { taskWindowMatchScore } = require('./main/task-window-matcher');
+const { createTaskNotificationLayout } = require('./main/task-notification-layout');
 const { createFinanceBackgroundRefresh } = require('./main/finance-background-refresh');
 const { registerFinanceIpc } = require('./main/ipc/finance');
 const { registerRecordingsIpc } = require('./main/ipc/recordings');
@@ -196,14 +201,7 @@ const TRANSCRIPTION_MODEL = 'qwen3-asr-flash-realtime';
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
 const TRANSCRIPTION_FINISH_TIMEOUT_MS = 7000;
 
-function decryptStoredSecret(value) {
-  if (!value || !safeStorage.isEncryptionAvailable()) return '';
-  try {
-    return safeStorage.decryptString(Buffer.from(String(value), 'base64'));
-  } catch (error) {
-    return '';
-  }
-}
+const decryptStoredSecret = createStoredSecretDecryptor({ safeStorage, BufferImpl: Buffer });
 const RECORDING_MAX_BYTES = 200 * 1024 * 1024;
 const LINK_FETCH_TIMEOUT_MS = 8000;
 const LINK_FETCH_MAX_BYTES = 512 * 1024;
@@ -489,20 +487,19 @@ const todoReminderService = createTodoReminderService({
 });
 
 
-function getTaskNotificationBounds(display) {
-  const d = display || getTargetDisplay();
-  const width = Math.min(
-    TASK_NOTIFICATION_WIDTH,
-    Math.max(280, d.bounds.width - TASK_NOTIFICATION_SCREEN_MARGIN * 2)
-  );
-  return getCenteredBounds(width, TASK_NOTIFICATION_HEIGHT, d);
-}
+const taskNotificationLayout = createTaskNotificationLayout({
+  getTargetDisplay,
+  getCenteredBounds,
+  width: TASK_NOTIFICATION_WIDTH,
+  height: TASK_NOTIFICATION_HEIGHT,
+  screenMargin: TASK_NOTIFICATION_SCREEN_MARGIN,
+});
 
 const taskNotificationWindowFactory = createTaskNotificationWindowFactory({
   BrowserWindow,
   preloadPath: path.join(__dirname, 'preload.js'),
   htmlPath: path.join(__dirname, 'renderer', 'notification.html'),
-  getBounds: () => getTaskNotificationBounds(getTargetDisplay()),
+  getBounds: () => taskNotificationLayout.getBounds(),
   installLocalWebContentsGuards,
   onReady: (targetWindow) => taskNotificationController?.onReady(targetWindow),
   onRenderProcessGone: (targetWindow) => {
@@ -516,7 +513,7 @@ taskNotificationController = createTaskNotificationController({
   state: taskNotificationWindowState,
   timers: taskNotificationTimers,
   windowFactory: taskNotificationWindowFactory,
-  getBounds: () => getTaskNotificationBounds(getTargetDisplay()),
+  getBounds: () => taskNotificationLayout.getBounds(),
   visibleMs: TASK_NOTIFICATION_VISIBLE_MS,
   leaveMs: TASK_NOTIFICATION_LEAVE_MS,
   windowPolicy: taskNotificationWindowPolicy,
@@ -693,27 +690,7 @@ function getJsonSettingsPath(name) {
   return path.join(app.getPath('userData'), name);
 }
 
-function readJsonFile(filePath, fallback = {}) {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
-  } catch (error) {
-    return fallback;
-  }
-}
-
-function writeJsonFile(filePath, value) {
-  const temporaryPath = `${filePath}.${process.pid}.tmp`;
-  try {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2), { mode: 0o600 });
-    fs.renameSync(temporaryPath, filePath);
-    return true;
-  } catch (error) {
-    try { fs.unlinkSync(temporaryPath); } catch (unlinkError) {}
-    return false;
-  }
-}
+const { readJsonFile, writeJsonFile } = createJsonFileStore({ fsModule: fs, pathModule: path });
 
 const launcherSettingsStore = createLauncherSettingsStore({
   readJsonFile,
@@ -1131,16 +1108,6 @@ function isMainWindowSender(sender) {
   return Boolean(mainWindow && !mainWindow.isDestroyed() && sender === mainWindow.webContents);
 }
 
-function getLayoutMetrics(display) {
-  const d = display || getWindowDisplay();
-  return {
-    stripHeight: getCollapsedHeight(d), // 折叠黑条总高（= 菜单栏高 = 物理刘海高，不含唇边）
-    menuBarHeight: getMenuBarHeight(d), // 折叠态菜单栏带高（折叠态菜单栏带高）
-    chromeY: EXPANDED_CHROME_Y,
-    tabSizes: TAB_SIZES,
-  };
-}
-
 registerWindowIpc({
   ipcMain,
   isMainWindowSender,
@@ -1155,7 +1122,7 @@ registerWindowIpc({
     windowsCollapsedHovering = hovering;
     applyWindowGeometry('collapsed');
   },
-  getMetrics: getLayoutMetrics,
+  getMetrics: windowGeometry.getLayoutMetrics,
   keepOpen: () => {
     cancelPanelBlurCollapse();
     if (currentMode === 'expanded' && !mainWindow.isFocused()) mainWindow.focus();
@@ -1259,23 +1226,7 @@ const permissionService = createPermissionService({
 });
 const { hasScreenRecordingAccess, promptForMissingPermissions } = permissionService;
 
-async function readResponseText(response) {
-  if (!response.body) return '';
-  const reader = response.body.getReader();
-  const chunks = [];
-  let size = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > LINK_FETCH_MAX_BYTES) {
-      await reader.cancel();
-      break;
-    }
-    chunks.push(Buffer.from(value));
-  }
-  return Buffer.concat(chunks).toString('utf8');
-}
+const readResponseText = createBoundedResponseTextReader({ maxBytes: LINK_FETCH_MAX_BYTES, BufferImpl: Buffer });
 
 const linkInspector = createLinkInspector({
   validatePublicHttpUrl,
@@ -1325,18 +1276,6 @@ registerWindowsIpc({
   listWindows: currentWindowService.list,
   focusWindow: currentWindowService.focus,
 });
-
-function taskWindowMatchScore(notification, target) {
-  const project = String(notification && notification.project || '').trim().toLocaleLowerCase();
-  const title = String(target && target.title || '').trim().toLocaleLowerCase();
-  const appName = String(target && target.appName || '').trim().toLocaleLowerCase();
-  if (!project || !title) return 0;
-  if (title === project) return 100;
-  if (title.startsWith(`${project} `) || title.startsWith(`${project} —`) || title.startsWith(`${project} -`)) return 90;
-  if (title.includes(project)) return 75;
-  if (project.includes(appName) && appName) return 25;
-  return 0;
-}
 
 async function activateActiveTaskNotification(eventId = null) {
   const notification = taskNotificationWindowState.active();  if (!notification || (eventId && notification.eventId !== eventId) || notification.source === 'todo') return false;
@@ -1694,7 +1633,7 @@ function watchDisplayChanges() {
         mainWindow.webContents.send('window:metrics-changed', getLayoutMetrics());
       }
       if (notificationWindow && !notificationWindow.isDestroyed() && notificationWindow.isVisible()) {
-        notificationWindow.setBounds(getTaskNotificationBounds());
+        notificationWindow.setBounds(taskNotificationLayout.getBounds());
       }
     }, 100);
   };

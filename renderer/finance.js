@@ -1,6 +1,4 @@
 (() => {
-  const WATCHLIST_KEY = 'notch-finance-watchlists-v1';
-  const PREFERENCES_KEY = 'notch-finance-view-preferences-v1';
   const getApi = () => window.notchAPI || {};
   const api = new Proxy({}, {
     get(_target, property) {
@@ -100,17 +98,13 @@
     { market: 'crypto', label: '加密货币', providerIds: ['coingecko', 'binance'], session: '24/7' },
   ]);
 
-  const DEFAULT_PREFERENCES = Object.freeze({
-    defaultView: 'overview',
-    defaultMarket: 'all',
-    defaultSource: 'coingecko',
-    defaultRanking: 'gainers',
-    refreshSeconds: 60,
+  const financeStore = window.NotchFinanceStore.createController({
+    rankingSourceFor: (market, source, sort) => rankingSourceFor(market, source, sort),
   });
 
   const state = {
-    watchlists: loadWatchlists(),
-    preferences: loadPreferences(),
+    watchlists: financeStore.loadWatchlists(),
+    preferences: financeStore.loadPreferences(),
     currentListId: 'all',
     currentView: 'overview',
     rankingMarket: 'all',
@@ -225,106 +219,23 @@
     },
   });
 
-  function escapeHtml(value) {
-    return String(value ?? '').replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character]));
-  }
-
-  function safeParse(value, fallback) {
-    try { return JSON.parse(value); } catch (error) { return fallback; }
-  }
+  const financeViewDomain = window.NotchFinanceViewDomain;
+  const escapeHtml = financeViewDomain.escapeHtml;
 
   function normalizeAssetIdentity(value) {
-    if (!value || typeof value !== 'object') return null;
-    const id = String(value.id || '').trim().slice(0, 240);
-    const name = String(value.name || '').trim().slice(0, 120);
-    const symbol = String(value.symbol || '').trim().toUpperCase().slice(0, 32);
-    if (!id || !name || !symbol) return null;
-    const parts = id.split(':');
-    let market = String(value.market || value.type || '').trim();
-    let provider = String(value.provider || '').trim();
-    if (id.startsWith('crypto:coingecko:')) { market = 'crypto'; provider = 'coingecko'; }
-    else if (id.startsWith('crypto:binance:')) { market = 'crypto'; provider = 'binance'; }
-    else if (id.startsWith('us:')) { market = 'us'; provider = provider || 'alpaca'; }
-    else if (id.startsWith('cn:') || id.startsWith('a:')) { market = 'cn'; provider = provider || 'cn-stock'; }
-    if (!['crypto', 'us', 'cn'].includes(market)) return null;
-    return {
-      id,
-      provider: provider.slice(0, 40),
-      providerAssetId: String(value.providerAssetId || parts[parts.length - 1] || '').trim().slice(0, 160),
-      market,
-      type: market === 'crypto' ? 'crypto' : 'stock',
-      symbol,
-      name,
-      exchange: String(value.exchange || '').trim().slice(0, 40),
-      currency: String(value.currency || (market === 'cn' ? 'CNY' : 'USD')).trim().toUpperCase().slice(0, 8),
-      addedAt: String(value.addedAt || '').trim().slice(0, 48),
-    };
-  }
-
-  function loadWatchlists() {
-    const raw = safeParse(localStorage.getItem(WATCHLIST_KEY), {});
-    const parsed = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-    const sourceAssets = parsed.assets && typeof parsed.assets === 'object' && !Array.isArray(parsed.assets) ? parsed.assets : {};
-    const assets = {};
-    for (const [assetId, value] of Object.entries(sourceAssets)) {
-      const hadFixtureQuote = Object.hasOwn(value || {}, 'base') || Object.hasOwn(value || {}, 'change') || Object.hasOwn(value || {}, 'price');
-      if (hadFixtureQuote && !String(value?.addedAt || '').trim()) continue;
-      const asset = normalizeAssetIdentity({ ...value, id: value?.id || assetId });
-      if (asset) assets[asset.id] = asset;
-    }
-    const lists = [];
-    for (const list of Array.isArray(parsed.lists) ? parsed.lists : []) {
-      const id = String(list?.id || '').trim().slice(0, 80);
-      const name = String(list?.name || '').trim().slice(0, 40);
-      if (!id || !name || lists.some((item) => item.id === id)) continue;
-      const assetIds = [...new Set((Array.isArray(list.assetIds) ? list.assetIds : []).map(String).filter((assetId) => assets[assetId]))];
-      lists.push({ id, name, assetIds });
-    }
-    let all = lists.find((list) => list.id === 'all');
-    if (!all) {
-      all = { id: 'all', name: '全部观察', assetIds: Object.keys(assets) };
-      lists.unshift(all);
-    } else {
-      all.name = '全部观察';
-      all.assetIds = [...new Set([...all.assetIds, ...Object.keys(assets)])];
-    }
-    const normalized = { schemaVersion: 1, lists: [all, ...lists.filter((list) => list.id !== 'all')], assets };
-    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(normalized));
-    return normalized;
+    return financeStore.normalizeAssetIdentity(value);
   }
 
   function loadPreferences() {
-    const raw = safeParse(localStorage.getItem(PREFERENCES_KEY), {});
-    const parsed = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-    const marketAliases = { 'A 股': 'cn', '美股': 'us', '加密': 'crypto' };
-    const rankingAliases = { change: 'gainers', 'change-asc': 'losers', price: 'market_cap' };
-    const defaultView = ['overview', 'ranking', 'watchlist'].includes(parsed.defaultView) ? parsed.defaultView : DEFAULT_PREFERENCES.defaultView;
-    const requestedMarket = marketAliases[parsed.defaultMarket] || parsed.defaultMarket;
-    const requestedRanking = rankingAliases[parsed.defaultRanking] || parsed.defaultRanking;
-    const requestedSource = parsed.defaultSource === 'binance' || parsed.defaultSource === 'coingecko'
-      ? parsed.defaultSource
-      : requestedMarket === 'binance' ? 'binance' : DEFAULT_PREFERENCES.defaultSource;
-    const defaultMarket = requestedMarket === 'binance' ? 'crypto' : ['all', 'crypto', 'us', 'cn'].includes(requestedMarket) ? requestedMarket : DEFAULT_PREFERENCES.defaultMarket;
-    const defaultRanking = ['gainers', 'losers', 'market_cap', 'volume'].includes(requestedRanking) ? requestedRanking : DEFAULT_PREFERENCES.defaultRanking;
-    const normalized = {
-      defaultView,
-      defaultMarket,
-      defaultSource: rankingSourceFor(defaultMarket, requestedSource, defaultRanking),
-      defaultRanking,
-      refreshSeconds: [0, 30, 60, 120, 300].includes(Number(parsed.refreshSeconds)) ? Number(parsed.refreshSeconds) : DEFAULT_PREFERENCES.refreshSeconds,
-    };
-    if (JSON.stringify(parsed) !== JSON.stringify(normalized)) localStorage.setItem(PREFERENCES_KEY, JSON.stringify(normalized));
-    return normalized;
+    return financeStore.loadPreferences();
   }
 
   function saveWatchlists() {
-    localStorage.setItem(WATCHLIST_KEY, JSON.stringify(state.watchlists));
-    window.dispatchEvent(new CustomEvent('notch-workspace-mutated'));
+    financeStore.saveWatchlists(state.watchlists);
   }
 
   function savePreferences() {
-    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(state.preferences));
-    window.dispatchEvent(new CustomEvent('notch-workspace-mutated'));
+    financeStore.savePreferences(state.preferences);
   }
 
   function currentList() {
@@ -360,63 +271,14 @@
     }
   }
 
-  function formatPrice(value, currency = 'USD') {
-    if (value === null || value === undefined || typeof value === 'string' && !value.trim()) return '--';
-    const number = Number(value);
-    if (!Number.isFinite(number)) return '--';
-    const maximumFractionDigits = Math.abs(number) < 1 ? 6 : 2;
-    try {
-      return new Intl.NumberFormat('zh-CN', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits }).format(number);
-    } catch (error) {
-      return number.toLocaleString('zh-CN', { maximumFractionDigits });
-    }
-  }
-
-  function formatQuotePrice(quote) {
-    if (quote?.asset?.currency === 'USDT') {
-      const number = Number(quote.price);
-      return Number.isFinite(number) ? `${number.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: Math.abs(number) < 1 ? 6 : 2 })} USDT` : '--';
-    }
-    return formatPrice(quote?.price, quote?.asset?.currency || 'USD');
-  }
-
-  function formatCompact(value) {
-    if (value === null || value === undefined || typeof value === 'string' && !value.trim()) return '--';
-    const number = Number(value);
-    if (!Number.isFinite(number)) return '--';
-    return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 2 }).format(number);
-  }
-
-  function formatPercent(value) {
-    if (value === null || value === undefined || typeof value === 'string' && !value.trim()) return '--';
-    const number = Number(value);
-    if (!Number.isFinite(number)) return '--';
-    return `${number >= 0 ? '+' : ''}${number.toFixed(2)}%`;
-  }
-
-  function formatTime(value) {
-    const timestamp = Date.parse(value || '');
-    if (!Number.isFinite(timestamp)) return '--';
-    return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(timestamp);
-  }
-
-  function changeClass(value) {
-    if (value === null || value === undefined || typeof value === 'string' && !value.trim()) return '';
-    const number = Number(value);
-    return Number.isFinite(number) && number < 0 ? 'down' : 'up';
-  }
-
-  function emptyState(title, detail = '') {
-    return `<div class="finance-empty-state"><strong>${escapeHtml(title)}</strong>${detail ? `<small>${escapeHtml(detail)}</small>` : ''}</div>`;
-  }
-
-  function providerStateLabel(provider) {
-    const labels = {
-      ready: '可用', disabled: '已停用', missing_credentials: '缺少凭据', not_available: '未配置',
-      available: '可用', available_without_summary: '已连接', stale: '缓存', error: '错误',
-    };
-    return labels[provider?.state] || '未知';
-  }
+  const formatPrice = financeViewDomain.formatPrice;
+  const formatQuotePrice = financeViewDomain.formatQuotePrice;
+  const formatCompact = financeViewDomain.formatCompact;
+  const formatPercent = financeViewDomain.formatPercent;
+  const formatTime = financeViewDomain.formatTime;
+  const changeClass = financeViewDomain.changeClass;
+  const emptyState = financeViewDomain.emptyState;
+  const providerStateLabel = financeViewDomain.providerStateLabel;
 
   function overviewMarkets(result) {
     const markets = Array.isArray(result?.markets) ? result.markets : [];
@@ -455,23 +317,9 @@
     return labels[error] || '暂时无法获取数据';
   }
 
-  function renderChartCanvas(assetId, values, className = 'finance-sparkline', label = '实际价格序列') {
-    const numbers = Array.isArray(values) ? values.map(Number).filter(Number.isFinite) : [];
-    if (numbers.length < 2) return '';
-    return `<canvas class="${className}" data-finance-chart-asset="${escapeHtml(assetId)}" role="img" aria-label="${escapeHtml(label)}"></canvas>`;
-  }
-
-  function chartColor(values) {
-    const first = Number(values?.[0]);
-    const last = Number(values?.[values.length - 1]);
-    return Number.isFinite(first) && Number.isFinite(last) && last < first ? '#ff8d82' : '#59d792';
-  }
-
-  function seriesChange(values) {
-    const first = Number(values?.[0]);
-    const last = Number(values?.[values.length - 1]);
-    return Number.isFinite(first) && Number.isFinite(last) && first !== 0 ? (last - first) / first * 100 : null;
-  }
+  const renderChartCanvas = financeViewDomain.renderChartCanvas;
+  const chartColor = financeViewDomain.chartColor;
+  const seriesChange = financeViewDomain.seriesChange;
 
   function drawChart(canvas, values, options = {}) {
     if (!canvas) return;
@@ -750,7 +598,7 @@
   function applyProviderSettings(settings) {
     if (!settings?.ok) return;
     state.providerSettings = settings;
-    const storedPreferences = safeParse(localStorage.getItem(PREFERENCES_KEY), {});
+    const storedPreferences = financeStore.readPreferences();
     const localRefresh = [0, 30, 60, 120, 300].includes(Number(storedPreferences?.refreshSeconds)) ? Number(storedPreferences.refreshSeconds) : null;
     if (localRefresh === null && [0, 30, 60, 120, 300].includes(Number(settings.refreshSeconds))) {
       state.preferences.refreshSeconds = Number(settings.refreshSeconds);

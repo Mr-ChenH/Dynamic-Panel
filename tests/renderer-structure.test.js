@@ -70,6 +70,8 @@ const homeChatReaderJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 
 const homeJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home.js'), 'utf8');
 const homeCss = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home.css'), 'utf8');
 const financeJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance.js'), 'utf8');
+const financeStoreJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-store.js'), 'utf8');
+const financeViewDomainJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-view-domain.js'), 'utf8');
 const financeRequestControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-request-controller.js'), 'utf8');
 const financeOverviewControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-overview-controller.js'), 'utf8');
 const financeRankingControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'finance-ranking-controller.js'), 'utf8');
@@ -593,8 +595,8 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.match(financeJs, /rememberRanking/);
   assert.match(financeJs, /function rankingSourceFor/);
   assert.match(financeJs, /sort === 'market_cap'.*source === 'binance'.*'coingecko'/);
-  assert.match(financeJs, /value === null \|\| value === undefined/);
-  assert.match(financeJs, /JSON\.stringify\(parsed\) !== JSON\.stringify\(normalized\).*localStorage\.setItem\(PREFERENCES_KEY/);
+  assert.match(financeViewDomainJs, /value === null \|\| value === undefined/);
+  assert.match(financeStoreJs, /JSON\.stringify\(parsed\) !== JSON\.stringify\(normalized\).*storage\.setItem\(PREFERENCES_KEY/);
   assert.match(financeRankingControllerJs, /只统计 provider 返回结果/);
   assert.match(html, /id="finance-list-select"/);
   assert.match(html, /class="finance-watchlist-workspace"/);
@@ -645,7 +647,7 @@ test('finance is a provider-backed peer workspace with management isolated in se
   assert.match(financeJs, /capabilities\.fullMarket/);
   assert.match(settingsJs, /id:'finance'[\s\S]*?selector:'\.settings-finance-card'/);
 
-  assert.match(financeJs, /notch-finance-view-preferences-v1/);
+  assert.match(financeStoreJs, /notch-finance-view-preferences-v1/);
   assert.match(financeJs, /searchFinanceAssets/);
   assert.match(financeJs, /getFinanceQuotes/);
   assert.match(financeJs, /getFinanceHistory/);
@@ -767,6 +769,27 @@ test('finance settings projections use a dedicated classic-script controller', (
   assert.match(financeJs, /NotchFinanceSettings\.createController/);
   assert.match(financeJs, /financeSettingsView\.renderPreferences/);
   assert.doesNotMatch(financeJs, /state\.watchlists\.lists\.map\(\(list\) => `<section class=\"finance-settings-watchlist/);
+});
+
+test('finance persistence uses an injected storage boundary before the finance coordinator', () => {
+  assert.ok(html.indexOf('finance-store.js') < html.indexOf('finance.js'));
+  assert.match(financeStoreJs, /createController/);
+  assert.match(financeStoreJs, /notch-finance-watchlists-v1/);
+  assert.match(financeStoreJs, /notch-finance-view-preferences-v1/);
+  assert.match(financeJs, /NotchFinanceStore\.createController/);
+  assert.doesNotMatch(financeJs, /function loadWatchlists\(/);
+  assert.match(financeJs, /return financeStore\.normalizeAssetIdentity/);
+});
+
+test('finance display formatting stays in a pure injected view domain', () => {
+  assert.ok(html.indexOf('finance-view-domain.js') < html.indexOf('finance.js'));
+  assert.match(financeViewDomainJs, /formatPrice/);
+  assert.match(financeViewDomainJs, /seriesChange/);
+  assert.match(financeViewDomainJs, /Object\.freeze/);
+  assert.match(financeJs, /window\.NotchFinanceViewDomain/);
+  assert.match(financeJs, /const formatPrice = financeViewDomain\.formatPrice/);
+  assert.doesNotMatch(financeJs, /function formatPrice\(/);
+  assert.doesNotMatch(financeJs, /function seriesChange\(/);
 });
 
 test('finance request lifecycle uses an injected controller and resolves APIs dynamically', () => {

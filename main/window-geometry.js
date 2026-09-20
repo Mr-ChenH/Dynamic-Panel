@@ -62,6 +62,16 @@ function createWindowGeometry({
     };
   }
 
+  function getLayoutMetrics(display) {
+    const currentDisplay = display || getWindowDisplay();
+    return {
+      stripHeight: getCollapsedHeight(currentDisplay),
+      menuBarHeight: getMenuBarHeight(currentDisplay),
+      chromeY: expandedChromeY,
+      tabSizes,
+    };
+  }
+
   function getBoundsForMode(mode, display) {
     const currentDisplay = display || getWindowDisplay();
     if (mode === 'launcher') {
@@ -121,6 +131,7 @@ function createWindowGeometry({
     getMenuBarHeight,
     getCollapsedHeight,
     getExpandedSize,
+    getLayoutMetrics,
     getBoundsForMode,
     applyWindowGeometry,
   };
