@@ -71,6 +71,12 @@ test('todo deadline popover styles load after shell overrides', () => {
   assert.match(todoDeadlinePopoverCss, /\.todo-date-popover \{/);
   assert.match(todoDeadlinePopoverCss, /\.quadrant > \.todo-date-popover/);
   assert.match(todoDeadlinePopoverCss, /z-index:\s*80/);
+  assert.match(todoDeadlinePopoverCss, /background:\s*var\(--surface-1\)/);
+  assert.match(todoDeadlinePopoverCss, /border:\s*1px solid var\(--hairline\)/);
+  assert.match(todoDeadlinePopoverCss, /grid-auto-rows:\s*17px/);
+  assert.match(todoDeadlinePopoverCss, /\.quadrant > \.todo-date-popover \.todo-calendar-grid > span/);
+  assert.match(todoDeadlinePopoverCss, /\.quadrant:nth-child\(-n \+ 2\) > \.todo-date-popover/);
+  assert.doesNotMatch(todoDeadlinePopoverCss, /linear-gradient\(/);
   assert.doesNotMatch(stylesCss, /\.todo-date-popover \{/);
 });
 
@@ -79,6 +85,8 @@ test('todo deadline editor styles load before shell overrides', () => {
   assert.match(todoEditorCss, /\.todo-editor-backdrop/);
   assert.match(todoEditorCss, /\.todo-calendar-grid/);
   assert.match(todoEditorCss, /\.todo-deadline-trigger/);
+  assert.match(todoEditorCss, /background:\s*var\(--surface-2\)/);
+  assert.match(todoEditorCss, /border:\s*1px solid var\(--hairline\)/);
   assert.doesNotMatch(stylesCss, /\.todo-editor-backdrop \{/);
 });
 

@@ -100,6 +100,26 @@
       return true;
     }
 
+    function positionPopover(quadrant) {
+      if (!backdrop || !quadrant?.getBoundingClientRect) return;
+      const boundary = documentRef.querySelector('.panel') || documentRef.documentElement;
+      if (!boundary?.getBoundingClientRect) return;
+      const quadrantRect = quadrant.getBoundingClientRect();
+      const boundaryRect = boundary.getBoundingClientRect();
+      const popoverRect = backdrop.getBoundingClientRect();
+      if (!popoverRect.height || !boundaryRect.height) return;
+
+      const edge = 8;
+      const availableHeight = Math.max(1, boundaryRect.height - edge * 2);
+      backdrop.style.setProperty('--todo-popover-max-height', `${availableHeight}px`);
+      const preferredTop = quadrantRect.bottom - 58 - popoverRect.height - quadrantRect.top;
+      const upperTop = boundaryRect.top + edge - quadrantRect.top;
+      const lowerTop = boundaryRect.bottom - edge - popoverRect.height - quadrantRect.top;
+      const top = Math.max(upperTop, Math.min(preferredTop, lowerTop));
+      backdrop.style.setProperty('top', `${Math.round(top)}px`, 'important');
+      backdrop.style.setProperty('bottom', 'auto', 'important');
+    }
+
     function open(priority, item = null, anchor = null) {
       const now = new Date();
       const trigger = documentRef.querySelector(`.todo-deadline-trigger[data-deadline-priority="${priority}"]`);
@@ -131,6 +151,7 @@
         backdrop.style.removeProperty('top');
         backdrop.style.right = '12px';
         backdrop.style.bottom = '58px';
+        positionPopover(quadrant);
       }
       applySelection(false);
     }

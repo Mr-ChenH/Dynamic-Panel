@@ -629,7 +629,9 @@ function createWindow() {
     syncDisplayFollowPolling();
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'), {
+    query: { theme: readAppSettings().theme },
+  });
 
   mainWindow.once('ready-to-show', () => {
     applyMode('collapsed');

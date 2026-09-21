@@ -19,6 +19,7 @@ const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 
 const shortcutRecorderControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'shortcut-recorder-controller.js'), 'utf8');
 const todoListControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-list-controller.js'), 'utf8');
 const todoEditorControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-editor-controller.js'), 'utf8');
+const themeBootstrapJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'theme-bootstrap.js'), 'utf8');
 const todoMutationControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-mutation-controller.js'), 'utf8');
 const todoScopeControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-scope-controller.js'), 'utf8');
 const todoApiControllerJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'todo-api-controller.js'), 'utf8');
@@ -300,6 +301,13 @@ test('pomodoro state and controls use a dedicated injected controller', () => {
   assert.doesNotMatch(appJs, /pomodoroToggle\?\.addEventListener/);
 });
 
+test('theme bootstrap runs before styles and accepts the persisted initial theme', () => {
+  assert.ok(html.indexOf('theme-bootstrap.js') < html.indexOf('todo-editor.css'));
+  assert.match(themeBootstrapJs, /URLSearchParams\(window\.location\.search\)/);
+  assert.match(themeBootstrapJs, /document\.documentElement\.dataset\.theme/);
+  assert.match(mainJs, /query:\s*\{\s*theme:\s*readAppSettings\(\)\.theme/);
+});
+
 test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', () => {
   for (const name of ['学习与课程', '内容与创作', '产品与开发', '生活与事务']) {
     assert.match(html, new RegExp(`value="${name}"`));
@@ -315,6 +323,10 @@ test('todo keeps P0-P3 storage while time scopes stay derived from deadlines', (
   assert.match(todoEditorControllerJs, /defaultTodoDeadlineForScope\(/);
   assert.match(todoEditorControllerJs, /shiftCalendarMonth/);
   assert.match(appJs, /NotchTodoEditor\.createTodoEditorController/);
+  assert.match(todoEditorControllerJs, /function positionPopover\(quadrant\)/);
+  assert.match(todoEditorControllerJs, /--todo-popover-max-height/);
+  assert.match(todoEditorControllerJs, /boundaryRect\.bottom/);
+  assert.match(todoEditorControllerJs, /setProperty\('top'/);
   assert.match(todoMutationControllerJs, /createTodoMutationController/);
   assert.match(todoMutationControllerJs, /bindLists/);
   assert.match(todoMutationControllerJs, /bindBulkDelete/);

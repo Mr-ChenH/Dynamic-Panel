@@ -4,20 +4,21 @@
   height: 34px;
   padding: 0 10px;
   overflow: hidden;
-  border: 0;
+  border: 1px solid var(--hairline);
   border-radius: 11px;
   outline: none;
-  background: rgba(255,255,255,.045);
+  background: var(--surface-2);
   color: var(--text-4);
   font: var(--fs-micro) var(--font);
   white-space: nowrap;
   text-overflow: ellipsis;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+  box-shadow: inset 0 1px 0 var(--highlight-top);
 }
-.todo-deadline-trigger:hover { background: rgba(255,255,255,.075); color: var(--text-2); }
-.todo-deadline-trigger.selected { color: var(--text-2); }
-.todo-deadline-trigger.invalid { box-shadow: inset 0 0 0 1px rgba(255,95,87,.72), 0 0 0 3px rgba(255,95,87,.08); }
+.todo-deadline-trigger:hover { border-color: var(--focus-ring); background: var(--surface-3); color: var(--text-2); }
+.todo-deadline-trigger:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.todo-deadline-trigger.selected { color: var(--text-1); }
+.todo-deadline-trigger.invalid { border-color: var(--p0); box-shadow: inset 0 0 0 1px var(--p0), 0 0 0 3px rgba(255,95,87,.08); }
 .todo-editor-backdrop {
   position: absolute;
   inset: 0;
@@ -26,16 +27,17 @@
   place-items: center;
   padding: 22px;
   border-radius: inherit;
-  background: rgba(4,4,6,.62);
+  background: var(--panel-shadow);
   backdrop-filter: blur(22px) saturate(.82);
 }
 .todo-editor-backdrop[hidden] { display: none; }
 .todo-editor-card {
   width: 372px;
   padding: 18px;
+  border: 1px solid var(--hairline);
   border-radius: 24px;
-  background: linear-gradient(150deg, rgba(36,36,41,.98), rgba(19,19,23,.98));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.11), 0 30px 80px rgba(0,0,0,.55);
+  background: var(--surface-1);
+  box-shadow: inset 0 1px 0 var(--highlight-top), 0 30px 80px var(--panel-shadow);
 }
 .todo-editor-card header,
 .todo-editor-card footer,
@@ -44,10 +46,12 @@
 .todo-editor-card header > div { display: flex; flex-direction: column; gap: 3px; }
 .todo-editor-card header strong { color: var(--text-1); font-size: 15px; }
 .todo-editor-card header span { color: var(--text-3); font: var(--fs-micro) var(--font-mono); }
-.todo-editor-card header button { width: 28px; height: 28px; border: 0; border-radius: 10px; background: rgba(255,255,255,.055); color: var(--text-2); cursor: pointer; }
+.todo-editor-card header button { width: 28px; height: 28px; border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface-2); color: var(--text-2); cursor: pointer; }
+.todo-editor-card header button:hover { background: var(--surface-3); color: var(--text-1); }
 .todo-editor-name { display: flex; flex-direction: column; gap: 6px; margin-bottom: 13px; }
 .todo-editor-name span { color: var(--text-3); font-size: var(--fs-micro); }
-.todo-editor-name input { height: 38px; padding: 0 11px; border: 0; border-radius: 12px; outline: none; background: rgba(255,255,255,.06); color: var(--text-1); font: var(--fs-ui) var(--font); }
+.todo-editor-name input { height: 38px; padding: 0 11px; border: 1px solid var(--hairline); border-radius: 12px; outline: none; background: var(--surface-2); color: var(--text-1); font: var(--fs-ui) var(--font); }
+.todo-editor-name input:focus { border-color: var(--focus-ring); }
 .todo-date-shortcuts {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -73,11 +77,12 @@
 .todo-calendar-grid > span,
 .todo-calendar-grid button { aspect-ratio: 1; }
 .todo-calendar-grid button { border: 0; border-radius: 11px; background: transparent; color: var(--text-2); font: var(--fs-small) var(--font-mono); cursor: pointer; }
-.todo-calendar-grid button:hover { background: rgba(255,255,255,.07); }
-.todo-calendar-grid button.today { box-shadow: inset 0 0 0 1px rgba(132,172,255,.4); }
-.todo-calendar-grid button.selected { background: #edf1f7; color: #111318; box-shadow: 0 7px 18px rgba(0,0,0,.28); }
+.todo-calendar-grid button:hover { background: var(--surface-3); }
+.todo-calendar-grid button.today { box-shadow: inset 0 0 0 1px var(--focus-ring); }
+.todo-calendar-grid button.selected { background: var(--accent-blue); color: #fff; box-shadow: 0 7px 18px var(--panel-shadow); }
 .todo-time-row { justify-content: flex-end; gap: 7px; margin-top: 12px; }
 .todo-time-row > span { margin-right: auto; color: var(--text-3); font-size: var(--fs-micro); }
-.todo-time-row select { width: 66px; height: 34px; padding: 0 8px; border: 0; border-radius: 11px; outline: none; background: rgba(255,255,255,.06); color: var(--text-1); font: var(--fs-small) var(--font-mono); }
+.todo-time-row select { width: 66px; height: 34px; padding: 0 8px; border: 1px solid var(--hairline); border-radius: 11px; outline: none; background: var(--surface-2); color: var(--text-1); font: var(--fs-small) var(--font-mono); }
+.todo-time-row select:focus { border-color: var(--focus-ring); }
 #todo-editor-error { min-height: 16px; margin: 8px 0 0; color: #ff817b; font-size: var(--fs-micro); }
 .todo-editor-card footer { justify-content: flex-end; gap: 7px; }
