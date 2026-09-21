@@ -164,6 +164,7 @@
     providerStateLabel: (provider) => providerStateLabel(provider),
     errorLabel: (error) => errorLabel(error),
     formatCompact: (value) => formatCompact(value),
+    formatPrice: (value, currency) => financeViewDomain.formatPrice(value, currency),
     formatQuotePrice: (quote) => formatQuotePrice(quote),
     formatPercent: (value) => formatPercent(value),
     changeClass: (value) => changeClass(value),

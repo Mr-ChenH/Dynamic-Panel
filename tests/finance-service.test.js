@@ -179,6 +179,31 @@ test('finance overview and rankings use provider responses without synthetic fal
   assert.ok(requests.some((url) => url.includes('/api/v3/coins/markets')));
 });
 
+test('finance overview uses the Shanghai Composite as the A-share market benchmark', async () => {
+  const service = createFinanceService({
+    now: () => NOW,
+    getConfig: () => ({
+      coingecko: { enabled: false },
+      alpaca: { enabled: false },
+      twelveData: { enabled: false },
+      alphaVantage: { enabled: false },
+      cnEastmoney: { enabled: true },
+      cnTencent: { enabled: false },
+      cnSina: { enabled: false },
+    }),
+    requestJson: async (url) => {
+      assert.match(url, /push2\.eastmoney\.com\/api\/qt\/ulist\.np\/get/);
+      return { rc: 0, data: { diff: [{ f12: '000001', f13: 1, f14: '上证指数', f2: 320000, f3: 100, f4: 3200, f6: 100000, f15: 321000, f16: 318000, f124: 1720000000 }] } };
+    },
+  });
+  const overview = await service.overview();
+  const cnMarket = overview.markets.find((item) => item.market === 'cn');
+  assert.equal(cnMarket.benchmark, '上证指数');
+  assert.equal(cnMarket.value, 3200);
+  assert.equal(cnMarket.changePercent, 1);
+  assert.equal(cnMarket.benchmarkAssetId, 'cn:eastmoney:000001.SH');
+});
+
 test('all-market rankings include public A-share rows and preserve per-market featured results', async () => {
   const service = createFinanceService({
     now: () => NOW,

@@ -112,6 +112,9 @@ function createFinanceRequestCache({ now = () => Date.now(), financeError, cance
           if (pending.get(key) === entry) pending.delete(key);
         }
       })();
+      // A consumer can be cancelled before waitForPending attaches its handler.
+      // Keep the shared loader rejection observed while individual consumers settle.
+      promise.catch(() => {});
       entry = { controller, promise, consumers: 0, settled: false };
       pending.set(key, entry);
     }

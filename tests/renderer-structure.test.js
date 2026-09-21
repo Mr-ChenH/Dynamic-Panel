@@ -91,6 +91,12 @@ test('panel navigation is exposed by a dedicated controller through an injected 
   assert.doesNotMatch(appJs, /window\.NotchPanel\s*=\s*\{/);
 });
 
+test('topbar blank space does not collapse the panel', () => {
+  assert.doesNotMatch(appJs, /topbarEl\.addEventListener\(['"]click['"]/);
+  assert.match(appJs, /面板只通过明确的收起入口关闭/);
+  assert.match(stylesCss, /\.topbar[\s\S]*?cursor: default;/);
+});
+
 test('preload exposes grouped domain APIs while retaining flat compatibility methods', () => {
   for (const group of ['window', 'finance', 'home', 'capture', 'recordings', 'notes', 'launcher', 'settings']) {
     assert.match(preloadJs, new RegExp(`api\\.${group}\\s*=\\s*Object\\.freeze`));

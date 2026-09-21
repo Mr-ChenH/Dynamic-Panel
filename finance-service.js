@@ -575,8 +575,27 @@ function createFinanceService({ requestJson, getConfig = () => ({}), now = () =>
       || [alpaca, twelveData, alphaVantage].find((provider) => provider.enabled) || alpaca;
     const cnProviders = providers.filter((provider) => provider.market === 'cn');
     const cnProvider = cnProviders.find((provider) => provider.state === 'ready') || cnProviders[0];
+    const cnMarket = { market: 'cn', label: 'A 股', state: cnProvider.state === 'ready' ? 'available_without_summary' : cnProvider.state, provider: cnProvider.label, feed: cnProvider.feed, session: '交易时段', benchmark: '上证指数' };
+    if (cnProviders.some((provider) => provider.enabled)) {
+      try {
+        const benchmarkResult = await providerAdapters.cnQuoteFallback([{ assetId: 'cn:eastmoney:000001.SH', symbol: '000001' }], signal, force);
+        const benchmark = benchmarkResult.rows?.[0];
+        if (benchmark && Number.isFinite(Number(benchmark.price))) {
+          cnMarket.value = benchmark.price;
+          cnMarket.changePercent = benchmark.changePercent;
+          cnMarket.benchmarkAssetId = benchmark.asset.id;
+          cnMarket.provider = benchmark.asset.provider === 'eastmoney' ? '东方财富' : cnMarket.provider;
+          cnMarket.feed = benchmark.feed;
+        }
+        if (benchmarkResult.errors?.length) result.warnings.push(...benchmarkResult.errors);
+      } catch (error) {
+        const message = financeError(error);
+        if (message !== 'cancelled') result.warnings.push({ provider: 'cn-benchmark', error: message });
+        else throw error;
+      }
+    }
     result.markets.unshift({ market: 'us', label: '美股', state: usProvider.state === 'ready' ? 'available_without_summary' : usProvider.state, provider: usProvider.label, feed: usProvider.feed });
-    result.markets.unshift({ market: 'cn', label: 'A 股', state: cnProvider.state === 'ready' ? 'available_without_summary' : cnProvider.state, provider: cnProvider.label, feed: cnProvider.feed, session: '交易时段' });
+    result.markets.unshift(cnMarket);
     return result;
     });
   }

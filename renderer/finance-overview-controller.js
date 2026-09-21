@@ -1,5 +1,5 @@
 (() => {
-  function createController({ getState, getElements, overviewMarkets, emptyState, escapeHtml, providerStateLabel, errorLabel, formatCompact, formatQuotePrice, formatPercent, changeClass, marketLabel }) {
+  function createController({ getState, getElements, overviewMarkets, emptyState, escapeHtml, providerStateLabel, errorLabel, formatCompact, formatPrice, formatQuotePrice, formatPercent, changeClass, marketLabel }) {
     if (typeof getState !== 'function' || typeof getElements !== 'function') throw new TypeError('finance overview host is required');
 
     function rankingRows(result, market = '') {
@@ -74,10 +74,10 @@
         const positive = marketRows.filter((quote) => Number(quote.changePercent) > 0.05).length;
         const negative = marketRows.filter((quote) => Number(quote.changePercent) < -0.05).length;
         const isCryptoAggregate = market.market === 'crypto' && result.crypto;
-        const primary = isCryptoAggregate ? formatCompact(result.crypto.marketCap) : marketRows.length ? `${marketRows.length} 个标的` : providerStateLabel(market);
-        const change = isCryptoAggregate ? `<em class="${changeClass(result.crypto.changePercent24h)}">${escapeHtml(formatPercent(result.crypto.changePercent24h))}</em>` : '';
-        const detail = marketRows.length ? `上涨 ${positive} · 下跌 ${negative}` : marketEmptyDetail(market.market);
-        return `<article class="finance-market-summary" data-market="${escapeHtml(market.market)}"><header><strong>${escapeHtml(market.label)}</strong><span>${escapeHtml(providerStateLabel(market))}</span></header><div><b>${escapeHtml(primary)}</b>${change}</div><footer><span>${escapeHtml(detail)}</span><small>${escapeHtml(market.provider || '')}</small></footer></article>`;
+        const primary = isCryptoAggregate ? formatCompact(result.crypto.marketCap) : Number.isFinite(Number(market.value)) ? formatPrice(market.value, market.currency || 'CNY') : marketRows.length ? `${marketRows.length} 个标的` : providerStateLabel(market);
+        const change = isCryptoAggregate || Number.isFinite(Number(market.changePercent)) ? `<em class="${changeClass(isCryptoAggregate ? result.crypto.changePercent24h : market.changePercent)}">${escapeHtml(formatPercent(isCryptoAggregate ? result.crypto.changePercent24h : market.changePercent))}</em>` : '';
+        const detail = market.benchmark ? `${market.benchmark}${marketRows.length ? ` · 上涨 ${positive} · 下跌 ${negative}` : ''}` : marketRows.length ? `上涨 ${positive} · 下跌 ${negative}` : marketEmptyDetail(market.market);
+        return `<article class="finance-market-summary" data-market="${escapeHtml(market.market)}"><header><strong>${escapeHtml(market.benchmark ? `${market.label} · ${market.benchmark}` : market.label)}</strong><span>${escapeHtml(providerStateLabel(market))}</span></header><div><b>${escapeHtml(primary)}</b>${change}</div><footer><span>${escapeHtml(detail)}</span><small>${escapeHtml(market.provider || '')}</small></footer></article>`;
       }).join('');
     }
 

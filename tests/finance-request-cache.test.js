@@ -57,6 +57,17 @@ test('finance request cancellation aborts every operation with the same request 
   assert.deepEqual(cache.cancel('request-1'), { ok: true, cancelled: false });
 });
 
+test('finance request cache observes a loader rejection when the consumer is already cancelled', async () => {
+  const cache = createHarness();
+  const controller = new AbortController();
+  controller.abort();
+  const pending = cache.cached('provider:cancelled', 30_000, (signal) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(Object.assign(new Error('cancelled'), { code: 'cancelled' })), { once: true });
+  }), controller.signal);
+  await assert.rejects(pending, (error) => error?.code === 'cancelled');
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
 test('nested finance operations reuse the inherited abort signal', async () => {
   const cache = createHarness();
   let outerSignal;

@@ -586,28 +586,7 @@ if (collapseBtn) {
   });
 }
 
-// 顶栏空白处点按收起——黑条在展开态已退场，由顶栏接替这一角色。
-// 排除交互区（Tab / 按钮 / 输入 / 搜索框），品牌区与空白处都可收起（明确的收起热区）。
-// 注意：home/todo 下搜索框隐藏会让 .topbar-mid 高度塌成 0，点击其实落在 .topbar 上，
-// 所以必须挂在 .topbar 上并用 closest 排除，不能只认 .topbar-mid 本体。
-const topbarEl = document.querySelector('.topbar');
-if (topbarEl) {
-  topbarEl.addEventListener('click', (e) => {
-    if (e.target.closest('.tabs, button, input')) return;
-    // The tab pills are slightly shorter than the topbar. Keep the small
-    // area directly below them inside the tab hit region; otherwise a click
-    // on the pill's lower edge is mistaken for a blank-topbar collapse.
-    const tabHitSlop = 8;
-    const overTabEdge = [...document.querySelectorAll('#tabs .tab:not([hidden])')].some((tab) => {
-      const rect = tab.getBoundingClientRect();
-      return e.clientX >= rect.left && e.clientX <= rect.right
-        && e.clientY >= rect.top && e.clientY <= rect.bottom + tabHitSlop;
-    });
-    if (overTabEdge) return;
-    e.stopPropagation();
-    setMode(false);
-  });
-}
+/* 顶栏空白区域保持为安全的非操作区域，面板只通过明确的收起入口关闭。 */
 
 function initTab() {
   setActiveTab('home');

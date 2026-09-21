@@ -249,7 +249,7 @@ body {
   grid-template-areas: 'tabs safe mid actions';
   align-items: center;
   gap: var(--s-3);
-  cursor: pointer; /* 空白处可点收起 */
+  cursor: default;
 }
 
 .topbar-mid {
