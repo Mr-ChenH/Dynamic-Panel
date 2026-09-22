@@ -414,7 +414,7 @@ body {
   position: absolute;
   left: 50%;
   bottom: var(--s-4);
-  z-index: 20;
+  z-index: 140;
   display: flex;
   align-items: center;
   gap: var(--s-3);

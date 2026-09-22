@@ -13,7 +13,7 @@
   let openState = false, transition = false, wasExpanded = false, previousFocus, previousInert;
   let rows = [], remote = [], selectedId = '', generation = 0, timer, running = false, pendingClose = false;
   let preferredId = '', searchPending = false, pendingProviders = [], restoreFocusOnClose = true, escapeGuardUntil = 0;
-  let settings = { shortcut: 'CommandOrControl+Space', sources: { apps: true, workspace: true, clipboard: false, extensions: true } };
+  let settings = { shortcut: 'Alt+Space', sources: { apps: true, workspace: true, clipboard: false, extensions: true } };
   let features = {};
   const KEY = 'notch-launcher-';
   const shortcutLabel=(value)=>value?String(value).split('+').map(part=>({CommandOrControl:api?.platform==='darwin'?'Cmd':'Ctrl',Command:'Cmd',Control:'Ctrl',Option:'Option',Alt:api?.platform==='darwin'?'Option':'Alt'})[part]||part).join(' + '):'未设置';

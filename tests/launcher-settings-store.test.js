@@ -31,7 +31,7 @@ test('launcher settings normalize defaults, sources and bounded timeouts', () =>
 test('launcher settings ignore oversized files and use defaults', () => {
   const { service } = createHarness({ shortcut: 'Alt+X' }, 65537);
   assert.deepEqual(service.read(), {
-    shortcut: 'CommandOrControl+Space',
+    shortcut: 'Alt+Space',
     executeTimeoutMs: 5000,
     queryTimeoutMs: 800,
     sources: { apps: true, workspace: true, clipboard: false, extensions: true },

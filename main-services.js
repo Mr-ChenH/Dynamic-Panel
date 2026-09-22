@@ -569,9 +569,28 @@ function isValidShortcutAccelerator(shortcut, { allowEmpty = false, allowSpace =
     && /^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Tab|Escape|Left|Right|Up|Down|Home|End|PageUp|PageDown|Backspace|Delete|Enter)$/.test(key);
 }
 
-function shortcutAssignmentConflict(assignments, action, shortcut) {
+function shortcutAcceleratorIdentity(shortcut, platform = 'darwin') {
+  if (typeof shortcut !== 'string' || !shortcut) return shortcut || '';
+  const tokens = shortcut.split('+');
+  const key = tokens.pop();
+  const modifierOrder = ['Command', 'Control', 'Alt', 'Shift'];
+  const modifiers = new Set(tokens.map((token) => {
+    if (token === 'CommandOrControl') return platform === 'darwin' ? 'Command' : 'Control';
+    if (token === 'Option') return 'Alt';
+    return token;
+  }));
+  return [...modifiers]
+    .sort((left, right) => modifierOrder.indexOf(left) - modifierOrder.indexOf(right))
+    .concat(key)
+    .join('+');
+}
+
+function shortcutAssignmentConflict(assignments, action, shortcut, platform = 'darwin') {
   if (!shortcut || !assignments || typeof assignments !== 'object') return false;
-  return Object.entries(assignments).some(([name, value]) => name !== action && value === shortcut);
+  const identity = shortcutAcceleratorIdentity(shortcut, platform);
+  return Object.entries(assignments).some(([name, value]) => (
+    name !== action && value && shortcutAcceleratorIdentity(value, platform) === identity
+  ));
 }
 
 const CONFIGURABLE_FEATURES = new Set(['todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip']);
@@ -633,6 +652,7 @@ module.exports = {
   collapsedDisplayRelocationPolicy,
   panelBlurCollapsePolicy,
   isValidShortcutAccelerator,
+  shortcutAcceleratorIdentity,
   shortcutAssignmentConflict,
   updateFeaturePreference,
   normalizeDefaultTabPreference,

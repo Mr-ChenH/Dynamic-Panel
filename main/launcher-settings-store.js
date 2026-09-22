@@ -27,7 +27,7 @@ function createLauncherSettingsStore(options = {}) {
       queryTimeoutMs: Math.max(300, Math.min(5000, Number(stored.queryTimeoutMs) || 800)),
       shortcut: typeof stored.shortcut === 'string' && stored.shortcut.length <= 100
         ? stored.shortcut
-        : 'CommandOrControl+Space',
+        : 'Alt+Space',
       sources,
     };
   }

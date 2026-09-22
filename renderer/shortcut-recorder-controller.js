@@ -1,4 +1,40 @@
 (function attachShortcutRecorderController(global) {
+  function shortcutKey(event = {}) {
+    const code = typeof event.code === 'string' ? event.code : '';
+    if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+    if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+    if (/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(code)) return code;
+    const codeAliases = {
+      Space: 'Space', Tab: 'Tab', Escape: 'Escape',
+      ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down',
+      Home: 'Home', End: 'End', PageUp: 'PageUp', PageDown: 'PageDown',
+      Backspace: 'Backspace', Delete: 'Delete', Enter: 'Enter', NumpadEnter: 'Enter',
+    };
+    if (codeAliases[code]) return codeAliases[code];
+
+    const keyAliases = {
+      ' ': 'Space', Spacebar: 'Space', Escape: 'Escape', Esc: 'Escape',
+      ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down',
+    };
+    let key = keyAliases[event.key] || event.key || '';
+    if (/^[a-z]$/i.test(key)) key = key.toUpperCase();
+    return /^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Tab|Escape|Left|Right|Up|Down|Home|End|PageUp|PageDown|Backspace|Delete|Enter)$/.test(key)
+      ? key
+      : '';
+  }
+
+  function keyEventToAccelerator(event = {}, platform = 'darwin') {
+    const key = shortcutKey(event);
+    if (!key) return '';
+    const parts = [];
+    if (event.metaKey) parts.push(platform === 'darwin' ? 'CommandOrControl' : 'Command');
+    if (event.ctrlKey) parts.push(platform === 'darwin' ? 'Control' : 'CommandOrControl');
+    if (event.altKey) parts.push('Alt');
+    if (event.shiftKey) parts.push('Shift');
+    parts.push(key);
+    return parts.join('+');
+  }
+
   function createController(options = {}) {
     const documentRef = options.document || document;
     const windowRef = options.window || window;
@@ -13,6 +49,7 @@
     const disable = documentRef.getElementById('shortcut-recorder-disable');
     const cancel = documentRef.getElementById('shortcut-recorder-cancel');
     let active = false;
+    let saving = false;
     let action = 'panel';
 
     function close() {
@@ -32,32 +69,31 @@
       })[part] || part).join(' + ');
     }
 
-    function keyEventToAccelerator(event) {
-      const keyAliases = {
-        ' ': 'Space', Spacebar: 'Space', Escape: 'Escape', Esc: 'Escape',
-        ArrowLeft: 'Left', ArrowRight: 'Right', ArrowUp: 'Up', ArrowDown: 'Down',
-      };
-      let key = keyAliases[event.key] || event.key;
-      if (/^[a-z]$/i.test(key)) key = key.toUpperCase();
-      if (!/^(?:[A-Z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Space|Tab|Escape|Left|Right|Up|Down|Home|End|PageUp|PageDown|Backspace|Delete|Enter)$/.test(key)) return '';
-      const parts = [];
-      if (event.metaKey) parts.push('Command');
-      if (event.ctrlKey) parts.push('Control');
-      if (event.altKey) parts.push('Alt');
-      if (event.shiftKey) parts.push('Shift');
-      parts.push(key);
-      return parts.join('+');
+    function keyEventToCurrentPlatformAccelerator(event) {
+      return keyEventToAccelerator(event, platform);
+    }
+
+    function setSaving(next) {
+      saving = next;
+      if (disable) disable.disabled = next;
+      if (cancel) cancel.disabled = next;
     }
 
     async function save(accelerator) {
+      if (!active || saving) return false;
+      setSaving(true);
       const setter = api?.setShortcut;
       const result = typeof setter === 'function'
         ? await setter(action, accelerator).catch(() => ({ ok: false }))
         : await api?.setPanelShortcut?.(accelerator).catch(() => ({ ok: false }));
       if (!result?.ok) {
-        if (value) value.textContent = result?.error === 'occupied' ? '该快捷键已被占用' : '无法使用该快捷键';
+        const message = result?.error === 'occupied' ? '该快捷键已被占用' : '无法使用该快捷键';
+        if (value) value.textContent = message;
+        showStatusToast(message);
+        setSaving(false);
         return false;
       }
+      active = false;
       showStatusToast(accelerator ? `快捷键已设为 ${label(accelerator)}` : '快捷键已禁用');
       setTimeout(close, 420);
       return true;
@@ -76,6 +112,7 @@
       };
       void setMode(true);
       active = true;
+      setSaving(false);
       if (!recorder) return;
       recorder.hidden = false;
       title.textContent = `设置：${labels[action]}`;
@@ -95,7 +132,8 @@
         close();
         return;
       }
-      const accelerator = keyEventToAccelerator(event);
+      if (event.repeat || saving) return;
+      const accelerator = keyEventToCurrentPlatformAccelerator(event);
       if (!accelerator) {
         if (value) value.textContent = '请按下完整按键组合';
         return;
@@ -116,5 +154,5 @@
     return Object.freeze({ close, open, isActive: () => active, label });
   }
 
-  global.NotchShortcutRecorder = Object.freeze({ createController });
+  global.NotchShortcutRecorder = Object.freeze({ createController, keyEventToAccelerator });
 })(window);

@@ -35,6 +35,7 @@ const {
   collapsedDisplayRelocationPolicy,
   panelBlurCollapsePolicy,
   isValidShortcutAccelerator,
+  shortcutAcceleratorIdentity,
   shortcutAssignmentConflict,
   reduceClipboardObservation,
   createForegroundMediaPermissionCoordinator,
@@ -240,7 +241,11 @@ test('global shortcut policy validates optional actions and detects in-app confl
   assert.equal(shortcutAssignmentConflict(assignments, 'screenRecording', 'CommandOrControl+Shift+S'), true);
   assert.equal(shortcutAssignmentConflict(assignments, 'audioRecording', 'CommandOrControl+Shift+S'), true);
   assert.equal(shortcutAssignmentConflict(assignments, 'screenshot', 'CommandOrControl+Shift+S'), false);
-  assert.equal(shortcutAssignmentConflict(assignments, 'screenRecording', ''), false);
+  assert.equal(shortcutAssignmentConflict(assignments, 'panel', ''), false);
+  assert.equal(shortcutAcceleratorIdentity('Shift+Control+S', 'win32'), 'Control+Shift+S');
+  assert.equal(shortcutAssignmentConflict({ launcher: 'CommandOrControl+Space' }, 'panel', 'Control+Space', 'win32'), true);
+  assert.equal(shortcutAssignmentConflict({ launcher: 'CommandOrControl+Space' }, 'panel', 'Command+Space', 'darwin'), true);
+  assert.equal(shortcutAssignmentConflict({ screenshot: 'Option+Shift+S' }, 'audioRecording', 'Shift+Alt+S', 'darwin'), true);
 });
 
 test('isPrivateAddress blocks loopback, private, link-local and unique-local ranges', () => {

@@ -897,6 +897,7 @@ const shortcutService = createShortcutService({
   isValidPanelShortcut,
   isValidOptionalShortcut,
   shortcutAssignmentConflict,
+  platform: process.platform,
   hoverSpacePollingPolicy,
   getPanelState: () => ({
     visible: Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()),

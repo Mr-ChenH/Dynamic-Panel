@@ -118,7 +118,7 @@ tests/
 ```js
 {
   schemaVersion: 1,
-  shortcut: 'CommandOrControl+Space',
+  shortcut: 'Alt+Space',
   sources: { apps: true, workspace: true, clipboard: false, extensions: true },
   closeOnBlur: true,
   maxResults: 50
@@ -239,4 +239,4 @@ MVP 不改变发布命令；`npm test` 通过后再按用户明确授权运行 `
 - Node 文件权限已限制直接工作区 IO，但网络与整个操作系统没有完整隔离；若未来需要第三方商店，必须先增加签名、审核或更强隔离。
 - 应用发现与图标索引可能影响启动时间；必须先缓存再展示。
 - 复用当前 BrowserWindow 的模式状态可能与启动器“失焦关闭”冲突，需要状态机测试。
-- `CommandOrControl+Space` 可能被输入法占用，设置页必须支持替代快捷键。
+- `Alt+Space` 可能被系统或其他工具占用，设置页必须支持替代快捷键。

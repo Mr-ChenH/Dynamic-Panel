@@ -5,6 +5,7 @@ function createShortcutService({
   isValidPanelShortcut,
   isValidOptionalShortcut,
   shortcutAssignmentConflict,
+  platform = 'darwin',
   hoverSpacePollingPolicy,
   getPanelState,
   getCursorPoint,
@@ -27,7 +28,7 @@ function createShortcutService({
   }
 
   function hasConflict(action, shortcut) {
-    return shortcutAssignmentConflict(assignments(), action, shortcut);
+    return shortcutAssignmentConflict(assignments(), action, shortcut, platform);
   }
 
   function register(accelerator, callback) {

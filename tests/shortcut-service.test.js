@@ -7,7 +7,7 @@ const {
 } = require('../main-services');
 const { createShortcutService } = require('../main/shortcut-service');
 
-function createHarness() {
+function createHarness(platform = 'darwin') {
   const registered = new Map();
   const unregistered = [];
   const failed = new Set();
@@ -32,6 +32,7 @@ function createHarness() {
     isValidPanelShortcut: (shortcut) => isValidShortcutAccelerator(shortcut, { allowSpace: true }),
     isValidOptionalShortcut: (shortcut) => isValidShortcutAccelerator(shortcut, { allowEmpty: true }),
     shortcutAssignmentConflict,
+    platform,
     hoverSpacePollingPolicy,
     getPanelState: () => panel,
     getCursorPoint: () => cursor,
@@ -78,6 +79,18 @@ test('shortcut service registers distinct panel, launcher and action shortcuts',
     actions: { screenshot: 'CommandOrControl+Shift+S', screenRecording: '', audioRecording: '' },
     hoverRegistered: false,
   });
+});
+
+test('shortcut service rejects platform-equivalent aliases before replacing a registration', () => {
+  const windows = createHarness('win32');
+  assert.equal(windows.service.setLauncherShortcut('CommandOrControl+Space'), true);
+  assert.equal(windows.service.setPanelShortcut('Control+Space'), false);
+  assert.equal(windows.registered.has('CommandOrControl+Space'), true);
+  assert.deepEqual(windows.unregistered, []);
+
+  const mac = createHarness('darwin');
+  assert.equal(mac.service.setLauncherShortcut('CommandOrControl+Space'), true);
+  assert.equal(mac.service.setPanelShortcut('Command+Space'), false);
 });
 
 test('shortcut service restores the previous registration after an occupied replacement', () => {
