@@ -4,18 +4,13 @@
   <p><strong>贴在屏幕顶部的本地工作台</strong></p>
   <p>待办、笔记、链接、录制、行情与本机 AI，随时可用，数据留在本机。</p>
   <p>
-    <a href="https://github.com/Mr-ChenH/TO-DO-Panel/releases/latest"><strong>下载 macOS</strong></a>
-    ·
-    <a href="https://github.com/Mr-ChenH/TO-DO-Panel/releases/latest"><strong>下载 Windows</strong></a>
-    ·
-    <a href="#从源码运行">从源码运行</a>
+    <a href="#源码构建"><strong>源码构建</strong></a>
     ·
     <a href="CHANGELOG.md">更新日志</a>
     ·
     <a href="https://github.com/Mr-ChenH/TO-DO-Panel/issues">反馈问题</a>
   </p>
   <p>
-    <img alt="Release" src="https://img.shields.io/github/v/release/Mr-ChenH/TO-DO-Panel?style=flat-square&color=7c8cff" />
     <img alt="macOS 13+ Apple Silicon" src="https://img.shields.io/badge/macOS-13%2B%20Apple%20Silicon-111318?style=flat-square&logo=apple" />
     <img alt="Windows 10/11 x64" src="https://img.shields.io/badge/Windows-10%2F11%20x64-0078D4?style=flat-square" />
     <img alt="Electron 44" src="https://img.shields.io/badge/Electron-44-47848f?style=flat-square&logo=electron" />
@@ -28,13 +23,13 @@
 ## 目录
 
 - [快速了解](#快速了解)
-- [下载安装](#下载安装)
+- [源码构建](#源码构建)
 - [核心功能](#核心功能)
 - [数据与权限](#数据与权限)
 - [高级功能](#高级功能)
-- [从源码运行](#从源码运行)
+- [官网开发](#官网开发)
 - [项目结构](#项目结构)
-- [开发文档与发布](#开发文档与发布)
+- [开发文档](#开发文档)
 
 ## 快速了解
 
@@ -46,39 +41,39 @@ Dynamic Panel 是一个常驻屏幕顶部的 Electron 工作台：
 | 运行方式 | 本地桌面应用，无后端、无云同步 |
 | 默认状态 | 折叠成顶部刘海/紧凑条，点击后展开工作区 |
 | 数据位置 | LocalStorage、当前工作区目录和 Electron `userData` 目录 |
-| 当前版本 | `1.1.0` |
-| 正式发行 | [上游 GitHub Releases](https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest) |
+| 获取方式 | 本仓库不提供预编译安装包，需要克隆源码后自行运行或构建 |
 | 许可证 | [MIT](LICENSE) |
 
-macOS 折叠态贴合物理刘海；Windows 折叠态为贴顶的 `200 × 38 DIP` 紧凑条，并避开任务栏。展开工作区统一使用约 `1240 × 540` 的内容尺寸，窄屏和矮屏会保留安全边距。连接多块屏幕时，面板跟随当前屏幕并保持顶部居中。
+macOS 折叠态贴合屏幕顶部，“小”档跟随菜单栏高度；Windows 使用宽 `160px` 的紧凑条。刘海高度可选择小、中、大或自定义，macOS 范围为 `24–64px`，Windows 为 `8–38px`；Windows 高度超过 `30px` 后不再执行鼠标悬停放大。展开工作区统一使用约 `1240 × 540` 的内容尺寸，窄屏和矮屏会保留安全边距。连接多块屏幕时，面板跟随当前屏幕并保持顶部居中。
 
-## 下载安装
+## 源码构建
 
-> 当前稳定版本：**1.1.0**
->
-> 正式安装包由[上游 GitHub Releases](https://github.com/xiaopu-ai/TO-DO-Panel/releases/latest) 发布；当前仓库用于源码维护和同步。
+> 当前代码与原项目已经有较大差异，本仓库不提供 DMG、EXE 或其他预编译安装包。请审阅源码后在目标平台自行运行、测试和构建。
 
-前往 [GitHub Releases](https://github.com/Mr-ChenH/TO-DO-Panel/releases/latest)，下载对应平台的安装包：
+桌面端要求 Node.js 18+，使用 npm：
 
-| 平台 | 安装包 | 要求 |
-| --- | --- | --- |
-| macOS | `Dynamic-Panel-*-arm64.dmg` | macOS 13+，Apple Silicon |
-| Windows | `Dynamic-Panel-*-windows-x64-setup.exe` | Windows 10/11，64 位 |
+```bash
+git clone https://github.com/Mr-ChenH/TO-DO-Panel.git
+cd TO-DO-Panel
+npm install
+npm test
+npm start
+```
 
-### macOS
+`npm start` 直接运行完整 Electron 应用，不需要渲染层构建步骤。需要生成本机安装包时，在对应操作系统执行：
 
-1. 下载并打开 `arm64.dmg`。
-2. 将 `Dynamic Panel.app` 拖入「应用程序」。
-3. 首次启动若被拦截，前往「系统设置 → 隐私与安全性」并选择「仍要打开」。
-4. 按需授予辅助功能、屏幕录制和麦克风权限。
+| 命令 | 用途 |
+| --- | --- |
+| `npm test` | 运行单元测试、结构检查和 Electron 验收 |
+| `npm start` | 启动桌面开发版 |
+| `npm run pack` | 生成当前平台的未安装应用目录 |
+| `npm run build` | 在 macOS 生成 Apple Silicon DMG |
+| `npm run build:win` | 在 Windows 生成 x64 NSIS 安装包 |
+| `npm run build:zip` | 在 macOS 生成 ZIP 包 |
 
-应用采用 GitHub Releases + ad-hoc 签名分发，不进行 Apple 公证，也不上架 Mac App Store。每次重新打包后，macOS 可能要求重新授权；由 `safeStorage` 加密的密钥也可能需要重新填写。
+构建输出位于 `dist.noindex/`。macOS 产物没有 Apple 公证，Windows 产物没有商业代码签名；系统可能显示安全提示。只运行自己审阅并构建的产物，权限按需授予。由 `safeStorage` 加密的密钥不保证能在不同电脑或重新打包的应用之间迁移。
 
-### Windows
-
-运行 `windows-x64-setup.exe`，按安装向导完成安装。默认仅安装给当前用户，无需管理员权限；卸载不会删除本机工作区数据。
-
-安装包暂未进行商业代码签名，Windows SmartScreen 可能显示提示。请从可信 Release 下载，并核对对应的 `.sha256` 校验文件。Windows 首版不显示「当前窗口」和「汽水音乐」组件；剪贴板使用复制后 `Ctrl+V` 粘贴，任务完成提醒暂不支持点击切回任务窗口。
+Windows 构建不会启用 macOS 专属的「当前窗口」和「汽水音乐」组件；剪贴板点击后仅复制，需手动按 `Ctrl+V` 粘贴。
 
 ## 核心功能
 
@@ -96,14 +91,14 @@ macOS 折叠态贴合物理刘海；Windows 折叠态为贴顶的 `200 × 38 DIP
 ### 常用行为
 
 - 面板默认从首页展开，可在「设置 → 通用」中更改默认页。
-- 默认面板快捷键为 `Space`，启动器快捷键为 `Cmd/Ctrl + Space`。
+- 默认面板快捷键为 `Space`，启动器快捷键为 `Alt/Option + Space`。
 - 截图、录屏和录音默认不占用全局快捷键，可在设置中配置或禁用。
 - 剪贴板历史默认关闭，可从菜单栏或「设置 → 显示功能」开启。
 - 主题支持深色和亮色，设置会立即保存；首次启动也会直接使用已保存的主题。
 - 刘海高度提供「小 / 中 / 大」三档和自定义高度；macOS 自定义范围为 `24–64 px`，Windows 为 `8–38 px`，超出范围或非整数会被拒绝。
 - 麦克风只在用户主动开始录音时启用，结束录音或退出应用后释放音频轨道。
 
-> 状态说明：行情、截图录屏、启动器和 AI 整理仍在持续开发，发行版中实际可用的能力以当前 Release 和应用内设置为准。
+> 状态说明：行情、截图录屏、启动器和 AI 整理仍在持续开发，实际可用能力以当前分支和应用内设置为准。
 
 ### 关键数据规则
 
@@ -203,34 +198,11 @@ curl -X POST http://127.0.0.1:43821/notify/codex \
   -d '{"title":"任务已完成","project":"my-project","task_id":"demo"}'
 ```
 
-仓库提供 [Codex 转发脚本](scripts/codex-notify.js) 和 [Claude Code 转发脚本](scripts/claude-notify.js)。安装包中的脚本位于 `resources/app/scripts/`；应用本身不要求用户安装 Node.js。
+仓库提供 [Codex 转发脚本](scripts/codex-notify.js) 和 [Claude Code 转发脚本](scripts/claude-notify.js)。源码运行时可直接使用 `scripts/` 中的文件；自行打包后脚本位于应用的 `resources/app/scripts/`。
 
 </details>
 
-## 从源码运行
-
-### 桌面端
-
-要求 Node.js 18+，包管理器为 npm：
-
-```bash
-git clone https://github.com/Mr-ChenH/TO-DO-Panel.git
-cd TO-DO-Panel
-npm install
-npm test
-npm start
-```
-
-| 命令 | 用途 |
-| --- | --- |
-| `npm test` | 桌面端单元测试、结构检查和 Electron 验收流程 |
-| `npm start` | 启动 Electron 开发版 |
-| `npm run pack` | 生成未安装的应用目录 |
-| `npm run build` | 构建 macOS DMG；执行前请确认发布需求 |
-| `npm run build:win` | 构建 Windows x64 NSIS 安装包 |
-| `npm run build:zip` | 构建 macOS ZIP 分发包 |
-
-### 官网
+## 官网开发
 
 官网位于 `website/`，要求 Node.js `22.13.0+`：
 
@@ -262,7 +234,7 @@ npm run build
 └── website/                # React 19 + Vinext 官网
 ```
 
-## 开发文档与发布
+## 开发文档
 
 - [架构与边界说明](docs/architecture-audit-2026-09-18.md)
 - [AI 使用方式研究与开发计划](docs/project-factory/ai-workflows/README.md)
@@ -270,10 +242,7 @@ npm run build
 - [实时数据源和全市场展示研究](docs/finance-market-data-and-display-research.md)
 - [金融页 AI 解读研究](docs/finance-ai-interpretation-research.md)
 - [启动器扩展开发](docs/launcher-extension-development.md)
-- [发布说明](docs/releasing.md)
 - [完整更新日志](CHANGELOG.md)
-
-发布流程要求 `package.json` 与 `package-lock.json` 版本一致。推送匹配的 `v*.*.*` 标签后，GitHub Actions 会分别测试、构建并校验 macOS DMG、Windows EXE 及各自 SHA-256 文件；两个平台通过后才创建同一个 Release。
 
 ## License
 
