@@ -269,8 +269,10 @@ async function setMode(expanded) {
   }
 }
 
+const COLLAPSED_HOVER_MAX_HEIGHT = 30;
+
 notch.addEventListener('mouseenter', () => {
-  if (!isExpanded) window.notchAPI?.setCollapsedHover?.(true);
+  if (!isExpanded && isCollapsedHoverEnabled()) window.notchAPI?.setCollapsedHover?.(true);
 });
 
 notch.addEventListener('mouseleave', () => {
@@ -368,14 +370,30 @@ if (window.notchAPI && typeof window.notchAPI.onOpenClip === 'function') {
   });
 }
 
+// 折叠高度超过 hover 展开目标高度时，保持静态刘海，避免 hover 后反而产生第二次尺寸变化。
+function isCollapsedHoverEnabled() {
+  if (app.dataset.platform !== 'win32') return false;
+  if (!layoutMetrics || !Number.isFinite(Number(layoutMetrics.notchHeight))) return true;
+  return Number(layoutMetrics.notchHeight) <= COLLAPSED_HOVER_MAX_HEIGHT;
+}
+
 // 布局度量（主进程按屏计算下发）：折叠条高 / 菜单栏占位高 / 各 Tab 目标尺寸
 let layoutMetrics = null;
 
 function applyLayoutMetrics(metrics) {
   if (!metrics) return;
   layoutMetrics = metrics;
+  const notchHeight = Number(metrics.notchHeight);
+  const hoverDisabled = app.dataset.platform === 'win32'
+    && Number.isFinite(notchHeight)
+    && notchHeight > COLLAPSED_HOVER_MAX_HEIGHT;
+  app.toggleAttribute('data-notch-hover-disabled', hoverDisabled);
+  if (hoverDisabled && !isExpanded) window.notchAPI?.setCollapsedHover?.(false);
   if (metrics.stripHeight) {
     document.documentElement.style.setProperty('--notch-h', `${metrics.stripHeight}px`);
+  }
+  if (metrics.notchHeight) {
+    document.documentElement.style.setProperty('--notch-compact-h', `${metrics.notchHeight}px`);
   }
   if (metrics.menuBarHeight) {
     document.documentElement.style.setProperty('--mb-h', `${metrics.menuBarHeight}px`);

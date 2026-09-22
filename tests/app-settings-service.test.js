@@ -39,6 +39,7 @@ test('app settings normalize defaults and force home to remain enabled', () => {
     shortcuts: { screenshot: 'Alt+S', screenRecording: 'bad', audioRecording: '' },
     defaultTab: 'home',
     theme: 'light',
+    notchHeight: { mode: 'small', custom: 24 },
   });
 });
 
@@ -55,6 +56,7 @@ test('app settings expose launcher shortcut and auto-launch state without changi
     },
     defaultTab: 'home',
     theme: 'dark',
+    notchHeight: { mode: 'small', custom: 24 },
     autoLaunch: true,
   });
 });

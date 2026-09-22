@@ -31,11 +31,12 @@
   // Windows keeps its compositor surface at workspace size across mode changes.
   // The native shape follows the visible island so transparent canvas never blocks
   // clicks in the window underneath it.
-  function windowsPanelLayout(display, expanded, collapsedHovering = false) {
+  function windowsPanelLayout(display, expanded, collapsedHovering = false, notchHeight = 8) {
     const bounds = panelBounds('win32', display, true);
+    const compactHeight = Math.max(8, Math.min(38, Number(notchHeight) || 8));
     const island = collapsedHovering
-      ? { width: 184, height: 30 }
-      : { width: 160, height: 8 };
+      ? { width: 184, height: Math.max(30, compactHeight) }
+      : { width: 160, height: compactHeight };
     return {
       bounds,
       shape: expanded ? [] : [{

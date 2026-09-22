@@ -11,6 +11,7 @@ function createHarness() {
     shortcuts: { screenshot: '', screenRecording: '', audioRecording: '' },
     defaultTab: 'home',
     theme: 'dark',
+    notchHeight: { mode: 'small', custom: 24 },
   };
   let saveSucceeds = true;
   let launcherSaveSucceeds = true;
@@ -32,6 +33,11 @@ function createHarness() {
     isAutoLaunchEnabled: () => false,
     isValidPanelShortcut: (value) => typeof value === 'string' && value.length > 0,
     isValidOptionalShortcut: (value) => typeof value === 'string',
+    validateNotchHeightPreference: (value) => value?.mode === 'custom' && Number.isInteger(value.custom) && value.custom >= 24 && value.custom <= 64
+      ? { mode: 'custom', custom: value.custom }
+      : value?.mode === 'small' || value?.mode === 'medium' || value?.mode === 'large'
+        ? { mode: value.mode, custom: 24 }
+        : null,
     launcherConfig: () => ({ shortcut: 'CommandOrControl+Space', sources: { apps: true } }),
     writeLauncherSettings: (next) => { calls.push({ type: 'launcherSave', next }); return launcherSaveSucceeds; },
     setLauncherShortcut: (shortcut) => { calls.push({ type: 'launcherShortcut', shortcut }); return true; },
@@ -60,6 +66,13 @@ test('settings controller persists feature, tab and main-window theme changes', 
   assert.ok(harness.calls.some((call) => call.type === 'apply'));
 });
 
+test('settings controller persists bounded notch height preferences', () => {
+  const harness = createHarness();
+  assert.deepEqual(harness.controller.setNotchHeight({ id: 1 }, { mode: 'custom', custom: 48 }), { ok: true, settings: { ...harness.settings(), autoLaunch: false, shortcuts: { ...harness.settings().shortcuts, launcher: 'CommandOrControl+Space' } } });
+  assert.deepEqual(harness.settings().notchHeight, { mode: 'custom', custom: 48 });
+  assert.deepEqual(harness.controller.setNotchHeight({ id: 1 }, { mode: 'custom', custom: 128 }), { ok: false, error: 'invalid_notch_height' });
+});
+
 test('settings controller rolls shortcuts back when persistence fails', () => {
   const appHarness = createHarness();
   appHarness.failAppSave();
@@ -80,7 +93,7 @@ test('settings IPC delegates the stable six-channel contract', () => {
   });
   registerSettingsIpc({ ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) }, settingsController });
   assert.deepEqual([...handlers.keys()], [
-    'settings:get', 'settings:set-feature', 'settings:set-default-tab', 'settings:set-theme',
+    'settings:get', 'settings:set-feature', 'settings:set-default-tab', 'settings:set-theme', 'settings:set-notch-height',
     'settings:set-auto-launch', 'settings:set-shortcut',
   ]);
   assert.equal(handlers.get('settings:set-theme')({ sender: { id: 1 } }, 'light'), 'setTheme');

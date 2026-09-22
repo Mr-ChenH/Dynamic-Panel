@@ -386,10 +386,16 @@ async function main() {
           clientX: x,
           clientY: y,
         }));
-        const collapsed = await waitForClass('collapsed');
+        await sleep(120);
+        const collapsed = document.getElementById('app').classList.contains('collapsed');
+        const remainedExpanded = document.getElementById('app').classList.contains('expanded');
+        document.getElementById('notch').click();
+        const collapsedAfterExplicitAction = await waitForClass('collapsed');
         return {
           opened,
           collapsed,
+          remainedExpanded,
+          collapsedAfterExplicitAction,
           interceptedByTabs,
           hitTarget: hitTarget?.id || hitTarget?.className || hitTarget?.tagName || '',
           appClass: document.getElementById('app').className,
@@ -404,10 +410,11 @@ async function main() {
       `顶部中央空白不得被 Tab 容器截获，当前命中 ${topbarBlankToggle.hitTarget}`
     );
     assert.equal(
-      topbarBlankToggle.collapsed,
+      topbarBlankToggle.remainedExpanded,
       true,
-      `展开后点击顶部中央空白必须收起；最终状态 ${topbarBlankToggle.appClass} / aria-hidden=${topbarBlankToggle.panelAriaHidden}`
+      `展开后点击顶部中央空白不得收起；最终状态 ${topbarBlankToggle.appClass} / aria-hidden=${topbarBlankToggle.panelAriaHidden}`
     );
+    assert.equal(topbarBlankToggle.collapsedAfterExplicitAction, true, '明确收起按钮必须继续生效');
 
     const topbarTabAndSpaceToggle = await window.webContents.executeJavaScript(`
       (async () => {

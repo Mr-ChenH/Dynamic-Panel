@@ -1,3 +1,5 @@
+const { resolveNotchHeight } = require('./notch-height-settings');
+
 function createWindowGeometry({
   screen,
   platformPolicy,
@@ -10,6 +12,7 @@ function createWindowGeometry({
   getCurrentTab,
   getMainWindow,
   isCollapsedHovering,
+  getNotchHeightPreference,
 }) {
   function getTargetDisplay() {
     try {
@@ -45,10 +48,19 @@ function createWindowGeometry({
     return Math.max(0, display.workArea.y - display.bounds.y);
   }
 
+  function getNotchHeight(display) {
+    const baseHeight = platform === 'win32'
+      ? 8
+      : getMenuBarHeight(display) || collapsedMinHeight;
+    return resolveNotchHeight(getNotchHeightPreference?.(), {
+      platform,
+      baseHeight,
+    });
+  }
+
   function getCollapsedHeight(display) {
     if (platform === 'win32') return collapsedMinHeight;
-    const menuBarHeight = getMenuBarHeight(display);
-    return menuBarHeight > 0 ? menuBarHeight : collapsedMinHeight;
+    return getNotchHeight(display);
   }
 
   function getExpandedSize(display) {
@@ -66,6 +78,7 @@ function createWindowGeometry({
     const currentDisplay = display || getWindowDisplay();
     return {
       stripHeight: getCollapsedHeight(currentDisplay),
+      notchHeight: getNotchHeight(currentDisplay),
       menuBarHeight: getMenuBarHeight(currentDisplay),
       chromeY: expandedChromeY,
       tabSizes,
@@ -102,10 +115,12 @@ function createWindowGeometry({
       mainWindow.setBounds(getBoundsForMode(mode, display));
       return;
     }
+    const currentDisplay = display || getWindowDisplay();
     const layout = platformPolicy.windowsPanelLayout(
-      display || getWindowDisplay(),
+      currentDisplay,
       mode === 'expanded',
-      mode === 'collapsed' && isCollapsedHovering()
+      mode === 'collapsed' && isCollapsedHovering(),
+      getNotchHeight(currentDisplay)
     );
     const current = mainWindow.getBounds();
     if (['x', 'y', 'width', 'height'].some((key) => current[key] !== layout.bounds[key])) {
@@ -129,6 +144,7 @@ function createWindowGeometry({
     getWindowDisplay,
     getCenteredBounds,
     getMenuBarHeight,
+    getNotchHeight,
     getCollapsedHeight,
     getExpandedSize,
     getLayoutMetrics,

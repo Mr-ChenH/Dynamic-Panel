@@ -22,6 +22,10 @@
     const settingsAudioShortcutChange = document.getElementById('settings-audio-shortcut-change');
     const settingsDefaultTab = document.getElementById('settings-default-tab');
     const settingsTheme = document.getElementById('settings-theme');
+    const settingsNotchHeight = document.getElementById('settings-notch-height');
+    const settingsNotchHeightCustomWrap = document.getElementById('settings-notch-height-custom-wrap');
+    const settingsNotchHeightCustom = document.getElementById('settings-notch-height-custom');
+    const settingsNotchHeightNote = document.getElementById('settings-notch-height-note');
     const settingsWorkspaceKind = document.getElementById('settings-workspace-kind');
     const settingsWorkspacePath = document.getElementById('settings-workspace-path');
     const settingsWorkspaceOpen = document.getElementById('settings-workspace-open');
@@ -65,6 +69,24 @@
         settingsTheme.querySelectorAll('[data-theme-value]').forEach((button) => {
           button.setAttribute('aria-pressed', String(button.dataset.themeValue === theme));
         });
+      }
+      if (settingsNotchHeight) {
+        const platform = window.notchAPI?.platform === 'win32' ? 'win32' : 'darwin';
+        const limits = platform === 'win32' ? { min: 8, max: 38 } : { min: 24, max: 64 };
+        const preference = appSettings?.notchHeight || { mode: 'small', custom: limits.min };
+        const mode = ['small', 'medium', 'large', 'custom'].includes(preference.mode) ? preference.mode : 'small';
+        settingsNotchHeight.value = mode;
+        if (settingsNotchHeightCustom) {
+          settingsNotchHeightCustom.min = String(limits.min);
+          settingsNotchHeightCustom.max = String(limits.max);
+          settingsNotchHeightCustom.value = String(Math.min(limits.max, Math.max(limits.min, Number(preference.custom) || limits.min)));
+        }
+        settingsNotchHeightCustomWrap?.toggleAttribute('hidden', mode !== 'custom');
+        if (settingsNotchHeightNote) {
+          settingsNotchHeightNote.textContent = platform === 'win32'
+            ? `小：当前紧凑高度 · 中/大：在默认高度上增加 8/16 px · 自定义：${limits.min}–${limits.max} px`
+            : `小：当前屏幕默认高度 · 中/大：在默认高度上增加 8/16 px · 自定义：${limits.min}–${limits.max} px`;
+        }
       }
       if (settingsDefaultTab) {
         const visibleTabs = new Set(Domain.visiblePanelTabs(
@@ -203,6 +225,36 @@
       appSettings = result.settings || appSettings;
       render();
       setNote(theme === 'light' ? '已切换为亮色主题。' : '已切换为深色主题。');
+    });
+
+    settingsNotchHeight?.addEventListener('change', async () => {
+      if (!window.notchAPI?.setNotchHeight) return;
+      const mode = settingsNotchHeight.value;
+      const custom = Number(settingsNotchHeightCustom?.value);
+      const min = Number(settingsNotchHeightCustom?.min || 24);
+      const max = Number(settingsNotchHeightCustom?.max || 64);
+      if (mode === 'custom' && (!Number.isInteger(custom) || custom < min || custom > max)) {
+        setNote(`自定义高度必须是 ${min}–${max} px 的整数。`, true);
+        render();
+        return;
+      }
+      settingsNotchHeight.disabled = true;
+      if (settingsNotchHeightCustom) settingsNotchHeightCustom.disabled = true;
+      const result = await window.notchAPI.setNotchHeight({ mode, custom }).catch(() => ({ ok: false }));
+      settingsNotchHeight.disabled = false;
+      if (settingsNotchHeightCustom) settingsNotchHeightCustom.disabled = false;
+      if (!result?.ok) {
+        render();
+        setNote(result?.error === 'invalid_notch_height' ? `自定义高度必须是 ${min}–${max} px 的整数。` : '刘海高度保存失败，请重试。', true);
+        return;
+      }
+      appSettings = result.settings || appSettings;
+      render();
+      setNote('刘海高度已更新。');
+    });
+
+    settingsNotchHeightCustom?.addEventListener('change', () => {
+      if (settingsNotchHeight?.value === 'custom') settingsNotchHeight.dispatchEvent(new Event('change'));
     });
 
     settingsDefaultTab?.addEventListener('change', async () => {

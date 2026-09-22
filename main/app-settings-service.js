@@ -9,6 +9,8 @@ function createAppSettingsService(options = {}) {
   const isValidOptionalShortcut = options.isValidOptionalShortcut;
   const launcherConfig = options.launcherConfig;
   const isAutoLaunchEnabled = options.isAutoLaunchEnabled;
+  const normalizeNotchHeightPreference = options.normalizeNotchHeightPreference || (() => ({ mode: 'small', custom: 24 }));
+  const platform = options.platform || 'darwin';
 
   function read() {
     const stored = readJsonFile(getSettingsPath(fileName));
@@ -25,6 +27,7 @@ function createAppSettingsService(options = {}) {
       },
       defaultTab: normalizeDefaultTabPreference(stored.defaultTab, features),
       theme: stored.theme === 'light' ? 'light' : 'dark',
+      notchHeight: normalizeNotchHeightPreference(stored.notchHeight, platform),
     };
   }
 

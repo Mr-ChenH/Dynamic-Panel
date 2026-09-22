@@ -907,6 +907,22 @@
                       <button type="button" data-theme-value="light" aria-pressed="false">亮色</button>
                     </div>
                   </div>
+                  <div class="settings-device-row settings-notch-height-row">
+                    <div><span>刘海高度</span><strong>控制折叠态顶部条的高度</strong></div>
+                    <div class="settings-notch-height-control">
+                      <select id="settings-notch-height" aria-label="刘海高度">
+                        <option value="small">小</option>
+                        <option value="medium">中</option>
+                        <option value="large">大</option>
+                        <option value="custom">自定义</option>
+                      </select>
+                      <label id="settings-notch-height-custom-wrap" class="settings-notch-height-custom" hidden>
+                        <input id="settings-notch-height-custom" type="number" inputmode="numeric" min="24" max="64" step="1" aria-label="自定义刘海高度" />
+                        <span>px</span>
+                      </label>
+                    </div>
+                  </div>
+                  <p class="settings-inline-note settings-notch-height-note" id="settings-notch-height-note">小：当前屏幕默认高度 · 中/大：在默认高度上增加 8/16 px · 自定义：24–64 px</p>
                   <label class="settings-device-row settings-default-tab-row">
                     <div><span>默认展开页</span><strong>每次唤出面板时显示</strong></div>
                     <select id="settings-default-tab" aria-label="默认展开页">

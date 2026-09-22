@@ -51,6 +51,7 @@ const { createSystemAppIconService } = require('./main/system-app-icon-service')
 const { createPasteTargetService } = require('./main/paste-target-service');
 const { createPermissionService } = require('./main/permission-service');
 const { createAppSettingsService } = require('./main/app-settings-service');
+const { normalizeNotchHeightPreference, validateNotchHeightPreference } = require('./main/notch-height-settings');
 const { createLauncherSettingsStore } = require('./main/launcher-settings-store');
 const { createNotchTrayIcon } = require('./main/tray-icon');
 const { createTranscriptionSettingsStore } = require('./main/transcription-settings-store');
@@ -293,6 +294,7 @@ const windowGeometry = createWindowGeometry({
   getCurrentTab: () => currentTab,
   getMainWindow: () => mainWindow,
   isCollapsedHovering: () => windowsCollapsedHovering,
+  getNotchHeightPreference: () => readAppSettings().notchHeight,
 });
 const {
   getTargetDisplay,
@@ -300,6 +302,8 @@ const {
   getCenteredBounds,
   getMenuBarHeight,
   getCollapsedHeight,
+  getNotchHeight,
+  getLayoutMetrics,
   getExpandedSize,
   getBoundsForMode,
   applyWindowGeometry,
@@ -721,6 +725,8 @@ const appSettingsService = createAppSettingsService({
   normalizeDefaultTabPreference,
   isValidPanelShortcut,
   isValidOptionalShortcut,
+  normalizeNotchHeightPreference: (value) => normalizeNotchHeightPreference(value, process.platform),
+  platform: process.platform,
   launcherConfig,
   isAutoLaunchEnabled,
 });
@@ -963,7 +969,11 @@ function applyAppSettings() {
     setActionShortcut(action, '');
   }
   if (changed) saveAppSettings(settings);
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', publicAppSettings());
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    applyWindowGeometry(currentMode, getWindowDisplay());
+    mainWindow.webContents.send('window:metrics-changed', getLayoutMetrics());
+    mainWindow.webContents.send('settings:changed', publicAppSettings());
+  }
 }
 
 function openRendererPanel(channel) {
@@ -1099,6 +1109,7 @@ const settingsController = createSettingsController({
   setLauncherShortcut,
   setPanelShortcut,
   setActionShortcut,
+  validateNotchHeightPreference: (value) => validateNotchHeightPreference(value, process.platform),
   sendSettingsChanged: (settings) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', settings);
   },

@@ -377,17 +377,21 @@ test('global shortcuts expose configurable panel, launcher, screenshot, screen r
 test('Windows collapsed notch stays compact and grows only on approach', () => {
   assert.match(appJs, /app\.dataset\.platform\s*=\s*window\.notchAPI\?\.platform/);
   const compactRule = platformCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
-  const hoverRule = platformCss.match(/#app\[data-platform='win32'\]\.collapsed \.notch:hover \{([\s\S]*?)\n\}/)?.[1] || '';
+  const hoverRule = platformCss.match(/#app\[data-platform='win32'\]\.collapsed:not\(\[data-notch-hover-disabled\]\) \.notch:hover \{([\s\S]*?)\n\}/)?.[1] || '';
   const closingRule = platformCss.match(/#app\[data-platform='win32'\]\.closing \.notch \{([\s\S]*?)\n\}/)?.[1] || '';
   assert.match(compactRule, /width:\s*160px/);
-  assert.match(compactRule, /height:\s*8px/);
+  assert.match(compactRule, /height:\s*var\(--notch-compact-h, 8px\)/);
   assert.match(compactRule, /width var\(--d-base\)/);
   assert.match(hoverRule, /width:\s*184px/);
-  assert.match(hoverRule, /height:\s*30px/);
+  assert.match(hoverRule, /height:\s*max\(30px, var\(--notch-compact-h, 8px\)\)/);
   assert.match(closingRule, /width:\s*160px/);
-  assert.match(closingRule, /height:\s*8px/);
+  assert.match(closingRule, /height:\s*var\(--notch-compact-h, 8px\)/);
   assert.match(closingRule, /background:\s*var\(--bg-base\)/);
+  assert.match(preloadJs, /setNotchHeight:.*settings:set-notch-height/);
   assert.match(preloadJs, /setCollapsedHover:.*window:set-collapsed-hover/);
+  assert.match(appJs, /COLLAPSED_HOVER_MAX_HEIGHT\s*=\s*30/);
+  assert.match(appJs, /data-notch-hover-disabled/);
+  assert.match(appJs, /isCollapsedHoverEnabled/);
   assert.match(appJs, /notch\.addEventListener\('mouseenter'.*setCollapsedHover/s);
   assert.match(appJs, /notch\.addEventListener\('mouseleave'.*setCollapsedHover/s);
   assert.match(windowIpcJs, /ipcMain\.on\('window:set-collapsed-hover'/);
@@ -558,6 +562,18 @@ test('settings exposes every panel tab as a possible default opening page', () =
     'home', 'todo', 'finance', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings',
   ]);
   assert.match(workspaceAppSettingsJs, /setDefaultTab/);
+});
+
+test('settings exposes bounded notch height presets and custom control', () => {
+  assert.match(html, /id="settings-notch-height"/);
+  assert.match(html, /value="small">小/);
+  assert.match(html, /value="medium">中/);
+  assert.match(html, /value="large">大/);
+  assert.match(html, /value="custom">自定义/);
+  assert.match(html, /id="settings-notch-height-custom"/);
+  assert.match(workspaceAppSettingsJs, /setNotchHeight/);
+  assert.match(workspaceAppSettingsJs, /invalid_notch_height/);
+  assert.match(mainJs, /notchHeight/);
 });
 
 test('finance IPC turns expected cancellation into a structured result', () => {

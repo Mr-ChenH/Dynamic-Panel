@@ -17,6 +17,7 @@ function createSettingsController({
   setPanelShortcut,
   setActionShortcut,
   sendSettingsChanged,
+  validateNotchHeightPreference,
 }) {
   function setFeature(payload) {
     const current = readAppSettings();
@@ -34,6 +35,17 @@ function createSettingsController({
     if (!next) return { ok: false, error: 'invalid_default_tab' };
     if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
     applyAppSettings();
+    return { ok: true, settings: publicAppSettings() };
+  }
+
+  function setNotchHeight(sender, preference) {
+    if (!isMainWindowSender(sender)) return { ok: false, error: 'invalid_sender' };
+    const notchHeight = validateNotchHeightPreference(preference);
+    if (!notchHeight) return { ok: false, error: 'invalid_notch_height' };
+    const next = { ...readAppSettings(), notchHeight };
+    if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
+    applyAppSettings();
+    refreshTrayMenu();
     return { ok: true, settings: publicAppSettings() };
   }
 
@@ -97,6 +109,7 @@ function createSettingsController({
     setFeature,
     setDefaultTab,
     setTheme,
+    setNotchHeight,
     setAutoLaunch: updateAutoLaunch,
     setShortcut,
   };

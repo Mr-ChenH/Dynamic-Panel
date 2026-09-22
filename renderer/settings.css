@@ -40,6 +40,16 @@
 .settings-theme-switch button[aria-pressed='true'] { background: var(--surface-1); color: var(--text-1); box-shadow: 0 1px 3px var(--panel-shadow); }
 .settings-theme-switch button:disabled { opacity: .55; cursor: wait; }
 .settings-theme-switch button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.settings-notch-height-control { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex: 0 0 auto !important; }
+.settings-notch-height-control select,
+.settings-notch-height-custom input { min-height: 32px; border: 1px solid var(--hairline); border-radius: var(--r-input); background: var(--surface-2); color: var(--text-1); font: var(--fs-small) var(--font); }
+.settings-notch-height-control select { min-width: 92px; padding: 5px 28px 5px 10px; }
+.settings-notch-height-custom { display: inline-flex; align-items: center; gap: 5px; color: var(--text-3); font: var(--fs-small) var(--font-mono); }
+.settings-notch-height-custom[hidden] { display: none; }
+.settings-notch-height-custom input { width: 68px; padding: 5px 8px; font: var(--fs-small) var(--font-mono); }
+.settings-notch-height-note { margin: -2px 0 0 !important; color: var(--text-4); }
+.settings-notch-height-control select:focus-visible,
+.settings-notch-height-custom input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .settings-organized .settings-workspace-path { max-width: none; }
 .settings-organized .settings-device-actions { flex-wrap: wrap; justify-content: flex-end; }
 .settings-organized .settings-inline-note { margin-top: 0 !important; min-height: 0; padding-top: 10px; overflow-wrap: anywhere; }

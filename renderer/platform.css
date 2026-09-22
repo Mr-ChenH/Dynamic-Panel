@@ -2,7 +2,7 @@
 /* Windows 没有物理刘海遮挡，常驻黑条应比原生透明画布更克制。 */
 #app[data-platform='win32'].collapsed .notch {
   width: 160px;
-  height: 8px;
+  height: var(--notch-compact-h, 8px);
   padding-bottom: 1px;
   border-radius: 0 0 5px 5px;
   box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22);
@@ -14,9 +14,9 @@
     box-shadow var(--d-fast) var(--ease-out);
 }
 
-#app[data-platform='win32'].collapsed .notch:hover {
+#app[data-platform='win32'].collapsed:not([data-notch-hover-disabled]) .notch:hover {
   width: 184px;
-  height: 30px;
+  height: max(30px, var(--notch-compact-h, 8px));
   border-radius: 0 0 9px 9px;
   background: #080808;
   box-shadow: 0 7px 18px rgba(0, 0, 0, 0.30);
@@ -30,7 +30,7 @@
 /* Windows 收起时直接过渡到最终紧凑尺寸，避免先回到 200 × 38 再跳成 160 × 8。 */
 #app[data-platform='win32'].closing .notch {
   width: 160px;
-  height: 8px;
+  height: var(--notch-compact-h, 8px);
   align-items: flex-end;
   padding-bottom: 1px;
   border-radius: 0 0 5px 5px;

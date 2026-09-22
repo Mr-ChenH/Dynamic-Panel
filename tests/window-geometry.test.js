@@ -26,8 +26,10 @@ function createGeometry(platform = 'darwin') {
 
 test('window geometry projects layout metrics from the injected display policy', () => {
   const geometry = createGeometry();
+  assert.equal(typeof geometry.getNotchHeight, 'function');
   assert.deepEqual(geometry.getLayoutMetrics(), {
     stripHeight: 24,
+    notchHeight: 24,
     menuBarHeight: 24,
     chromeY: 76,
     tabSizes: { home: { width: 1240, panelHeight: 540 } },
