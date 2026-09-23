@@ -166,6 +166,35 @@ const api = {
     ipcRenderer.invoke('task-notification:activate', eventId),
   taskNotificationHover: (paused) =>
     ipcRenderer.send('task-notification:hover', paused === true),
+  getSyncStatus: () => ipcRenderer.invoke('sync:get-status'),
+  getSyncRuntimeContext: () => ipcRenderer.invoke('sync:get-runtime-context'),
+  testSyncConnection: (payload) => ipcRenderer.invoke('sync:test-connection', payload),
+  saveSyncBinding: (payload) => ipcRenderer.invoke('sync:save-binding', payload),
+  setSyncCategories: (categories) => ipcRenderer.invoke('sync:set-categories', { categories }),
+  pauseSync: (paused) => ipcRenderer.invoke('sync:pause', { paused: paused === true }),
+  runSyncNow: () => ipcRenderer.invoke('sync:run-now'),
+  enqueueSync: (operation) => ipcRenderer.invoke('sync:enqueue', { operation }),
+  listSyncConflicts: (payload) => ipcRenderer.invoke('sync:list-conflicts', payload),
+  resolveSyncConflict: (payload) => ipcRenderer.invoke('sync:resolve-conflict', payload),
+  removeSyncBinding: (payload) => ipcRenderer.invoke('sync:remove-binding', payload),
+  cancelSyncTransfer: (transferId) => ipcRenderer.invoke('sync:cancel-transfer', { transferId }),
+  uploadSyncObject: (payload) => ipcRenderer.invoke('sync:upload-object', payload),
+  downloadSyncObject: (payload) => ipcRenderer.invoke('sync:download-object', payload),
+  previewFirstSync: (payload) => ipcRenderer.invoke('sync:first-sync-preview', payload),
+  executeFirstSync: (payload) => ipcRenderer.invoke('sync:first-sync-execute', payload),
+  cancelFirstSync: (payload) => ipcRenderer.invoke('sync:first-sync-cancel', payload),
+  prepareSyncCategoryClear: (payload) => ipcRenderer.invoke('sync:category-clear-preview', payload),
+  executeSyncCategoryClear: (payload) => ipcRenderer.invoke('sync:category-clear-execute', payload),
+  restoreSyncDeleted: (payload) => ipcRenderer.invoke('sync:restore-deleted', payload),
+  onSyncStatus: (cb) => subscribe('sync:status', (event, status) => cb(status)),
+  onSyncApplyBatch: (cb) => subscribe('sync:apply-batch', async (event, message) => {
+    try {
+      const result = await cb(message.batch);
+      ipcRenderer.send('sync:projection-result', { requestId: message.requestId, ok: true, result });
+    } catch (error) {
+      ipcRenderer.send('sync:projection-result', { requestId: message.requestId, ok: false, error: { code: String(error?.code || error?.message || 'renderer_projection_failed').slice(0, 80) } });
+    }
+  }),
 };
 
 // New grouped namespaces are aliases over the stable flat API. Keeping both
@@ -279,6 +308,31 @@ api.settings = Object.freeze({
   setPanelShortcut: api.setPanelShortcut,
   setShortcut: api.setShortcut,
   onChanged: api.onAppSettingsChanged,
+});
+
+api.sync = Object.freeze({
+  getStatus: api.getSyncStatus,
+  getRuntimeContext: api.getSyncRuntimeContext,
+  testConnection: api.testSyncConnection,
+  saveBinding: api.saveSyncBinding,
+  setCategories: api.setSyncCategories,
+  pause: api.pauseSync,
+  runNow: api.runSyncNow,
+  enqueue: api.enqueueSync,
+  listConflicts: api.listSyncConflicts,
+  resolveConflict: api.resolveSyncConflict,
+  removeBinding: api.removeSyncBinding,
+  cancelTransfer: api.cancelSyncTransfer,
+  uploadObject: api.uploadSyncObject,
+  downloadObject: api.downloadSyncObject,
+  previewFirstSync: api.previewFirstSync,
+  executeFirstSync: api.executeFirstSync,
+  cancelFirstSync: api.cancelFirstSync,
+  prepareCategoryClear: api.prepareSyncCategoryClear,
+  executeCategoryClear: api.executeSyncCategoryClear,
+  restoreDeleted: api.restoreSyncDeleted,
+  onStatus: api.onSyncStatus,
+  onApplyBatch: api.onSyncApplyBatch,
 });
 
 contextBridge.exposeInMainWorld('notchAPI', api);

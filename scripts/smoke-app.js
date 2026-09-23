@@ -69,7 +69,10 @@ async function main() {
   }, 'DevTools startup');
   const page = await until(async () => {
     const pages = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-    return pages.find((item) => item.url.endsWith('/renderer/index.html'));
+    return pages.find((item) => {
+      try { return new URL(item.url).pathname.endsWith('/renderer/index.html'); }
+      catch { return false; }
+    });
   }, 'application renderer');
   socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });

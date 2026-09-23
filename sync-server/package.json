@@ -1,0 +1,28 @@
+{
+  "name": "dynamic-panel-sync-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "worker": "node src/worker.js",
+    "migrate": "node src/db/migrate.js",
+    "cli": "node src/cli/index.js",
+    "admin": "node src/cli/index.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.888.0",
+    "@fastify/cookie": "11.0.2",
+    "@fastify/helmet": "13.0.2",
+    "@fastify/rate-limit": "10.3.0",
+    "@fastify/websocket": "^11.2.0",
+    "argon2": "0.44.0",
+    "fastify": "5.6.1",
+    "pg": "8.16.3",
+    "zod": "4.1.11"
+  }
+}

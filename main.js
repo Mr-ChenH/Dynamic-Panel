@@ -15,6 +15,7 @@ const {
   dialog,
   desktopCapturer,
   ClipboardItem,
+  powerMonitor,
 } = require('electron');
 const WebSocket = require('ws');
 const path = require('path');
@@ -83,8 +84,17 @@ const { registerWindowIpc } = require('./main/ipc/window');
 const { registerWindowsIpc } = require('./main/ipc/windows');
 const { registerTaskNotificationIpc } = require('./main/ipc/task-notification');
 const { registerLauncherIpc } = require('./main/ipc/launcher');
+const { registerSyncIpc } = require('./main/ipc/sync');
+const { createProtocolClient } = require('./main/sync/protocol-client');
+const { createCredentialEnvelope } = require('./main/sync/credential-envelope');
+const { createSyncLocalStore } = require('./main/sync/local-store');
+const { createSyncService } = require('./main/sync/sync-service');
+const { createProjectionBridge } = require('./main/sync/projection-bridge');
+const { createWorkspaceObjectTransfers } = require('./main/sync/workspace-object-transfer');
 registerCaptureScheme();
 let captureService = null;
+let syncService = null;
+let syncProjectionBridge = null;
 let captureQuitPending = false;
 let captureQuitReady = false;
 const {
@@ -197,6 +207,7 @@ const CREDENTIALS_VAULT_FILE = 'credentials.vault.json';
 const APP_SETTINGS_FILE = 'app-settings.json';
 const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
 const WORKSPACE_DATA_FILE = 'workspace.json';
+const SYNC_STATE_FILE = 'sync-state.json';
 const workspacePersistenceGate = createWorkspacePersistenceGate();
 const TRANSCRIPTION_MODEL = 'qwen3-asr-flash-realtime';
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
@@ -845,6 +856,10 @@ function showOwnedOpenDialog(options) {
   );
 }
 
+function syncWorkspaceIdentity(root) {
+  return crypto.createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 32);
+}
+
 const workspaceController = createWorkspaceController({
   fs,
   path,
@@ -869,6 +884,7 @@ const workspaceController = createWorkspaceController({
     aiModelService?.cancelAll();
   },
   onWorkspaceChanged: (selected) => {
+    syncService?.switchWorkspace(syncWorkspaceIdentity(selected));
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('workspace:changed', { path: selected });
     captureService?.refresh();
     refreshTrayMenu();
@@ -1121,6 +1137,41 @@ registerWorkspaceIpc({ ipcMain, workspaceController });
 function isMainWindowSender(sender) {
   return Boolean(mainWindow && !mainWindow.isDestroyed() && sender === mainWindow.webContents);
 }
+
+const syncWorkspaceId = syncWorkspaceIdentity(workspaceRoot());
+const syncLocalStore = createSyncLocalStore({
+  fsModule: fs,
+  pathModule: path,
+  filePath: path.join(app.getPath('userData'), SYNC_STATE_FILE),
+  workspaceId: syncWorkspaceId,
+});
+const syncCredentialEnvelope = createCredentialEnvelope({ secureStorage: safeStorage });
+const syncProtocolClient = createProtocolClient({
+  lookup: (hostname, options) => dns.promises.lookup(hostname, options),
+  appVersion: app.getVersion(),
+});
+syncProjectionBridge = createProjectionBridge({ ipcMain, getMainWindow: () => mainWindow, isMainWindowSender });
+const syncObjectTransfers = createWorkspaceObjectTransfers({
+  fsModule: fs,
+  pathModule: path,
+  getWorkspaceRoot: workspaceRoot,
+  store: syncLocalStore,
+  request: (requestPath, options) => syncService.objectRequest(requestPath, options),
+});
+syncService = createSyncService({
+  protocolClient: syncProtocolClient,
+  credentialEnvelope: syncCredentialEnvelope,
+  store: syncLocalStore,
+  workspaceId: syncWorkspaceId,
+  applyRemoteBatch: syncProjectionBridge.applyRemoteBatch,
+  objectTransfers: syncObjectTransfers,
+  WebSocketImpl: WebSocket,
+  powerEvents: powerMonitor,
+  onStatus: (status) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('sync:status', status);
+  },
+});
+registerSyncIpc({ ipcMain, syncService, isMainWindowSender });
 
 registerWindowIpc({
   ipcMain,
@@ -1769,6 +1820,8 @@ app.on('will-quit', () => {
   clearTaskNotificationTimers();
   stopTaskNotificationServer();
   closeAllTranscriptionSessions();
+  syncService.stop();
+  syncProjectionBridge?.dispose();
   globalShortcut.unregisterAll();
   stopClipboardPolling();
 });

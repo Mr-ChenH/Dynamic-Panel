@@ -3,6 +3,7 @@
   if(!page)return;
   const groups=[
     {id:'general',title:'通用',description:'快捷键、启动与本地数据',selector:'.settings-device-card',icon:'M4 7h16 M4 17h16 M9 4v6 M15 14v6'},
+    {id:'sync',title:'同步',description:'空间连接、范围与冲突',selector:'.sync-settings',icon:'M7 18a5 5 0 0 1-.7-9.95A7 7 0 0 1 19.7 10 4 4 0 0 1 19 18z M8 14l3 3 5-6'},
     {id:'music',title:'音乐',description:'本地、网络与聚合歌单',selector:'.settings-music-card',icon:'M9 18V5l10-2v13 M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6 M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6'},
     {id:'launcher',title:'搜索与启动器',description:'搜索来源、快捷键与本地扩展',selector:'.settings-launcher-card',icon:'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14 M15 15l6 6'},
     {id:'finance',title:'金融与行情',description:'数据源、自选与默认展示',selector:'.settings-finance-card',icon:'M4 19V5 M4 19h16 M7 15l3-4 3 2 5-7'},
@@ -18,7 +19,7 @@
   const buttons=[],cards=[];
   for(const group of groups){
     const card=page.querySelector(group.selector);if(!card)return;
-    card.id=`settings-pane-${group.id}`;card.setAttribute('role','tabpanel');card.setAttribute('aria-labelledby',`settings-category-${group.id}`);
+    if(!card.id)card.id=`settings-pane-${group.id}`;card.setAttribute('role','tabpanel');card.setAttribute('aria-labelledby',`settings-category-${group.id}`);
     const button=document.createElement('button');button.type='button';button.id=`settings-category-${group.id}`;button.dataset.settingsCategory=group.id;button.setAttribute('role','tab');button.setAttribute('aria-controls',card.id);
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
     const shape=document.createElementNS(svg.namespaceURI,'path');shape.setAttribute('d',group.icon);svg.append(shape);

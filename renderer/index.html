@@ -951,6 +951,50 @@
                   </label>
                   <p class="settings-inline-note" id="settings-inline-note" role="status" aria-live="polite"></p>
                 </section>
+                <section class="tile settings-card sync-settings" id="sync-settings" aria-labelledby="sync-settings-title" aria-busy="false" data-state="disconnected">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">数据同步</span><strong id="sync-settings-title">跨设备工作数据</strong></div>
+                    <small>服务器可读取你选择同步的业务数据；这不是端到端加密。</small>
+                  </div>
+                  <div class="sync-status-line" role="status" aria-live="polite">
+                    <span class="sync-state-dot" aria-hidden="true"></span>
+                    <div><strong id="sync-status-label">未连接</strong><small id="sync-status-detail">连接后可在多台设备间同步所选数据</small></div>
+                  </div>
+                  <div id="sync-setup" class="sync-setup">
+                    <label>服务器地址<input id="sync-base-url" type="url" inputmode="url" autocomplete="url" placeholder="https://sync.example.com" /></label>
+                    <label>客户端 Key<input id="sync-client-key" type="password" autocomplete="off" spellcheck="false" placeholder="dpk_v1_…" /></label>
+                    <label class="sync-switch"><span><b>允许本机开发服务器</b><small>仅允许 127.0.0.1 / localhost 的 HTTP 地址</small></span><input id="sync-loopback" type="checkbox" /><i aria-hidden="true"></i></label>
+                    <button id="sync-test" class="workspace-button compact" type="button">测试连接</button>
+                    <p id="sync-identity" class="sync-identity" hidden></p>
+                    <fieldset class="sync-categories"><legend>同步范围</legend>
+                      <label><span>待办与分类</span><input type="checkbox" data-sync-category="todo" checked /></label>
+                      <label><span>笔记与图片</span><input type="checkbox" data-sync-category="notes" checked /></label>
+                      <label><span>链接与分组</span><input type="checkbox" data-sync-category="links" checked /></label>
+                      <label><span>基础偏好</span><input type="checkbox" data-sync-category="preferences" checked /></label>
+                      <label><span>剪贴板文字与图片</span><input type="checkbox" data-sync-category="clipboard" /></label>
+                      <label><span>完整截图</span><input type="checkbox" data-sync-category="screenshots" /></label>
+                      <label><span>已保存 AI 对话</span><input type="checkbox" data-sync-category="aiSessions" /></label>
+                      <label><span>行情自选</span><input type="checkbox" data-sync-category="finance" /></label>
+                      <label><span>常用指令</span><input type="checkbox" data-sync-category="commands" /></label>
+                      <label><span>启动器收藏与别名</span><input type="checkbox" data-sync-category="launcher" /></label>
+                      <label><span>天气地点</span><input type="checkbox" data-sync-category="location" /></label>
+                    </fieldset>
+                    <p class="sync-exclusions">不同步：密钥、录音与转写、录屏、音乐、本地扩展、诊断和数据文件夹路径。</p>
+                    <div id="sync-first-sync" class="sync-first-sync" hidden>
+                      <strong>首次同步预览</strong><span id="sync-first-sync-summary"></span>
+                      <div id="sync-first-sync-impact" class="sync-first-sync-impact" aria-label="首次同步分类影响"></div>
+                      <label>处理方式<select id="sync-first-sync-mode"><option value="merge">安全合并</option><option value="upload">上传到空服务器</option><option value="download">从服务器下载到空设备</option><option value="local-wins">以本机为准（替换服务器）</option><option value="server-wins">以服务器为准（替换本机）</option></select></label>
+                      <div><button id="sync-first-sync-cancel" type="button">取消</button><button id="sync-save" class="workspace-button compact primary" type="button">确认并连接</button></div>
+                    </div>
+                  </div>
+                  <div id="sync-connected" class="sync-connected" hidden>
+                    <div class="sync-metrics"><span><b id="sync-queue-count">0 项待同步</b><small id="sync-last-sync">尚未同步</small></span><span><b id="sync-conflict-count">0 个冲突</b><button id="sync-conflicts-open" type="button">查看</button></span></div>
+                    <div class="sync-actions"><button id="sync-run-now" class="workspace-button compact primary" type="button">立即同步</button><button id="sync-pause" type="button" aria-pressed="false">暂停</button><button id="sync-remove" class="danger" type="button">移除连接</button></div>
+                    <div id="sync-conflict-list" class="sync-conflict-list" aria-label="同步冲突" hidden></div>
+                  </div>
+                  <p id="sync-error" class="sync-error" role="alert" hidden></p>
+                  <p id="sync-message" class="settings-inline-note" role="status" aria-live="polite"></p>
+                </section>
               </div>
             </div>
           </section>
@@ -1056,6 +1100,15 @@
     <script src="workspace-recording-lifecycle.js"></script>
     <script src="workspace-recording-projection.js"></script>
     <script src="workspace-transcription-pipeline.js"></script>
+    <script src="sync/categories.js"></script>
+    <script src="sync/scanner.js"></script>
+    <script src="sync/adapters.js"></script>
+    <script src="sync/sync-state.js"></script>
+    <script src="sync/indexeddb-store.js"></script>
+    <script src="sync/projection.js"></script>
+    <script src="sync/runtime.js"></script>
+    <script src="sync/view.js"></script>
+    <script src="sync/controller.js"></script>
     <script src="workspace-app-settings.js"></script>
     <script src="workspace-ai-settings.js"></script>
     <script src="workspace.js"></script>

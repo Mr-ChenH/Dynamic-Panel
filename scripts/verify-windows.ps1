@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 $version = node -p "require('./package.json').version"
 $installer = Join-Path (Get-Location) "dist.noindex/Dynamic-Panel-$version-windows-x64-setup.exe"
 if (!(Test-Path $installer)) { throw "Missing installer: $installer" }
-$testRoot = Join-Path $env:RUNNER_TEMP ("todo-install-" + [guid]::NewGuid().ToString())
+$tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
+$testRoot = Join-Path $tempRoot ("todo-install-" + [guid]::NewGuid().ToString())
 $installDir = Join-Path $testRoot 'Dynamic Panel'
 $profile = Join-Path $testRoot 'profile'
 New-Item -ItemType Directory -Path $testRoot | Out-Null

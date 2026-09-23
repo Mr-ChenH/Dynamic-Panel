@@ -116,8 +116,10 @@
       if (!entry) return null;
 
       const updated = domain.prependClipboardHistory(history, entry, maxEntries);
-      history = updated.history;
-      const evictedPaths = updated.evicted
+      const protectedEntries = updated.evicted.filter((item) => favorites.includes(item.id));
+      const evicted = updated.evicted.filter((item) => !favorites.includes(item.id));
+      history = [...updated.history, ...protectedEntries];
+      const evictedPaths = evicted
         .filter((item) => item.type === 'image' && item.imagePath)
         .map((item) => item.imagePath);
       deleteImageFiles(evictedPaths);
@@ -126,7 +128,7 @@
         await preloadImage(entry.imagePath, { notifyChange: false });
       }
       touch('entry-added');
-      return { entry, evicted: updated.evicted };
+      return { entry, evicted };
     }
 
     function toggleFavorite(id) {

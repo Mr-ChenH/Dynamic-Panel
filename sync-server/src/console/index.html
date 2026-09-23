@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Dynamic Panel Sync Console</title>
+  <link rel="stylesheet" href="/console/styles.css">
+  <script src="/console/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要内容</a>
+  <div id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+  <main id="login-view" class="login-layout" aria-labelledby="login-title">
+    <form id="login-form" class="login-panel">
+      <p class="product-mark">Dynamic Panel Sync</p>
+      <h1 id="login-title">账户登录</h1>
+      <p class="muted">管理空间、客户端和同步活动。</p>
+      <div id="login-error" class="message message-error" role="alert" hidden></div>
+      <label for="login-username">用户名</label>
+      <input id="login-username" name="username" autocomplete="username" required>
+      <label for="login-password">密码</label>
+      <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      <button class="button primary" type="submit">登录</button>
+      <p id="login-delay" class="muted" role="status" hidden></p>
+    </form>
+  </main>
+
+  <div id="console-shell" class="app-shell" hidden>
+    <header class="topbar">
+      <button id="nav-toggle" class="icon-button mobile-only" type="button" aria-label="打开导航" aria-controls="sidebar" aria-expanded="false">☰</button>
+      <a class="brand" href="/console/spaces" data-route>Dynamic Panel Sync</a>
+      <div class="account-menu">
+        <span id="account-name" class="account-name"></span>
+        <button id="logout-button" class="button quiet" type="button">退出</button>
+      </div>
+    </header>
+
+    <aside id="sidebar" class="sidebar" aria-label="主导航">
+      <nav>
+        <a href="/console/spaces" data-route data-nav="spaces">空间</a>
+        <a href="/console/usage" data-route data-nav="usage">用量</a>
+        <a href="/console/audit" data-route data-nav="audit">审计</a>
+        <a href="/console/security" data-route data-nav="security">安全</a>
+      </nav>
+    </aside>
+    <button id="nav-scrim" class="nav-scrim mobile-only" type="button" aria-label="关闭导航" hidden></button>
+
+    <main id="main-content" class="content" tabindex="-1">
+      <div id="page-status" class="message" role="status" hidden></div>
+      <div id="page-error" class="message message-error" role="alert" hidden></div>
+      <div id="view-root" aria-busy="false"></div>
+    </main>
+  </div>
+
+  <dialog id="action-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description">
+    <form id="dialog-form" method="dialog">
+      <header class="dialog-header">
+        <h2 id="dialog-title"></h2>
+        <button id="dialog-close" class="icon-button" type="button" aria-label="关闭">×</button>
+      </header>
+      <p id="dialog-description" class="muted"></p>
+      <div id="dialog-error" class="message message-error" role="alert" hidden></div>
+      <div id="dialog-body"></div>
+      <footer id="dialog-actions" class="dialog-actions"></footer>
+    </form>
+  </dialog>
+</body>
+</html>

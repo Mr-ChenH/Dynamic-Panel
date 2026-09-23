@@ -303,11 +303,15 @@
     });
     window.notchAPI?.onWorkspaceChanged?.(() => refresh());
 
+    const syncController = window.NotchSyncController?.createController?.();
+    syncController?.bind?.();
+
     return Object.freeze({
       refresh,
       render,
       renderHomeModules,
       setNote,
+      sync: syncController,
     });
   }
 
