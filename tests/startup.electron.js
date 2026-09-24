@@ -438,12 +438,13 @@ app.on('web-contents-created', (_event, contents) => {
           document.querySelector('[data-finance-provider-test="cn-stock"]').click();await new Promise(resolve=>setTimeout(resolve,40));
           const select=(id,value)=>{const control=document.getElementById(id);control.value=value;control.dispatchEvent(new Event('change',{bubbles:true}));};
           select('finance-settings-default-view','ranking');select('finance-settings-default-market','crypto');select('finance-settings-default-source','coingecko');select('finance-settings-default-ranking','losers');select('finance-settings-refresh-seconds','0');
-          const search=document.getElementById('finance-settings-asset-search');search.value='ETH';search.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,340));
-          const searchResultVisible=!document.getElementById('finance-settings-asset-results').hidden;
-          document.querySelector('#finance-settings-asset-results .finance-search-result')?.click();document.getElementById('finance-settings-add').click();
+          const search=document.getElementById('finance-settings-asset-search');search.value='ETH';search.dispatchEvent(new Event('input',{bubbles:true}));let financeSearchDeadline=performance.now()+3000;while(!document.querySelector('#finance-settings-asset-results .finance-search-result')&&performance.now()<financeSearchDeadline)await new Promise(resolve=>setTimeout(resolve,20));
+          const searchResult=document.querySelector('#finance-settings-asset-results .finance-search-result');
+          const searchResultVisible=Boolean(searchResult)&&!document.getElementById('finance-settings-asset-results').hidden;
+          searchResult?.click();financeSearchDeadline=performance.now()+1000;while(!search.dataset.selectedAssetId&&performance.now()<financeSearchDeadline)await new Promise(resolve=>setTimeout(resolve,20));document.getElementById('finance-settings-add').click();
+          let watchlists;financeSearchDeadline=performance.now()+1000;do{watchlists=JSON.parse(localStorage.getItem('notch-finance-watchlists-v1'));if(watchlists.lists[0].assetIds.includes('crypto:coingecko:ethereum'))break;await new Promise(resolve=>setTimeout(resolve,20));}while(performance.now()<financeSearchDeadline);
           const preferences=JSON.parse(localStorage.getItem('notch-finance-view-preferences-v1'));
-          const watchlists=JSON.parse(localStorage.getItem('notch-finance-watchlists-v1'));
-          search.value='600519';search.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,340));
+          search.value='600519';search.dispatchEvent(new Event('input',{bubbles:true}));financeSearchDeadline=performance.now()+3000;while(!document.querySelector('[data-finance-search-result="cn:quantdash:600519.SH"]')&&performance.now()<financeSearchDeadline)await new Promise(resolve=>setTimeout(resolve,20));
           const quantDashSearch=!!document.querySelector('[data-finance-search-result="cn:quantdash:600519.SH"]');
           const card=document.querySelector('.settings-finance-card'),content=document.querySelector('.settings-content');
           const providerForms=!!document.getElementById('finance-coingecko-key')&&!!document.getElementById('finance-alpaca-secret')&&!!document.getElementById('finance-twelve-data-key')&&!!document.getElementById('finance-sec-edgar-contact')&&!!document.getElementById('finance-quantdash-key')&&!!document.getElementById('finance-tencent-enabled')&&!!document.getElementById('finance-eastmoney-enabled')&&!!document.getElementById('finance-sina-enabled')&&!document.getElementById('finance-tushare-token')&&!document.querySelector('[data-finance-provider-save]:disabled');
