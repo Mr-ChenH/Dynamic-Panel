@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
+const { pathToFileURL } = require('node:url');
 const { createProjectionBridge } = require('../main/sync/projection-bridge');
 const { ensureSafePath } = require('../main/sync/media-path');
 const { createSyncLocalStore } = require('../main/sync/local-store');
@@ -24,6 +25,16 @@ function temporaryStore(t, workspaceId = 'workspace-a') {
 
 function envelope() {
   return createCredentialEnvelope({ secureStorage: { isEncryptionAvailable: () => true, encryptString: (value) => Buffer.from(`sealed:${value}`), decryptString: (value) => value.toString().slice(7) } });
+}
+
+async function loadSyncServer(t) {
+  const serverEntry = process.env.DYNAMIC_PANEL_SYNC_SERVER_ENTRY
+    || path.resolve(__dirname, '..', '..', 'Dynamic-Panel-Sync-Server', 'src', 'server.js');
+  if (!fs.existsSync(serverEntry)) {
+    t.skip('set DYNAMIC_PANEL_SYNC_SERVER_ENTRY to run desktop/server compatibility tests');
+    return null;
+  }
+  return import(pathToFileURL(serverEntry).href);
 }
 
 test('projection bridge resolves only a matching acknowledgement from the main renderer', async () => {
@@ -96,7 +107,9 @@ test('sync local store migrates and isolates binding, queues, cursors, and trans
 });
 
 test('real loopback server converges a local operation onto a second desktop client', async (t) => {
-  const { buildServer } = await import('../sync-server/src/server.js');
+  const serverModule = await loadSyncServer(t);
+  if (!serverModule) return;
+  const { buildServer } = serverModule;
   const server = await buildServer({ env: { NODE_ENV: 'test', COOKIE_SECRET: 'desktop-e2e-cookie-secret-at-least-32', KEY_LOOKUP_SECRET: 'desktop-e2e-lookup-secret-at-least-32' } });
   const address = await server.listen({ host: '127.0.0.1', port: 0 });
   t.after(() => server.close());
@@ -145,7 +158,9 @@ test('real loopback server converges a local operation onto a second desktop cli
 
 test('destructive local-wins first sync creates a verified recovery and replaces server records', async (t) => {
   const recoveryPointId = '55555555-5555-4555-8555-555555555555';
-  const { buildServer } = await import('../sync-server/src/server.js');
+  const serverModule = await loadSyncServer(t);
+  if (!serverModule) return;
+  const { buildServer } = serverModule;
   const server = await buildServer({
     env: { NODE_ENV: 'test', COOKIE_SECRET: 'first-sync-cookie-secret-at-least-32', KEY_LOOKUP_SECRET: 'first-sync-lookup-secret-at-least-32' },
     operations: {

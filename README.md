@@ -39,7 +39,7 @@ Dynamic Panel 是一个常驻屏幕顶部的 Electron 工作台：
 | 项目 | 说明 |
 | --- | --- |
 | 支持平台 | macOS 13+ Apple Silicon；Windows 10/11 x64 |
-| 运行方式 | 本地优先桌面应用；可选连接仓库内的自托管同步服务 |
+| 运行方式 | 本地优先桌面应用；可选连接独立部署的自托管同步服务 |
 | 默认状态 | 折叠成顶部刘海/紧凑条，点击后展开工作区 |
 | 数据位置 | LocalStorage、当前工作区目录和 Electron `userData` 目录 |
 | 获取方式 | 本仓库不提供预编译安装包，需要克隆源码后自行运行或构建 |
@@ -205,9 +205,9 @@ curl -X POST http://127.0.0.1:43821/notify/codex \
 
 ## 自托管同步服务
 
-仓库中的 [`sync-server/`](sync-server/) 提供可选的自托管同步服务，桌面端默认仍保持本地优先且不会自动上传数据。用户必须在「设置 → 同步」输入单客户端 Key、测试连接、选择分类并确认首次同步；剪贴板、截图、AI 会话、行情自选、指令、启动器数据和天气地点默认关闭。服务端可读取被选择的业务数据，这不是端到端加密。
+同级独立仓库 [`../Dynamic-Panel-Sync-Server`](../Dynamic-Panel-Sync-Server/README.md) 提供可选的自托管同步服务；本仓库只包含桌面同步客户端，默认仍保持本地优先且不会自动上传数据。用户必须在「设置 → 同步」输入单客户端 Key、测试连接、选择分类并确认首次同步；剪贴板、截图、AI 会话、行情自选、指令、启动器数据和天气地点默认关闭。服务端可读取被选择的业务数据，这不是端到端加密。
 
-服务端要求 Node.js 22.13+、PostgreSQL、HTTPS，以及独立配置的持久对象存储与加密备份。它提供多账号/多空间隔离、单客户端 Key、增量记录同步、冲突与墓碑、PNG 对象续传、Web 账号控制台、管理员 CLI、加密恢复点和分空间恢复。生产部署、迁移、反向代理、备份验证与恢复流程见 [`sync-server/docs/deployment.md`](sync-server/docs/deployment.md)；环境变量示例见 [`.env.example`](.env.example)，Compose 拓扑示例见 [`compose.example.yml`](compose.example.yml)。
+服务端要求 Node.js 22.13+、PostgreSQL、HTTPS，以及独立配置的持久对象存储与加密备份。它提供多账号/多空间隔离、单客户端 Key、增量记录同步、冲突与墓碑、PNG 对象续传、Web 账号控制台、管理员 CLI、加密恢复点和分空间恢复。生产部署、迁移、反向代理、备份验证、恢复流程、环境模板和 Compose 拓扑均由服务端仓库维护。
 
 ## 官网开发
 
@@ -234,7 +234,6 @@ npm run build
 ├── main-services.js        # 可测试的纯领域服务
 ├── preload.js              # contextBridge 安全桥
 ├── renderer/               # 桌面界面、交互与同步投影
-├── sync-server/            # 可选 Node 22 自托管同步服务与管理 CLI
 ├── tests/                  # Node 单元测试和 Electron 验收
 ├── build/                  # 图标、签名与打包配置
 ├── scripts/                # Codex / Claude Code 通知转发
@@ -250,9 +249,8 @@ npm run build
 - [实时数据源和全市场展示研究](docs/finance-market-data-and-display-research.md)
 - [金融页 AI 解读研究](docs/finance-ai-interpretation-research.md)
 - [启动器扩展开发](docs/launcher-extension-development.md)
-- [同步 MVP 技术设计](docs/project-factory/sync/05-technical-design.md)
-- [同步服务部署与恢复](sync-server/docs/deployment.md)
-- [同步验收报告](docs/project-factory/sync/08-server-acceptance.md)
+- [同步协议与桌面接口](docs/project-factory/sync/README.md)
+- [独立同步服务仓库](../Dynamic-Panel-Sync-Server/README.md)
 - [完整更新日志](CHANGELOG.md)
 
 ## License

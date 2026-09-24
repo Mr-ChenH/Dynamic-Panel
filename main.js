@@ -33,6 +33,7 @@ const { createFinanceService } = require('./finance-service');
 const { registerCaptureScheme, createCaptureService } = require('./captureService');
 const { copyCaptures } = require('./captureStorage');
 const { createWindowGeometry } = require('./main/window-geometry');
+const { createCollapsedHoverService } = require('./main/collapsed-hover-service');
 const { createNetworkSecurity } = require('./main/network-security');
 const { createLinkInspector } = require('./main/link-inspector');
 const { createWorkspaceFiles } = require('./main/workspace-files');
@@ -267,7 +268,7 @@ const mediaPermissionCoordinator = createForegroundMediaPermissionCoordinator();
 let notificationWindow = null;
 let taskNotificationController = null;
 
-let windowsCollapsedHovering = false;
+let collapsedHoverService = null;
 let displayFollowTimer = null;
 let displayRelocationTimer = null;
 let displayRelocationGeneration = 0;
@@ -304,7 +305,7 @@ const windowGeometry = createWindowGeometry({
   tabSizes: TAB_SIZES,
   getCurrentTab: () => currentTab,
   getMainWindow: () => mainWindow,
-  isCollapsedHovering: () => windowsCollapsedHovering,
+  isCollapsedHovering: () => collapsedHoverService?.isHovering() === true,
   getNotchHeightPreference: () => readAppSettings().notchHeight,
 });
 const {
@@ -320,6 +321,17 @@ const {
   applyWindowGeometry,
 } = windowGeometry;
 
+collapsedHoverService = createCollapsedHoverService({
+  platform: process.platform,
+  screen,
+  getMainWindow: () => mainWindow,
+  getMode: () => currentMode,
+  getDisplay: getWindowDisplay,
+  getNotchHeight,
+  getLayout: platformPolicy.windowsPanelLayout,
+  applyCollapsedGeometry: () => applyWindowGeometry('collapsed'),
+});
+
 function cancelCollapseWatchdog() {
   collapseGeneration++;
   if (collapseWatchdog) {
@@ -332,10 +344,14 @@ function applyMode(mode, display) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   cancelCollapseWatchdog();
   if (mode !== 'collapsed') cancelDisplayRelocation();
-  if (mode !== 'collapsed') windowsCollapsedHovering = false;
+  // Every native mode transition starts from the configured compact notch.
+  // A renderer mouseleave can be lost while Windows reshapes the transparent canvas.
+  collapsedHoverService.reset({ applyGeometry: false });
   applyWindowGeometry(mode, display);
   mainWindow.setIgnoreMouseEvents(false);
   currentMode = mode;
+  if (mode === 'collapsed') collapsedHoverService.start();
+  else collapsedHoverService.stop();
   if (mode === 'expanded') hideWhenCollapsed = false;
   if (mode === 'collapsed' && hideWhenCollapsed) {
     hideWhenCollapsed = false;
@@ -368,6 +384,7 @@ function repositionWindow(display) {
     return;
   }
 
+  collapsedHoverService.reset({ applyGeometry: false });
   // Windows can commit cross-monitor position and canvas-size changes on separate
   // compositor frames. Keep the shaped strip invisible until both settle.
   const target = mainWindow;
@@ -634,10 +651,13 @@ function createWindow() {
   mainWindow.on('focus', cancelPanelBlurCollapse);
 
   mainWindow.on('show', () => {
+    collapsedHoverService.start();
     syncHoverSpacePolling();
     syncDisplayFollowPolling();
   });
   mainWindow.on('hide', () => {
+    collapsedHoverService.stop();
+    collapsedHoverService.reset({ applyGeometry: false });
     cancelPanelBlurCollapse();
     cancelDisplayRelocation();
     syncHoverSpacePolling();
@@ -654,6 +674,7 @@ function createWindow() {
   });
 
   mainWindow.on('closed', () => {
+    collapsedHoverService.dispose();
     cancelPanelBlurCollapse();
     cancelCollapseWatchdog();
     cancelDisplayRelocation(false);
@@ -987,6 +1008,7 @@ function applyAppSettings() {
   }
   if (changed) saveAppSettings(settings);
   if (mainWindow && !mainWindow.isDestroyed()) {
+    collapsedHoverService.reset({ applyGeometry: false });
     applyWindowGeometry(currentMode, getWindowDisplay());
     mainWindow.webContents.send('window:metrics-changed', getLayoutMetrics());
     mainWindow.webContents.send('settings:changed', publicAppSettings());
@@ -1182,11 +1204,7 @@ registerWindowIpc({
     applyMode(normalized, normalized === 'launcher' ? getTargetDisplay() : undefined);
   },
   beginCollapse: beginNativeCollapse,
-  setCollapsedHover: (hovering) => {
-    if (process.platform !== 'win32' || currentMode !== 'collapsed' || hovering === windowsCollapsedHovering) return;
-    windowsCollapsedHovering = hovering;
-    applyWindowGeometry('collapsed');
-  },
+  setCollapsedHover: (hovering) => collapsedHoverService.setHovering(hovering),
   getMetrics: windowGeometry.getLayoutMetrics,
   keepOpen: () => {
     cancelPanelBlurCollapse();

@@ -141,9 +141,9 @@
     }
     function resetMusicShuffle() { musicShuffleKey = ''; musicShuffleRemaining = []; }
     function activeMusicTrack() {
+      const selected = musicLibrary.tracks.find((track) => track.id === activeMusicId);
       const loaded = musicLibrary.tracks.find((track) => track.id === loadedMusicId);
-      if (loaded) return loaded;
-      return musicLibrary.tracks.find((track) => track.id === activeMusicId) || musicLibrary.tracks[0] || null;
+      return (musicLoading && selected) || loaded || selected || musicLibrary.tracks[0] || null;
     }
     function rememberActiveMusic(track) {
       activeMusicId = track?.id || '';
@@ -309,7 +309,7 @@
       rememberActiveMusic(track); const epoch = ++musicLoadEpoch; musicLoading = true; renderMusicCard(); const result = await getApi()?.loadHomeMusicTrack?.(track.id).catch(() => null); if (epoch !== musicLoadEpoch) return;
       if (!result?.ok) { releaseMusicSource(); renderMusicCard(); setText($('home-media-status'), result?.error === 'audio_too_large' ? '音频超过 128 MB 限制' : result?.error === 'unsupported_audio' ? '服务器返回的不是音频文件' : '音频读取失败，播放已停止'); return; }
       const raw = result.bytes?.data || result.bytes; const bytes = raw instanceof Uint8Array ? raw : new Uint8Array(raw || []); if (!bytes.length) { releaseMusicSource(); renderMusicCard(); setText($('home-media-status'), '音频内容为空，播放已停止'); return; }
-      releaseMusicSource(); const sourceEpoch = ++musicLoadEpoch; musicLoading = true; musicObjectUrl = URL.createObjectURL(new Blob([bytes], { type: result.mimeType || track.mimeType || 'application/octet-stream' })); loadedMusicId = track.id; musicAudio.src = musicObjectUrl; musicAudio.load(); musicLoading = false; renderMusicCard();
+      releaseMusicSource(); const sourceEpoch = ++musicLoadEpoch; musicLoading = true; rememberActiveMusic(track); musicObjectUrl = URL.createObjectURL(new Blob([bytes], { type: result.mimeType || track.mimeType || 'application/octet-stream' })); loadedMusicId = track.id; musicAudio.src = musicObjectUrl; musicAudio.load(); musicLoading = false; renderMusicCard();
       if (autoplay && sourceEpoch === musicLoadEpoch) { try { await musicAudio.play(); } catch { releaseMusicSource(); setText($('home-media-status'), '无法播放该音频格式，播放已停止'); } renderMusicCard(); }
     }
     async function switchMusicPlaylist(sourceId, playlistId) { if (musicSelectionBusy || !sourceId || !playlistId || (sourceId === musicLibrary.sourceId && playlistId === musicLibrary.playlistId)) return; setMusicSelectionBusy(true); setText($('music-settings-status'), '正在切换歌单…'); const result = await getApi()?.selectHomeMusicPlaylist?.({ sourceId, playlistId }).catch(() => null); setMusicSelectionBusy(false); if (!applyMusicLibrary(result)) { releaseMusicSource(); renderMusicNavigation(); setText($('music-settings-status'), musicError(result, '歌单切换失败')); return; } void ensureMusicSettingsCategories(); setText($('music-settings-status'), `已切换到 ${musicPlaylistLabel(activeMusicPlaylist(), activeMusicSource())}`); if (activeMusicTrack()) await loadMusicTrack(activeMusicTrack(), true); }
@@ -330,7 +330,7 @@
     documentRef.querySelector('[data-home-media="previous"]').addEventListener('click', () => moveMusic(-1)); documentRef.querySelector('[data-home-media="next"]').addEventListener('click', () => moveMusic(1));
     documentRef.querySelector('[data-home-media="shuffle"]').addEventListener('click', () => { musicShuffle = !musicShuffle; storage.setItem(MUSIC_SHUFFLE_KEY, String(musicShuffle)); resetMusicShuffle(); renderMusicCard(); });
     musicAudio.addEventListener('play', () => { musicPlaybackIntent = true; renderMusicCard(); }); musicAudio.addEventListener('pause', () => { if (!musicResumeAfterTabChange) musicPlaybackIntent = false; renderMusicCard(); }); musicAudio.addEventListener('loadedmetadata', () => { renderMusicProgress(); renderMusicCard(); }); musicAudio.addEventListener('timeupdate', renderMusicProgress);
-    musicAudio.addEventListener('ended', () => { musicPlaybackIntent = false; if (activeMusicTrack() && musicQueue().length > 1) moveMusic(1, true); else renderMusicCard(); }); musicAudio.addEventListener('error', () => { if (musicAudio.src) { releaseMusicSource(); renderMusicCard(); setText($('home-media-status'), '无法解码该音频格式，播放已停止'); } });
+    musicAudio.addEventListener('ended', () => { musicPlaybackIntent = false; if (activeMusicTrack() && musicQueue().length > 1) moveMusic(1, true); else renderMusicCard(); }); musicAudio.addEventListener('error', () => { const failedSource = musicAudio.currentSrc || musicAudio.src; if (musicAudio.error && musicObjectUrl && failedSource === musicObjectUrl) { releaseMusicSource(); renderMusicCard(); setText($('home-media-status'), '无法解码该音频格式，播放已停止'); } });
     documentRef.addEventListener('notch:tabchange', (event) => { if (event.detail?.tab === 'home' || musicAudio.paused || musicAudio.ended || !loadedMusicId) return; musicResumeAfterTabChange = true; const epoch = musicLoadEpoch; setTimeout(async () => { if (!musicResumeAfterTabChange || epoch !== musicLoadEpoch || musicAudio.ended) { musicResumeAfterTabChange = false; return; } if (!musicAudio.paused) { musicResumeAfterTabChange = false; return; } try { await musicAudio.play(); } catch {} musicResumeAfterTabChange = false; renderMusicCard(); }, 0); });
     $('home-media-source-select').addEventListener('change', (event) => { saveMusicDiscoveryFilter(event.target.value, ''); renderHomeMusicDiscovery(); void ensureHomeMusicCategories(); });
     windowRef.addEventListener('notch:settings-category-change', (event) => { if (event.detail?.id === 'music') void ensureMusicSettingsCategories(); });

@@ -28,7 +28,7 @@
         testedToken = result.token; if (byId('sync-client-key')) byId('sync-client-key').value = '';
         byId('sync-identity')?.removeAttribute('hidden');
         byId('sync-identity') && (byId('sync-identity').textContent = `${result.identity.spaceName || '同步空间'} · 客户端 ${result.identity.clientIdPrefix}`);
-        announce(result.secureStorage === 'session-only' ? '连接有效。系统安全存储不可用，密钥仅在本次运行中保留。' : '连接有效，请确认同步范围。');
+        announce(result.warning ? `连接有效，但服务器时钟相差 ${Math.abs(result.clockSkewSeconds)} 秒，请校准时间后同步。` : result.secureStorage === 'session-only' ? '连接有效。系统安全存储不可用，密钥仅在本次运行中保留。' : '连接有效，请确认同步范围。', Boolean(result.warning));
         const local = await root.NotchSyncRuntime?.inventory?.() || {};
         const preview = await invoke('previewFirstSync', { token: result.token, categories: selectedCategories(), local });
         if (!preview?.ok) { announce(`预览失败：${preview?.error?.code || 'unknown_error'}`, true); return preview; }

@@ -8,6 +8,8 @@ const { defaultCategories, normalizeCategories } = require('../../renderer/sync/
 
 const TEST_TOKEN_TTL_MS = 5 * 60 * 1000;
 const RECONCILE_INTERVAL_MS = 30000;
+const CLOCK_SKEW_WARNING_SECONDS = 300;
+const CLOCK_SKEW_ERROR_SECONDS = 900;
 function unwrap(value) { return value && Object.hasOwn(value, 'data') ? value.data : value; }
 function bindingFromSession(session, config) {
   return Object.freeze({
@@ -24,13 +26,47 @@ function bindingFromSession(session, config) {
     initialized: config.initialized === true,
   });
 }
+function normalizedCount(value) {
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+function normalizeCategoryCounts(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const allowed = new Set(Object.keys(defaultCategories()));
+  return Object.fromEntries(Object.entries(value).filter(([name, row]) => allowed.has(name) && row && typeof row === 'object' && !Array.isArray(row)).map(([name, row]) => [name, { records: normalizedCount(row.records), bytes: normalizedCount(row.bytes) }]));
+}
+function normalizeDiagnostics(discovery, session) {
+  const capabilities = Array.isArray(discovery?.capabilities) ? [...new Set(discovery.capabilities)].slice(0, 32).sort() : [];
+  const limits = discovery?.limits && typeof discovery.limits === 'object' ? Object.fromEntries(['jsonBytes', 'operationsPerPush', 'changesPerPull', 'chunkBytes', 'clientObjectTransfers', 'chunksPerUpload', 'headerBytes'].map((key) => [key, normalizedCount(discovery.limits[key])])) : {};
+  const capacity = session?.capacity && typeof session.capacity === 'object' && !Array.isArray(session.capacity) ? Object.fromEntries(['spaces', 'clients'].map((name) => {
+    const row = session.capacity[name];
+    return [name, { active: normalizedCount(row?.active), max: normalizedCount(row?.max), remaining: normalizedCount(row?.remaining) }];
+  })) : null;
+  const storageState = (value) => ['ok', 'degraded', 'down'].includes(value) ? value : 'unknown';
+  const storage = session?.storage && typeof session.storage === 'object' && !Array.isArray(session.storage) ? { database: storageState(session.storage.database), objects: storageState(session.storage.objects) } : null;
+  return Object.freeze({ capabilities, limits, capacity, storage });
+}
+function assertServerIdentity(discovery, session) {
+  if (!discovery) return;
+  if (discovery.instanceId !== session?.instance?.instanceId) throw Object.assign(new Error('server_identity_mismatch'), { code: 'server_identity_mismatch', retryable: false });
+}
+function assessAuthenticatedSession(session, discovery, startedAt, endedAt) {
+  const parsedServerTime = Date.parse(session?.instance?.serverTime || '');
+  if (!Number.isFinite(parsedServerTime)) {
+    if (!discovery) return Object.freeze({ clockSkewSeconds: 0, clockSkewWarning: null });
+    throw Object.assign(new Error('invalid_session_server_time'), { code: 'invalid_session_server_time', retryable: false });
+  }
+  const midpoint = startedAt + Math.max(0, endedAt - startedAt) / 2;
+  const clockSkewSeconds = Math.round((parsedServerTime - midpoint) / 1000);
+  if (Math.abs(clockSkewSeconds) > CLOCK_SKEW_ERROR_SECONDS) throw Object.assign(new Error('clock_skew_excessive'), { code: 'clock_skew_excessive', retryable: false });
+  return Object.freeze({ clockSkewSeconds, clockSkewWarning: Math.abs(clockSkewSeconds) > CLOCK_SKEW_WARNING_SECONDS ? Object.freeze({ code: 'clock_skew_warning', seconds: clockSkewSeconds }) : null });
+}
+
 function publicPreflight(session, token, secureStorage) {
-  return Object.freeze({
-    ok: true, token,
-    secureStorage,
+  const diagnostics = normalizeDiagnostics(session.discovery, session);
+  return Object.freeze({ ok: true, token, secureStorage,
     identity: Object.freeze({ instanceIdPrefix: String(session.instance?.instanceId || '').slice(0, 12), spaceIdPrefix: String(session.identity?.spaceId || '').slice(0, 12), clientIdPrefix: String(session.identity?.clientId || '').slice(0, 12), spaceName: String(session.identity?.spaceName || '').slice(0, 120), clientName: String(session.identity?.clientName || '').slice(0, 120) }),
-    categoryCounts: session.categoryCounts || {}, usage: session.usage || {}, storage: session.storage || {}, clockSkewSeconds: Number(session.clockSkewSeconds) || 0,
-  });
+    categoryCounts: normalizeCategoryCounts(session.categoryCounts), usage: { recordCount: normalizedCount(session.usage?.recordCount), objectCount: normalizedCount(session.usage?.objectCount), objectBytes: normalizedCount(session.usage?.objectBytes) }, storage: diagnostics.storage, capacity: diagnostics.capacity, capabilities: diagnostics.capabilities, limits: diagnostics.limits,
+    clockSkewSeconds: Number(session.clockSkewSeconds) || 0, protocolVersion: Number(session.protocol?.selected) || 1, warning: session.clockSkewWarning || null });
 }
 
 function projectionUnavailable() { throw Object.assign(new Error('renderer_projection_unavailable'), { code: 'renderer_projection_unavailable', retryable: true }); }
@@ -71,7 +107,14 @@ function createSyncService({ protocolClient, credentialEnvelope, store, workspac
   let lastError = null;
 
   function status() {
-    return projectStatus({ state, binding: store.binding(), queued: store.outbox().length, conflicts: store.conflicts().length, lastSyncAt, error: lastError });
+    const cursor = store.cursor?.(); const transfers = store.transfers?.() || [];
+    const activeTransfer = transfers.find((row) => ['queued', 'pending', 'uploading', 'downloading', 'active'].includes(row?.state));
+    return projectStatus({ state, binding: store.binding(), queued: store.outbox().length, conflicts: store.conflicts().length, lastSyncAt, error: lastError,
+      protocolVersion: connection?.protocolVersion || 1, cursorAgeMs: Number.isFinite(Number(cursor?.savedAt)) ? Math.max(0, clock() - Number(cursor.savedAt)) : null,
+      activeTransfer: activeTransfer ? { transferIdPrefix: String(activeTransfer.transferId || '').slice(0, 12), direction: ['upload', 'download'].includes(activeTransfer.direction) ? activeTransfer.direction : null, state: activeTransfer.state } : null,
+      serverCapacity: connection?.diagnostics?.capacity || null, serverStorage: connection?.diagnostics?.storage || null,
+      capabilities: connection?.diagnostics?.capabilities || [], limits: connection?.diagnostics?.limits || {},
+      clockSkewSeconds: connection?.clockSkewSeconds || 0, warning: connection?.clockSkewWarning || null });
   }
   function emit() { const value = status(); onStatus(value); return value; }
   function transition(next, error = null) { state = next; lastError = error; return emit(); }
@@ -91,7 +134,12 @@ function createSyncService({ protocolClient, credentialEnvelope, store, workspac
     const binding = store.binding(); const clientKey = keyForBinding();
     if (!binding || !clientKey) throw Object.assign(new Error('credential_unavailable'), { code: 'credential_unavailable', retryable: false });
     const next = await protocolClient.connect({ baseUrl: binding.baseUrl, clientKey, installationId: installation.installationId(), allowLoopbackHttp: binding.allowLoopbackHttp });
+    const discovery = typeof next.discover === 'function' ? await next.discover() : null;
+    const startedAt = clock();
     const session = unwrap(await next.session());
+    assertServerIdentity(discovery, session);
+    const assessment = assessAuthenticatedSession(session, discovery, startedAt, clock());
+
     if (expectedGeneration !== generation) throw new Error('binding_generation_cancelled');
     try { assertSessionMatches(binding, session); }
     catch (error) {
@@ -99,7 +147,7 @@ function createSyncService({ protocolClient, credentialEnvelope, store, workspac
       store.saveBinding({ ...binding, restoreEpoch: session.state?.restoreEpoch }, store.credential());
       store.resetCursor?.();
     }
-    connection = Object.freeze({ ...next, clientKey });
+    connection = Object.freeze({ ...next, clientKey, protocolVersion: Number(session.protocol?.selected) || 1, diagnostics: normalizeDiagnostics(discovery, session), ...assessment });
     return session;
   }
 
@@ -107,11 +155,16 @@ function createSyncService({ protocolClient, credentialEnvelope, store, workspac
     cleanTests(); transition('connecting');
     try {
       const next = await protocolClient.connect({ baseUrl: input.baseUrl, clientKey: input.clientKey, installationId: installation.installationId(), allowLoopbackHttp: input.allowLoopbackHttp === true });
+      const discovery = typeof next.discover === 'function' ? await next.discover() : null;
+      const startedAt = clock();
       const session = unwrap(await next.session());
+      assertServerIdentity(discovery, session);
+      const assessment = assessAuthenticatedSession(session, discovery, startedAt, clock());
+      const assessedSession = { ...session, ...assessment, discovery };
       const token = randomUUID();
-      tested.set(token, { expiresAt: clock() + TEST_TOKEN_TTL_MS, input: { baseUrl: next.policy.url, clientKey: input.clientKey, allowLoopbackHttp: input.allowLoopbackHttp === true }, session });
+      tested.set(token, { expiresAt: clock() + TEST_TOKEN_TTL_MS, input: { baseUrl: next.policy.url, clientKey: input.clientKey, allowLoopbackHttp: input.allowLoopbackHttp === true }, session: assessedSession });
       transition(store.binding() ? 'offline' : 'disconnected');
-      return publicPreflight(session, token, credentialEnvelope.mode);
+      return publicPreflight(assessedSession, token, credentialEnvelope.mode);
     } catch (error) { transition(store.binding() ? 'offline' : 'disconnected', error); return { ok: false, error: projectStatus({ error }).error }; }
   }
 

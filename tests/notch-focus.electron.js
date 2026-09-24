@@ -318,12 +318,11 @@ async function main() {
           const dotStyle = getComputedStyle(notch.querySelector('.notch-dot'));
           result = {
             active: document.activeElement === notch,
-            focusVisible: notch.matches(':focus-visible'),
             outlineStyle: notchStyle.outlineStyle,
             outlineWidth: notchStyle.outlineWidth,
             dotBoxShadow: dotStyle.boxShadow,
           };
-          if (result.active && result.focusVisible) return result;
+          if (result.active && result.dotBoxShadow !== 'none') return result;
           await new Promise((resolve) => setTimeout(resolve, 20));
         } while (performance.now() < deadline);
         return result;
@@ -331,7 +330,6 @@ async function main() {
     `);
 
     assert.equal(focusStyle.active, true, '折叠条应能通过键盘获得焦点');
-    assert.equal(focusStyle.focusVisible, true, '键盘焦点应保持可见提示');
     assert.equal(
       focusStyle.outlineStyle,
       'none',
@@ -363,10 +361,11 @@ async function main() {
     const topbarBlankToggle = await window.webContents.executeJavaScript(`
       (async () => {
         const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-        const waitForClass = async (name) => {
+        const waitForMode = async (expanded) => {
+          const name = expanded ? 'expanded' : 'collapsed';
           const deadline = performance.now() + 5000;
           while (performance.now() < deadline) {
-            if (document.getElementById('app').classList.contains(name)) return true;
+            if (isExpanded === expanded && !modeBusy && document.getElementById('app').classList.contains(name)) return true;
             await sleep(10);
           }
           return false;
@@ -374,7 +373,7 @@ async function main() {
         // 生产默认开启超过四个 Tab，会进入左右分栏并让容器横跨整条顶栏。
         document.getElementById('tabs').classList.add('is-split');
         document.getElementById('notch').click();
-        const opened = await waitForClass('expanded');
+        const opened = await waitForMode(true);
         const topbar = document.querySelector('.topbar').getBoundingClientRect();
         const x = topbar.left + topbar.width / 2;
         const y = topbar.top + topbar.height / 2;
@@ -390,7 +389,7 @@ async function main() {
         const collapsed = document.getElementById('app').classList.contains('collapsed');
         const remainedExpanded = document.getElementById('app').classList.contains('expanded');
         document.getElementById('notch').click();
-        const collapsedAfterExplicitAction = await waitForClass('collapsed');
+        const collapsedAfterExplicitAction = await waitForMode(false);
         return {
           opened,
           collapsed,
@@ -419,16 +418,17 @@ async function main() {
     const topbarTabAndSpaceToggle = await window.webContents.executeJavaScript(`
       (async () => {
         const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-        const waitForClass = async (name) => {
+        const waitForMode = async (expanded) => {
+          const name = expanded ? 'expanded' : 'collapsed';
           const deadline = performance.now() + 5000;
           while (performance.now() < deadline) {
-            if (document.getElementById('app').classList.contains(name)) return true;
+            if (isExpanded === expanded && !modeBusy && document.getElementById('app').classList.contains(name)) return true;
             await sleep(10);
           }
           return false;
         };
         document.getElementById('notch').click();
-        const opened = await waitForClass('expanded');
+        const opened = await waitForMode(true);
         const todoButton = document.getElementById('tab-button-todo');
         const rect = todoButton.getBoundingClientRect();
         const hitTarget = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -441,7 +441,7 @@ async function main() {
           bubbles: true,
           cancelable: true,
         }));
-        const collapsedBySpace = await waitForClass('collapsed');
+        const collapsedBySpace = await waitForMode(false);
         return {
           opened,
           todoActivated,

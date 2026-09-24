@@ -79,6 +79,7 @@ test('the release workflow lets manual runs verify artifacts while policy gates 
   const workflow = fs.readFileSync(releaseWorkflowPath, 'utf8');
 
   assert.match(workflow, /^\s{2}workflow_dispatch:\s*$/m);
+  assert.match(workflow, /^\s{4}branches:\s*\[main\]\s*$/m);
   assert.match(workflow, /id:\s*release[\s\S]*?run:\s*node scripts\/release-policy\.js/);
   assert.match(workflow, /name:\s*Build DMG[\s\S]*?run:\s*npm run build/);
   assert.match(workflow, /name:\s*Verify and checksum DMG/);

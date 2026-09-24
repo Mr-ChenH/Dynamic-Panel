@@ -53,7 +53,7 @@ test('local extension installs, queries and executes; disabled or removed result
     assert.equal(service.target(dynamic.id), undefined);
     await service.uninstall(example.id);
     assert.equal((await service.list()).length, 0);
-  } finally { service.cancel(); await fs.rm(root, { recursive: true, force: true }); }
+  } finally { service.cancel(); await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });
 
 test('extension process errors, cancellation and timeout settle without blocking the host', async () => {
@@ -67,5 +67,5 @@ test('extension process errors, cancellation and timeout settle without blocking
     const request = queryExtension(root, manifest, 'upper', '', abort.signal);
     abort.abort(); await assert.rejects(request, /cancelled/);
     await assert.rejects(queryExtension(root, manifest, 'upper', '', undefined), /extension_timeout/);
-  } finally { await fs.rm(root, { recursive: true, force: true }); }
+  } finally { await fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
 });

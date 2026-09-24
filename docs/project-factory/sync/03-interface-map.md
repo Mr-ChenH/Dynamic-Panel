@@ -1,6 +1,6 @@
 # Sync MVP v1 Interface Map
 
-> Status: implementation contract. Product behavior remains governed by [02-requirements.md](./02-requirements.md). This document maps that behavior to public server APIs and desktop IPC without changing the existing local schemas described in [01-research-notes.md](./01-research-notes.md).
+> Status: implementation contract. Product behavior remains governed by [02-requirements.md](./02-requirements.md). This document maps that behavior to public server APIs and desktop IPC without changing the existing local schemas described in the [server research notes](../../../../Dynamic-Panel-Sync-Server/docs/project-factory/sync/01-research-notes.md).
 
 ## 1. Interface boundaries
 
@@ -403,4 +403,4 @@ Exit codes: `0` success, `2` validation/configuration, `3` authentication/author
 | Objects/entity schemas/categories | `FR-019`-`FR-025`, `FR-070`-`FR-100`; `DR-004`-`DR-005`, `DR-011`-`DR-014`, `DR-017`, `DR-019`; `NFR-008`-`NFR-009` |
 | Backup/export/admin CLI | `FR-003`, `FR-101`-`FR-121`, `FR-134`, `FR-145`-`FR-146`; `NFR-013`-`NFR-015` |
 
-Implementation phases and acceptance owners are listed in [06-implementation-plan.md](./06-implementation-plan.md).
+Server implementation phases and acceptance owners are listed in the [independent sibling repository](../../../../Dynamic-Panel-Sync-Server/docs/project-factory/sync/06-implementation-plan.md).

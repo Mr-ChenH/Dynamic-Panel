@@ -47,6 +47,19 @@ test('source schemas reject malformed rows without mutating raw data',()=>{
   assert.deepEqual(storage.history([{at:1,durationMs:3,operation:'query',status:'success',secret:'drop'},{at:1,durationMs:-1,operation:'query',status:'success'}]),[{at:1,durationMs:3,operation:'query',status:'success'}]);
 });
 
+test('extension permissions use canonical temporary paths',async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'launcher-canonical-'));
+  try{
+    const code=path.join(root,'code'),data=path.join(root,'data');
+    await fs.mkdir(code);await fs.mkdir(data);
+    await fs.writeFile(path.join(code,'index.js'),`require('readline').createInterface({input:process.stdin}).once('line',line=>{
+      const r=JSON.parse(line);process.stdout.write(JSON.stringify({type:'result',requestId:r.requestId,items:[{id:'path',title:'Storage',action:{type:'copy-text',text:r.context.storagePath}}]})+'\\n');
+    });`);
+    const response=await queryExtension(code,example,'upper','',undefined,process.execPath,{storagePath:data});
+    assert.equal(await fs.realpath(response[0].action.text),await fs.realpath(data));
+  }finally{await fs.rm(root,{recursive:true,force:true});}
+});
+
 test('extension permissions allow private data but deny outside IO, code writes and child processes',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'launcher-permissions-'));
   try{

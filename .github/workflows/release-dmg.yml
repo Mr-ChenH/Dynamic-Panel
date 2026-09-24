@@ -3,7 +3,7 @@ name: Release macOS and Windows
 on:
   workflow_dispatch:
   push:
-    branches: [feat/windows-support]
+    branches: [main]
     tags: ['v*.*.*']
 
 permissions:

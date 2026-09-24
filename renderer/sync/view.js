@@ -11,7 +11,7 @@
       const state = status.state || 'disconnected';
       const section = byId('sync-settings'); if (section) section.dataset.state = state;
       setText(byId('sync-status-label'), STATE_LABELS[state] || STATE_LABELS.disconnected);
-      setText(byId('sync-status-detail'), status.identity ? `${status.identity.spaceName || '同步空间'} · ${status.identity.spaceIdPrefix || ''}` : '连接后可在多台设备间同步所选数据');
+      setText(byId('sync-status-detail'), status.identity ? `${status.identity.spaceName || '同步空间'} · ${status.identity.spaceIdPrefix || ''} · 协议 v${status.protocolVersion || 1}` : '连接后可在多台设备间同步所选数据');
       setText(byId('sync-last-sync'), formatTime(status.lastSyncAt));
       setText(byId('sync-queue-count'), `${Number(status.queued) || 0} 项待同步`);
       setText(byId('sync-conflict-count'), `${Number(status.conflicts) || 0} 个冲突`);

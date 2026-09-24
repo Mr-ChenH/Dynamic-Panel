@@ -2,7 +2,7 @@
 
 一个常驻 macOS 屏幕顶部的本地工作台。默认折叠成物理刘海大小，点击从顶部展开，包含**首页 / 待办 / 笔记 / 链接 / 录制 / 密钥**等页面；剪贴板默认关闭、可从菜单栏「显示功能」启用；还可接收 Codex / Claude Code / GPT 的本机完成事件并关联当前窗口。
 
-项目由默认本地优先的 Electron 桌面端和可选的 Node.js 自托管同步服务组成：折叠态、展开工作区、任务完成提醒与 Hover + Space 唤出都在 Electron 主进程和渲染层内实现，`npm start` 仍是唯一桌面运行路径；`sync-server/` 独立部署，不改变离线桌面行为。
+项目是默认本地优先的 Electron 桌面端：折叠态、展开工作区、任务完成提醒与 Hover + Space 唤出都在 Electron 主进程和渲染层内实现，`npm start` 是唯一桌面运行路径。可选自托管同步服务已拆分到同级独立仓库 `../Dynamic-Panel-Sync-Server`，本仓库只维护同步客户端和协议产品约束。
 
 > **文档准绳**：产品行为以 [README.md](README.md) 为唯一事实来源。本文与 README 冲突时以 README 为准。
 
@@ -11,7 +11,7 @@
 - 桌面端：Electron 44 + 原生 HTML/CSS/JavaScript，无渲染层构建步骤
 - 官网：React 19 + Vinext + 原生 CSS，位于 `website/`
 - 数据：默认 LocalStorage + `userData/clipboard-images/` + `userData/note-images/` + `userData/recordings/`；可选自托管同步使用 PostgreSQL + 文件系统/S3 对象存储，禁止同步项仍只留本机
-- 同步服务：Node.js 22.13+ + Fastify + PostgreSQL，位于 `sync-server/`
+- 同步服务：Node.js 22.13+ + Fastify + PostgreSQL，位于同级独立仓库 `../Dynamic-Panel-Sync-Server`
 - 包管理器：npm
 - Node：桌面端使用 Node 18+；官网和同步服务要求 Node 22.13.0+
 
@@ -33,7 +33,6 @@
 ├── renderer/               # 桌面界面与交互（index.html / styles.css / app.js / workspace.js / notification.*）
 ├── build/                  # DMG 打包钩子、entitlements 与应用图标
 ├── scripts/                # Codex 与 Claude Code 的通知转发脚本
-├── sync-server/            # 可选自托管同步服务、Web 控制台、管理 CLI、迁移与备份
 ├── tests/                  # Node 单元测试
 ├── docs/                   # 设计说明、ADR 与验收图
 ├── website/                # 官网 React/Vinext 源码
